@@ -46,6 +46,8 @@ import {
   Settings,
   LockKeyhole,
   Save,
+  Mail,
+  Phone,
 } from "lucide-react";
 
 const API = "http://localhost:5000/api";
@@ -1160,167 +1162,184 @@ function Cart({ store }: { store: ReturnType<typeof useStore> }) {
 
 function Login({ store }: { store: ReturnType<typeof useStore> }) {
   const nav = useNavigate();
-  const [email, setEmail] = useState(
-    "customer@grocery.com"
-  );
+  const [email, setEmail] = useState("customer@grocery.com");
   const [password, setPassword] = useState("Customer@123");
-  const [mode, setMode] = useState<"login" | "register">(
-    "login"
-  );
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [loginRole, setLoginRole] = useState<"customer" | "admin" | "delivery">("customer");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailOtp, setEmailOtp] = useState("");
+  const [mobileOtp, setMobileOtp] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [mobileSent, setMobileSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [mobileVerified, setMobileVerified] = useState(false);
+  const [loadingOtp, setLoadingOtp] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [devOtp, setDevOtp] = useState("");
+
+  const clearMessages = () => { setError(""); setMessage(""); setDevOtp(""); };
+
+  const sendEmailOtp = async (purpose: "register" | "forgot") => {
+    clearMessages(); setLoadingOtp("email");
+    try {
+      const r = await axios.post(API + "/auth/send-email-otp", { email, purpose });
+      setEmailSent(true); setMessage(r.data.message || "Email OTP sent.");
+      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
+    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send email OTP."); }
+    finally { setLoadingOtp(""); }
+  };
+
+  const verifyEmailOtp = async (purpose: "register" | "forgot") => {
+    clearMessages(); setLoadingOtp("verify-email");
+    try {
+      await axios.post(API + "/auth/verify-email-otp", { email, otp: emailOtp, purpose });
+      setEmailVerified(true); setMessage("Email verified successfully.");
+    } catch (e: any) { setError(e?.response?.data?.message || "Invalid email OTP."); }
+    finally { setLoadingOtp(""); }
+  };
+
+  const sendMobileOtp = async () => {
+    clearMessages(); setLoadingOtp("mobile");
+    try {
+      const r = await axios.post(API + "/auth/send-mobile-otp", { phone, purpose: "register" });
+      setMobileSent(true); setMessage(r.data.message || "Mobile OTP sent.");
+      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
+    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send mobile OTP."); }
+    finally { setLoadingOtp(""); }
+  };
+
+  const verifyMobileOtp = async () => {
+    clearMessages(); setLoadingOtp("verify-mobile");
+    try {
+      await axios.post(API + "/auth/verify-mobile-otp", { phone, otp: mobileOtp, purpose: "register" });
+      setMobileVerified(true); setMessage("Mobile number verified successfully.");
+    } catch (e: any) { setError(e?.response?.data?.message || "Invalid mobile OTP."); }
+    finally { setLoadingOtp(""); }
+  };
 
   const submit = async (e: any) => {
-    e.preventDefault();
-    setError("");
-
+    e.preventDefault(); clearMessages();
     try {
-      const r = await axios.post(
-        API + "/auth/" + (mode === "login" ? "login" : "register"),
-        mode === "login"
-          ? { email, password, role: loginRole }
-          : { name, email, password }
-      );
-
-      store.setUser(r.data.data.user);
-      localStorage.setItem(
-        "fb-user",
-        JSON.stringify(r.data.data.user)
-      );
-      localStorage.setItem(
-        "fb-token",
-        r.data.data.token
-      );
-
-      const role = r.data.data.user.role;
-      if (role === "admin") {
-        nav("/admin");
-      } else if (role === "delivery") {
-        nav("/delivery");
-      } else {
-        nav("/");
+      if (mode === "forgot") {
+        if (!emailVerified) return setError("Verify the email OTP first.");
+        if (resetPassword.length < 8) return setError("New password must be at least 8 characters.");
+        if (resetPassword !== resetConfirm) return setError("Passwords do not match.");
+        await axios.post(API + "/auth/reset-password", { email, newPassword: resetPassword });
+        setMessage("Password reset successfully. You can now sign in.");
+        setMode("login"); setPassword(""); setEmailOtp(""); setEmailSent(false); setEmailVerified(false);
+        return;
       }
+
+      if (mode === "register") {
+        if (password.length < 8) return setError("Password must be at least 8 characters.");
+        if (password !== confirmPassword) return setError("Passwords do not match.");
+        if (!/^[6-9]\d{9}$/.test(phone.replace(/\D/g, ""))) return setError("Enter a valid 10-digit mobile number.");
+        if (!emailVerified || !mobileVerified) return setError("Please verify both email and mobile OTP before creating the account.");
+      }
+
+      if (mode === "register") {
+        const registerResponse = await axios.post(API + "/auth/register", { name, email, password, phone: phone.replace(/\D/g, "") });
+        store.setUser(registerResponse.data.data.user);
+        localStorage.setItem("fb-user", JSON.stringify(registerResponse.data.data.user));
+        localStorage.setItem("fb-token", registerResponse.data.data.token);
+        nav("/");
+        return;
+      }
+      const r = await axios.post(API + "/auth/login", { email, password, role: loginRole });
+      store.setUser(r.data.data.user);
+      localStorage.setItem("fb-user", JSON.stringify(r.data.data.user));
+      localStorage.setItem("fb-token", r.data.data.token);
+      const role = r.data.data.user.role;
+      if (role === "admin") nav("/admin"); else if (role === "delivery") nav("/delivery"); else nav("/");
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-          "Unable to login. Check backend and credentials."
-      );
+      // Registration has its own endpoint; avoid an unnecessary login call for it.
+      if (mode === "register") {
+        try {
+          const registerResponse = await axios.post(API + "/auth/register", { name, email, password, phone: phone.replace(/\D/g, "") });
+          store.setUser(registerResponse.data.data.user);
+          localStorage.setItem("fb-user", JSON.stringify(registerResponse.data.data.user));
+          localStorage.setItem("fb-token", registerResponse.data.data.token);
+          nav("/");
+          return;
+        } catch (registerErr: any) {
+          setError(registerErr?.response?.data?.message || "Registration failed.");
+          return;
+        }
+      }
+      setError(err?.response?.data?.message || "Unable to login. Check backend and credentials.");
     }
   };
 
-  return (
-    <div className="min-h-screen gradient grid place-items-center px-4">
-      <div className="w-full max-w-md bg-white rounded-[2rem] border shadow-soft p-7">
-        <Link
-          to="/"
-          className="flex justify-center items-center gap-2 font-bold text-xl"
-        >
-          <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center">
-            <Leaf />
-          </span>
-          FreshBasket
-        </Link>
+  const switchMode = (next: "login" | "register" | "forgot") => {
+    clearMessages(); setMode(next); setEmailOtp(""); setMobileOtp(""); setEmailSent(false); setMobileSent(false); setEmailVerified(false); setMobileVerified(false);
+    if (next === "register") { setEmail(""); setPassword(""); setName(""); setPhone(""); setConfirmPassword(""); }
+  };
 
-        <h1 className="text-2xl font-bold text-center mt-7">
-          {mode === "login"
-            ? "Welcome back"
-            : "Create your account"}
-        </h1>
+  return (
+    <div className="min-h-screen gradient grid place-items-center px-4 py-8">
+      <div className="w-full max-w-md bg-white rounded-[2rem] border shadow-soft p-7">
+        <Link to="/" className="flex justify-center items-center gap-2 font-bold text-xl">
+          <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Leaf /></span>FreshBasket
+        </Link>
+        <h1 className="text-2xl font-bold text-center mt-7">{mode === "login" ? "Welcome back" : mode === "register" ? "Create your account" : "Forgot password"}</h1>
 
         {mode === "login" && (
           <div className="mt-6">
             <p className="text-sm font-semibold text-slate-700 mb-3">Login as</p>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                ["customer", "Customer"],
-                ["admin", "Admin"],
-                ["delivery", "Delivery"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    const role = value as "customer" | "admin" | "delivery";
-                    setLoginRole(role);
-                    if (role === "customer") {
-                      setEmail("customer@grocery.com");
-                      setPassword("Customer@123");
-                    } else if (role === "admin") {
-                      setEmail("admin@grocery.com");
-                      setPassword("Admin@123");
-                    } else {
-                      setEmail("");
-                      setPassword("");
-                    }
-                  }}
-                  className={`border rounded-xl py-2.5 text-sm font-bold ${loginRole === value ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600"}`}
-                >
-                  {label}
-                </button>
+              {[['customer','Customer'],['admin','Admin'],['delivery','Delivery']].map(([value,label]) => (
+                <button key={value} type="button" onClick={() => { const role=value as any; setLoginRole(role); if(role==='customer'){setEmail('customer@grocery.com');setPassword('Customer@123')}else if(role==='admin'){setEmail('admin@grocery.com');setPassword('Admin@123')}else{setEmail('');setPassword('')} }} className={`border rounded-xl py-2.5 text-sm font-bold ${loginRole===value?'border-emerald-600 bg-emerald-50 text-emerald-700':'border-slate-200 text-slate-600'}`}>{label}</button>
               ))}
             </div>
           </div>
         )}
 
-        <form
-          onSubmit={submit}
-          className="space-y-4 mt-7"
-        >
-          {mode === "register" && (
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Full name"
-              className="w-full border rounded-xl p-3 outline-none"
-            />
-          )}
+        <form onSubmit={submit} className="space-y-4 mt-7">
+          {mode === "register" && <>
+            <input required value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" className="w-full border rounded-xl p-3 outline-none" />
+            <input required value={phone} onChange={e=>{setPhone(e.target.value);setMobileVerified(false)}} placeholder="10-digit mobile number" className="w-full border rounded-xl p-3 outline-none" />
+          </>}
+          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailVerified(false)}} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
 
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="w-full border rounded-xl p-3 outline-none"
-          />
+          {mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold"><Mail size={17}/> Email verification</div>
+            {!emailVerified ? <>
+              <div className="flex gap-2"><input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3 bg-white"/><button type="button" onClick={()=>sendEmailOtp("register")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailSent?'Resend':'Send OTP'}</button></div>
+              {emailSent && <button type="button" onClick={()=>verifyEmailOtp("register")} disabled={loadingOtp==="verify-email"} className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify email</button>}
+            </> : <p className="text-emerald-700 text-sm font-bold">✓ Email verified</p>}
+          </div>}
 
-          <input
-            required
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full border rounded-xl p-3 outline-none"
-          />
+          {mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold"><Phone size={17}/> Mobile verification</div>
+            {!mobileVerified ? <>
+              <div className="flex gap-2"><input value={mobileOtp} onChange={e=>setMobileOtp(e.target.value)} placeholder="Mobile OTP" className="flex-1 border rounded-xl p-3 bg-white"/><button type="button" onClick={sendMobileOtp} disabled={loadingOtp==="mobile"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{mobileSent?'Resend':'Send OTP'}</button></div>
+              {mobileSent && <button type="button" onClick={verifyMobileOtp} disabled={loadingOtp==="verify-mobile"} className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify mobile</button>}
+            </> : <p className="text-emerald-700 text-sm font-bold">✓ Mobile verified</p>}
+          </div>}
 
-          {error && (
-            <p className="text-red-500 text-sm">{error}</p>
-          )}
+          {mode !== "forgot" && <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />}
+          {mode === "register" && <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full border rounded-xl p-3 outline-none" />}
 
-          <button className="w-full bg-emerald-600 text-white rounded-xl py-3.5 font-bold">
-            {mode === "login" ? "Sign in" : "Create account"}
-          </button>
+          {mode === "forgot" && <>
+            <div className="flex gap-2"><input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={()=>sendEmailOtp("forgot")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailSent?'Resend':'Send OTP'}</button></div>
+            {emailSent && !emailVerified && <button type="button" onClick={()=>verifyEmailOtp("forgot")} className="w-full bg-emerald-600 text-white rounded-xl py-3 font-bold">Verify OTP</button>}
+            <input required type="password" value={resetPassword} onChange={e=>setResetPassword(e.target.value)} placeholder="New password (min 8 characters)" className="w-full border rounded-xl p-3" />
+            <input required type="password" value={resetConfirm} onChange={e=>setResetConfirm(e.target.value)} placeholder="Confirm new password" className="w-full border rounded-xl p-3" />
+          </>}
+
+          {devOtp && <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">Development OTP: <b>{devOtp}</b>. Configure the email/SMS provider in `.env` for real delivery.</div>}
+          {message && <p className="text-emerald-700 text-sm font-semibold">{message}</p>}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <button className="w-full bg-emerald-600 text-white rounded-xl py-3.5 font-bold">{mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Reset password"}</button>
         </form>
 
-        <div className="text-center text-sm mt-5 text-slate-500">
-          {mode === "login"
-            ? "New here? "
-            : "Already have an account? "}
-          <button
-            onClick={() =>
-              setMode(
-                mode === "login" ? "register" : "login"
-              )
-            }
-            className="text-emerald-700 font-bold"
-          >
-            {mode === "login"
-              ? "Create account"
-              : "Sign in"}
-          </button>
-        </div>
+        {mode === "login" && <button type="button" onClick={()=>switchMode("forgot")} className="w-full text-center text-emerald-700 font-bold text-sm mt-4">Forgot password?</button>}
+        <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':mode==='register'?'Already have an account? ':'Remembered your password? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
       </div>
     </div>
   );
@@ -1913,6 +1932,11 @@ function ProfilePage({
   const [accountPassword, setAccountPassword] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [savingAccount, setSavingAccount] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [emailChangeOtp, setEmailChangeOtp] = useState("");
+  const [emailChangeSent, setEmailChangeSent] = useState(false);
+  const [mobileChangeOtp, setMobileChangeOtp] = useState("");
+  const [mobileChangeSent, setMobileChangeSent] = useState(false);
+  const [devOtp, setDevOtp] = useState("");
   const [addresses, setAddresses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -1946,7 +1970,7 @@ function ProfilePage({
   const saveProfile = async () => {
     setSavingProfile(true); setMessage(""); setError("");
     try {
-      const r = await axios.patch(API + "/profile", { name: profile.name, phone: profile.phone }, { headers: adminHeaders() });
+      const r = await axios.patch(API + "/profile", { name: profile.name }, { headers: adminHeaders() });
       const u = r.data.data;
       store.setUser({ ...store.user, name: u.name, phone: u.phone, email: u.email });
       localStorage.setItem("fb-user", JSON.stringify({ ...store.user, name: u.name, phone: u.phone, email: u.email }));
@@ -1955,18 +1979,50 @@ function ProfilePage({
     finally { setSavingProfile(false); }
   };
 
-  const saveAccountEmail = async () => {
+  const sendAccountEmailOtp = async () => {
+    setSavingAccount(true); setMessage(""); setError(""); setDevOtp("");
+    try {
+      const r = await axios.post(API + "/profile/send-email-otp", { email: accountEmail }, { headers: adminHeaders() });
+      setEmailChangeSent(true); setMessage(r.data.message || "Email OTP sent.");
+      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
+    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send email OTP."); }
+    finally { setSavingAccount(false); }
+  };
+
+  const verifyAccountEmailOtp = async () => {
     setSavingAccount(true); setMessage(""); setError("");
     try {
-      const r = await axios.patch(API + "/profile/account", { email: accountEmail }, { headers: adminHeaders() });
+      const r = await axios.post(API + "/profile/verify-email-otp", { email: accountEmail, otp: emailChangeOtp }, { headers: adminHeaders() });
       const u = r.data.data || {};
-      setAccountEmail(u.email || accountEmail);
-      setProfile((current) => ({ ...current, email: u.email || accountEmail }));
-      const nextUser = { ...store.user, email: u.email || accountEmail };
+      const nextUser = { ...store.user, email: u.email || accountEmail, emailVerified: true };
       store.setUser(nextUser as any);
       localStorage.setItem("fb-user", JSON.stringify(nextUser));
-      setMessage("Login email updated successfully.");
-    } catch (e: any) { setError(e?.response?.data?.message || "Unable to update login email."); }
+      setAccountEmail(u.email || accountEmail); setProfile((current) => ({ ...current, email: u.email || accountEmail }));
+      setEmailChangeSent(false); setEmailChangeOtp(""); setDevOtp(""); setMessage("Login email verified and updated successfully.");
+    } catch (e: any) { setError(e?.response?.data?.message || "Invalid email OTP."); }
+    finally { setSavingAccount(false); }
+  };
+
+  const sendAccountMobileOtp = async () => {
+    setSavingAccount(true); setMessage(""); setError(""); setDevOtp("");
+    try {
+      const r = await axios.post(API + "/profile/send-mobile-otp", { phone: profile.phone }, { headers: adminHeaders() });
+      setMobileChangeSent(true); setMessage(r.data.message || "Mobile OTP sent.");
+      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
+    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send mobile OTP."); }
+    finally { setSavingAccount(false); }
+  };
+
+  const verifyAccountMobileOtp = async () => {
+    setSavingAccount(true); setMessage(""); setError("");
+    try {
+      const r = await axios.post(API + "/profile/verify-mobile-otp", { phone: profile.phone, otp: mobileChangeOtp }, { headers: adminHeaders() });
+      const u = r.data.data || {};
+      const nextUser = { ...store.user, phone: u.phone || profile.phone, phoneVerified: true };
+      store.setUser(nextUser as any); localStorage.setItem("fb-user", JSON.stringify(nextUser));
+      setProfile((current) => ({ ...current, phone: u.phone || current.phone }));
+      setMobileChangeSent(false); setMobileChangeOtp(""); setDevOtp(""); setMessage("Mobile number verified and updated successfully.");
+    } catch (e: any) { setError(e?.response?.data?.message || "Invalid mobile OTP."); }
     finally { setSavingAccount(false); }
   };
 
@@ -2020,33 +2076,29 @@ function ProfilePage({
             {message && <div className="mt-5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl p-4 text-sm font-semibold">{message}</div>}
             {error && <div className="mt-5 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm">{error}</div>}
             <section className="bg-white border rounded-3xl p-6 mt-6">
-              <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center text-xl font-bold">{(profile.name || "G").charAt(0)}</div><div><h2 className="font-bold text-lg">Personal details</h2><p className="text-sm text-slate-500">Keep your delivery contact information up to date.</p></div></div>
-              <div className="grid sm:grid-cols-2 gap-3 mt-5">
-                <input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} placeholder="Full name" className="border rounded-xl p-3" />
-                <input value={profile.phone} onChange={e => setProfile({ ...profile, phone: e.target.value })} placeholder="10-digit mobile" className="border rounded-xl p-3" />
-                <input value={profile.email} disabled className="border rounded-xl p-3 bg-slate-50 text-slate-500 sm:col-span-2" />
-              </div>
-              <button onClick={saveProfile} disabled={savingProfile} className="mt-4 bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{savingProfile ? "Saving..." : "Save profile"}</button>
-            </section>
-
-            <section className="bg-white border rounded-3xl p-6 mt-6">
-              <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center"><ShieldCheck size={20} className="text-slate-700" /></div><div><h2 className="text-xl font-bold">Account & security</h2><p className="text-sm text-slate-500">Update the email used to log in and change your password.</p></div></div>
+              <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center"><ShieldCheck size={20} className="text-slate-700" /></div><div><h2 className="text-xl font-bold">Account & security</h2><p className="text-sm text-slate-500">Verify your email and mobile number with OTP and manage your password.</p></div></div>
               <div className="grid md:grid-cols-2 gap-5 mt-5">
-                <div>
-                  <label className="text-sm font-semibold">Login email / username</label>
-                  <input type="email" value={accountEmail} onChange={e => setAccountEmail(e.target.value)} className="mt-2 w-full border rounded-xl p-3" placeholder="you@example.com" />
-                  <button onClick={saveAccountEmail} disabled={savingAccount} className="mt-3 bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{savingAccount ? "Saving..." : "Update login email"}</button>
+                <div className="border rounded-2xl p-4">
+                  <div className="flex items-center justify-between gap-2"><label className="text-sm font-semibold">Login email</label><span className={`text-xs font-bold px-2 py-1 rounded-full ${store.user?.emailVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{store.user?.emailVerified ? "Verified" : "Not verified"}</span></div>
+                  <input type="email" value={accountEmail} onChange={e=>{setAccountEmail(e.target.value);setEmailChangeSent(false)}} className="mt-2 w-full border rounded-xl p-3" placeholder="you@example.com" />
+                  {!store.user?.emailVerified || accountEmail.toLowerCase() !== String(store.user?.email || "").toLowerCase() ? <>
+                    <div className="flex gap-2 mt-3"><input value={emailChangeOtp} onChange={e=>setEmailChangeOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={sendAccountEmailOtp} disabled={savingAccount} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailChangeSent ? "Resend" : "Send OTP"}</button></div>
+                    {emailChangeSent && <button type="button" onClick={verifyAccountEmailOtp} disabled={savingAccount} className="w-full mt-2 bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify & update email</button>}
+                  </> : <p className="text-xs text-slate-500 mt-2">Changing this email requires OTP verification.</p>}
                 </div>
-                <div>
-                  <label className="text-sm font-semibold">Change password</label>
-                  <div className="space-y-2 mt-2">
-                    <input type="password" value={accountPassword.currentPassword} onChange={e => setAccountPassword({ ...accountPassword, currentPassword: e.target.value })} placeholder="Current password" className="w-full border rounded-xl p-3" />
-                    <input type="password" value={accountPassword.newPassword} onChange={e => setAccountPassword({ ...accountPassword, newPassword: e.target.value })} placeholder="New password (min 8 characters)" className="w-full border rounded-xl p-3" />
-                    <input type="password" value={accountPassword.confirmPassword} onChange={e => setAccountPassword({ ...accountPassword, confirmPassword: e.target.value })} placeholder="Confirm new password" className="w-full border rounded-xl p-3" />
-                  </div>
-                  <button onClick={changeCustomerPassword} disabled={changingPassword} className="mt-3 bg-slate-950 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{changingPassword ? "Changing..." : "Change password"}</button>
+                <div className="border rounded-2xl p-4">
+                  <div className="flex items-center justify-between gap-2"><label className="text-sm font-semibold">Mobile number</label><span className={`text-xs font-bold px-2 py-1 rounded-full ${store.user?.phoneVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{store.user?.phoneVerified ? "Verified" : "Not verified"}</span></div>
+                  <input value={profile.phone} onChange={e=>{setProfile({...profile, phone:e.target.value});setMobileChangeSent(false)}} className="mt-2 w-full border rounded-xl p-3" placeholder="10-digit mobile" />
+                  <div className="flex gap-2 mt-3"><input value={mobileChangeOtp} onChange={e=>setMobileChangeOtp(e.target.value)} placeholder="Mobile OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={sendAccountMobileOtp} disabled={savingAccount} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{mobileChangeSent ? "Resend" : "Send OTP"}</button></div>
+                  {mobileChangeSent && <button type="button" onClick={verifyAccountMobileOtp} disabled={savingAccount} className="w-full mt-2 bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify & update mobile</button>}
                 </div>
               </div>
+              <div className="border rounded-2xl p-4 mt-5">
+                <label className="text-sm font-semibold">Change password</label>
+                <div className="grid md:grid-cols-3 gap-2 mt-2"><input type="password" value={accountPassword.currentPassword} onChange={e=>setAccountPassword({...accountPassword,currentPassword:e.target.value})} placeholder="Current password" className="w-full border rounded-xl p-3"/><input type="password" value={accountPassword.newPassword} onChange={e=>setAccountPassword({...accountPassword,newPassword:e.target.value})} placeholder="New password (min 8)" className="w-full border rounded-xl p-3"/><input type="password" value={accountPassword.confirmPassword} onChange={e=>setAccountPassword({...accountPassword,confirmPassword:e.target.value})} placeholder="Confirm password" className="w-full border rounded-xl p-3"/></div>
+                <button onClick={changeCustomerPassword} disabled={changingPassword} className="mt-3 bg-slate-950 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{changingPassword ? "Changing..." : "Change password"}</button>
+              </div>
+              {devOtp && <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">Development OTP: <b>{devOtp}</b>. Configure the email/SMS provider in `.env` for real delivery.</div>}
             </section>
 
             <section className="mt-6">

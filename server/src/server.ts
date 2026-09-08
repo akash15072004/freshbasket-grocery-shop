@@ -8,6 +8,7 @@ import morgan from "morgan";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+import crypto from "crypto";
 
 import User from "./models/User";
 import Product from "./models/Product";
@@ -20,6 +21,7 @@ import Banner from "./models/Banner";
 import LoyaltyTransaction from "./models/LoyaltyTransaction";
 import LoyaltySetting from "./models/LoyaltySetting";
 import Address from "./models/Address";
+import OtpVerification from "./models/OtpVerification";
 import { auth, role, AuthRequest } from "./middleware/auth";
 
 const app = express();
@@ -119,6 +121,143 @@ const notifyAdmins = async ({ title, message, type = "info", order }: { title: s
   }
 };
 
+
+/* =========================================================
+   OTP / VERIFICATION HELPERS
+========================================================= */
+
+const normalizePhone = (value: any) => String(value || "").replace(/\D/g, "");
+const hashOtp = (otp: string) => crypto.createHash("sha256").update(otp).digest("hex");
+const makeOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+const otpExpiryMs = 10 * 60 * 1000;
+const otpCooldownMs = 60 * 1000;
+
+const sendEmailOtp = async (email: string, otp: string, purpose: string) => {
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  const from = String(process.env.OTP_FROM_EMAIL || "FreshBasket <onboarding@resend.dev>").trim();
+  const subject = purpose === "forgot" ? "FreshBasket password reset OTP" : "FreshBasket verification OTP";
+
+  if (!apiKey) {
+    console.log(`[FreshBasket OTP] EMAIL ${email}: ${otp}`);
+    return process.env.OTP_DEV_MODE === "true" || process.env.NODE_ENV !== "production" ? otp : null;
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject,
+      html: `<div style="font-family:Arial,sans-serif"><h2>FreshBasket</h2><p>Your OTP is:</p><h1 style="letter-spacing:6px">${otp}</h1><p>This OTP expires in 10 minutes. Do not share it with anyone.</p></div>`,
+    }),
+  });
+  if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+  return null;
+};
+
+const sendSmsOtp = async (phone: string, otp: string) => {
+  const sid = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
+  const token = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+  const from = String(process.env.TWILIO_FROM_NUMBER || "").trim();
+  const to = phone.startsWith("+") ? phone : `+91${phone}`;
+
+  if (!sid || !token || !from) {
+    console.log(`[FreshBasket OTP] SMS ${phone}: ${otp}`);
+    return process.env.OTP_DEV_MODE === "true" || process.env.NODE_ENV !== "production" ? otp : null;
+  }
+
+  const body = new URLSearchParams({
+    To: to,
+    From: from,
+    Body: `FreshBasket verification OTP: ${otp}. Valid for 10 minutes.`,
+  });
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: "POST",
+    headers: {
+      Authorization: "Basic " + Buffer.from(`${sid}:${token}`).toString("base64"),
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  if (!response.ok) throw new Error(`SMS provider returned ${response.status}`);
+  return null;
+};
+
+const createOtp = async ({
+  channel,
+  target,
+  user,
+  purpose,
+}: {
+  channel: "email" | "mobile";
+  target: string;
+  user?: any;
+  purpose: string;
+}) => {
+  const normalizedTarget = channel === "email" ? target.toLowerCase() : normalizePhone(target);
+  const recent = await OtpVerification.findOne({
+    channel,
+    target: normalizedTarget,
+    purpose,
+    createdAt: { $gte: new Date(Date.now() - otpCooldownMs) },
+  }).lean();
+  if (recent) throw new Error("Please wait 60 seconds before requesting another OTP");
+
+  const otp = makeOtp();
+  await OtpVerification.deleteMany({ channel, target: normalizedTarget, purpose, verifiedAt: { $exists: false } });
+  await OtpVerification.create({
+    channel,
+    target: normalizedTarget,
+    otpHash: hashOtp(otp),
+    user: user?._id,
+    purpose,
+    expiresAt: new Date(Date.now() + otpExpiryMs),
+  });
+
+  const devOtp = channel === "email"
+    ? await sendEmailOtp(normalizedTarget, otp, purpose)
+    : await sendSmsOtp(normalizedTarget, otp);
+  return devOtp;
+};
+
+const verifyOtp = async ({ channel, target, otp, purpose }: { channel: "email" | "mobile"; target: string; otp: string; purpose: string }) => {
+  const normalizedTarget = channel === "email" ? target.toLowerCase() : normalizePhone(target);
+  const record: any = await OtpVerification.findOne({
+    channel,
+    target: normalizedTarget,
+    purpose,
+    verifiedAt: { $exists: false },
+  }).sort({ createdAt: -1 });
+
+  if (!record || record.expiresAt < new Date()) throw new Error("OTP is invalid or expired");
+  if (record.attempts >= 5) throw new Error("Too many incorrect OTP attempts. Request a new OTP");
+
+  if (record.otpHash !== hashOtp(String(otp || "").trim())) {
+    record.attempts = Number(record.attempts || 0) + 1;
+    await record.save();
+    throw new Error("Invalid OTP");
+  }
+
+  record.verifiedAt = new Date();
+  await record.save();
+  return record;
+};
+
+const requireVerifiedOtp = async (channel: "email" | "mobile", target: string, purpose: string, userId?: any) => {
+  const normalizedTarget = channel === "email" ? target.toLowerCase() : normalizePhone(target);
+  const filter: any = {
+    channel,
+    target: normalizedTarget,
+    purpose,
+    verifiedAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) },
+  };
+  if (userId) filter.user = userId;
+  const record = await OtpVerification.findOne(filter).sort({ verifiedAt: -1 });
+  if (!record) throw new Error("Please verify the OTP first");
+  return record;
+};
+
 /* =========================================================
    HEALTH
 ========================================================= */
@@ -133,6 +272,78 @@ app.get("/api/health", (_, res) => {
 /* =========================================================
    AUTH
 ========================================================= */
+
+
+app.post("/api/auth/send-email-otp", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const purpose = String(req.body.purpose || "register").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+    if (!["register", "forgot", "change-email"].includes(purpose)) return res.status(400).json({ success: false, message: "Invalid OTP purpose" });
+
+    const existing: any = await User.findOne({ email }).lean();
+    if (purpose === "register" && existing) return res.status(409).json({ success: false, message: "Email already registered" });
+    if (purpose !== "register" && (!existing || existing.role !== "customer")) return res.status(404).json({ success: false, message: "Customer account not found" });
+
+    const devOtp = await createOtp({ channel: "email", target: email, user: existing, purpose });
+    return res.json({ success: true, message: "Email OTP sent successfully", ...(devOtp ? { devOtp } : {}) });
+  } catch (error: any) {
+    return res.status(429).json({ success: false, message: error?.message || "Unable to send email OTP" });
+  }
+});
+
+app.post("/api/auth/verify-email-otp", async (req, res) => {
+  try {
+    await verifyOtp({ channel: "email", target: String(req.body.email || ""), otp: String(req.body.otp || ""), purpose: String(req.body.purpose || "register") });
+    return res.json({ success: true, message: "Email verified successfully" });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error?.message || "Unable to verify email OTP" });
+  }
+});
+
+app.post("/api/auth/send-mobile-otp", async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    const purpose = String(req.body.purpose || "register").trim();
+    if (!/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ success: false, message: "Please enter a valid 10-digit Indian mobile number" });
+    if (!["register", "change-mobile"].includes(purpose)) return res.status(400).json({ success: false, message: "Invalid OTP purpose" });
+
+    const existing: any = await User.findOne({ phone, role: "customer" }).lean();
+    if (purpose === "register" && existing) return res.status(409).json({ success: false, message: "Mobile number already registered" });
+    if (purpose === "change-mobile" && existing && String(existing._id) !== String(req.body.userId || "")) return res.status(409).json({ success: false, message: "Mobile number already registered" });
+
+    const devOtp = await createOtp({ channel: "mobile", target: phone, user: existing, purpose });
+    return res.json({ success: true, message: "Mobile OTP sent successfully", ...(devOtp ? { devOtp } : {}) });
+  } catch (error: any) {
+    return res.status(429).json({ success: false, message: error?.message || "Unable to send mobile OTP" });
+  }
+});
+
+app.post("/api/auth/verify-mobile-otp", async (req, res) => {
+  try {
+    await verifyOtp({ channel: "mobile", target: String(req.body.phone || ""), otp: String(req.body.otp || ""), purpose: String(req.body.purpose || "register") });
+    return res.json({ success: true, message: "Mobile number verified successfully" });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error?.message || "Unable to verify mobile OTP" });
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const newPassword = String(req.body.newPassword || "");
+    if (newPassword.length < 8) return res.status(400).json({ success: false, message: "New password must be at least 8 characters" });
+    const user: any = await User.findOne({ email, role: "customer" });
+    if (!user) return res.status(404).json({ success: false, message: "Customer account not found" });
+    await requireVerifiedOtp("email", email, "forgot", user._id);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await User.collection.updateOne({ _id: user._id }, { $set: { password: hashedPassword } });
+    await OtpVerification.deleteMany({ user: user._id, purpose: "forgot" });
+    return res.json({ success: true, message: "Password reset successfully. You can now sign in." });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error?.message || "Unable to reset password" });
+  }
+});
 
 app.post("/api/auth/register", async (req, res) => {
   try {
@@ -158,16 +369,32 @@ app.post("/api/auth/register", async (req, res) => {
       });
     }
 
+    const normalizedPhone = normalizePhone(phone);
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
+      return res.status(400).json({ success: false, message: "A valid 10-digit mobile number is required" });
+    }
+    try {
+      await requireVerifiedOtp("email", normalizedEmail, "register");
+      await requireVerifiedOtp("mobile", normalizedPhone, "register");
+    } catch (otpError: any) {
+      return res.status(400).json({ success: false, message: otpError?.message || "Please verify email and mobile OTP first" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name: String(name).trim(),
       email: normalizedEmail,
       password: hashedPassword,
-      phone: phone ? String(phone).trim() : undefined,
+      phone: normalizedPhone,
       role: "customer",
       blocked: false,
     });
+    await User.collection.updateOne({ _id: user._id }, { $set: { emailVerified: true, phoneVerified: true } });
+    await OtpVerification.deleteMany({ $or: [
+      { target: normalizedEmail, purpose: "register" },
+      { target: normalizedPhone, purpose: "register" },
+    ] });
 
     return res.status(201).json({
       success: true,
@@ -177,7 +404,10 @@ app.post("/api/auth/register", async (req, res) => {
           id: user._id,
           name: user.name,
           email: user.email,
+          phone: user.phone,
           role: user.role,
+          emailVerified: true,
+          phoneVerified: true,
         },
       },
     });
@@ -250,6 +480,8 @@ app.post("/api/auth/login", async (req, res) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
+          emailVerified: Boolean((user as any).emailVerified),
+          phoneVerified: Boolean((user as any).phoneVerified),
           isMainAdmin: String(user.email || "").toLowerCase() === MAIN_ADMIN_EMAIL,
         },
       },
@@ -282,7 +514,7 @@ app.get(
 
       return res.json({
         success: true,
-        data: { ...user.toObject(), isMainAdmin: String((user as any).email || "").toLowerCase() === MAIN_ADMIN_EMAIL },
+        data: { ...user.toObject(), emailVerified: Boolean((user as any).emailVerified), phoneVerified: Boolean((user as any).phoneVerified), isMainAdmin: String((user as any).email || "").toLowerCase() === MAIN_ADMIN_EMAIL },
       });
     } catch (error) {
       console.error("ME ERROR:", error);
@@ -374,21 +606,22 @@ app.patch("/api/admin/settings/password", auth, mainAdminOnly, async (req: AuthR
 app.patch("/api/profile", auth, role("customer"), async (req: AuthRequest, res) => {
   try {
     const name = String(req.body.name || "").trim();
-    const phone = String(req.body.phone || "").replace(/\D/g, "");
+    const requestedPhone = req.body.phone === undefined ? "" : String(req.body.phone || "").replace(/\D/g, "");
 
     if (name.length < 2) {
       return res.status(400).json({ success: false, message: "Please enter your full name" });
-    }
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      return res.status(400).json({ success: false, message: "Please enter a valid 10-digit mobile number" });
     }
 
     const existing: any = await User.findById(req.user!.id).select("-password");
     if (!existing) return res.status(404).json({ success: false, message: "User not found" });
 
+    if (requestedPhone && requestedPhone !== String(existing.phone || "")) {
+      return res.status(400).json({ success: false, message: "Mobile number changes require OTP verification" });
+    }
+
     await User.collection.updateOne(
       { _id: existing._id },
-      { $set: { name, phone } }
+      { $set: { name } }
     );
 
     const updated: any = await User.findById(existing._id).select("-password").lean();
@@ -416,7 +649,8 @@ app.patch("/api/profile/account", auth, role("customer"), async (req: AuthReques
       return res.status(409).json({ success: false, message: "This email is already registered" });
     }
 
-    await User.collection.updateOne({ _id: user._id }, { $set: { email } });
+    await requireVerifiedOtp("email", email, "change-email", user._id);
+    await User.collection.updateOne({ _id: user._id }, { $set: { email, emailVerified: true } });
     const updated: any = await User.findById(user._id).select("-password").lean();
     return res.json({ success: true, message: "Login email updated successfully", data: updated });
   } catch (error) {
@@ -458,6 +692,52 @@ app.patch("/api/profile/password", auth, role("customer"), async (req: AuthReque
     console.error("CUSTOMER PASSWORD CHANGE ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to change password" });
   }
+});
+
+
+app.post("/api/profile/send-email-otp", auth, role("customer"), async (req: AuthRequest, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const user: any = await User.findById(req.user!.id);
+    if (!user) return res.status(404).json({ success: false, message: "Customer account not found" });
+    const existing: any = await User.findOne({ email, _id: { $ne: user._id } }).select("_id").lean();
+    if (existing) return res.status(409).json({ success: false, message: "This email is already registered" });
+    const devOtp = await createOtp({ channel: "email", target: email, user, purpose: "change-email" });
+    return res.json({ success: true, message: "Email OTP sent successfully", ...(devOtp ? { devOtp } : {}) });
+  } catch (error: any) { return res.status(429).json({ success: false, message: error?.message || "Unable to send email OTP" }); }
+});
+
+app.post("/api/profile/verify-email-otp", auth, role("customer"), async (req: AuthRequest, res) => {
+  try {
+    await verifyOtp({ channel: "email", target: String(req.body.email || ""), otp: String(req.body.otp || ""), purpose: "change-email" });
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const user: any = await User.findById(req.user!.id);
+    await User.collection.updateOne({ _id: user._id }, { $set: { email, emailVerified: true } });
+    const updated: any = await User.findById(user._id).select("-password").lean();
+    return res.json({ success: true, message: "Email verified and updated successfully", data: updated });
+  } catch (error: any) { return res.status(400).json({ success: false, message: error?.message || "Unable to verify email OTP" }); }
+});
+
+app.post("/api/profile/send-mobile-otp", auth, role("customer"), async (req: AuthRequest, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    if (!/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ success: false, message: "Please enter a valid 10-digit Indian mobile number" });
+    const existing: any = await User.findOne({ phone, role: "customer", _id: { $ne: req.user!.id } }).select("_id").lean();
+    if (existing) return res.status(409).json({ success: false, message: "This mobile number is already registered" });
+    const user: any = await User.findById(req.user!.id);
+    const devOtp = await createOtp({ channel: "mobile", target: phone, user, purpose: "change-mobile" });
+    return res.json({ success: true, message: "Mobile OTP sent successfully", ...(devOtp ? { devOtp } : {}) });
+  } catch (error: any) { return res.status(429).json({ success: false, message: error?.message || "Unable to send mobile OTP" }); }
+});
+
+app.post("/api/profile/verify-mobile-otp", auth, role("customer"), async (req: AuthRequest, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    await verifyOtp({ channel: "mobile", target: phone, otp: String(req.body.otp || ""), purpose: "change-mobile" });
+    await User.collection.updateOne({ _id: req.user!.id }, { $set: { phone, phoneVerified: true } });
+    const updated: any = await User.findById(req.user!.id).select("-password").lean();
+    return res.json({ success: true, message: "Mobile number verified and updated successfully", data: updated });
+  } catch (error: any) { return res.status(400).json({ success: false, message: error?.message || "Unable to verify mobile OTP" }); }
 });
 
 app.get("/api/addresses", auth, role("customer"), async (req: AuthRequest, res) => {
