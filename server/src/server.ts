@@ -3,8 +3,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-// bcryptjs does not provide declarations in this project.
-// @ts-expect-error No type declarations are available for bcryptjs.
+
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -734,7 +733,7 @@ app.post("/api/profile/verify-mobile-otp", auth, role("customer"), async (req: A
   try {
     const phone = normalizePhone(req.body.phone);
     await verifyOtp({ channel: "mobile", target: phone, otp: String(req.body.otp || ""), purpose: "change-mobile" });
-    await User.collection.updateOne({ _id: req.user!.id }, { $set: { phone, phoneVerified: true } });
+    await User.collection.updateOne({ _id: new User.base.Types.ObjectId(req.user!.id) }, { $set: { phone, phoneVerified: true } });
     const updated: any = await User.findById(req.user!.id).select("-password").lean();
     return res.json({ success: true, message: "Mobile number verified and updated successfully", data: updated });
   } catch (error: any) { return res.status(400).json({ success: false, message: error?.message || "Unable to verify mobile OTP" }); }
@@ -1169,7 +1168,7 @@ app.post(
   "/api/products",
   auth,
   role("admin"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     try {
       const product = await Product.create(req.body);
 
@@ -1855,7 +1854,7 @@ app.post(
 
       if (safeRewardPoints > 0) {
         await User.collection.updateOne(
-          { _id: req.user!.id },
+          { _id: new mongoose.Types.ObjectId(req.user!.id) },
           { $inc: { loyaltyPoints: -safeRewardPoints } }
         );
         await LoyaltyTransaction.create({
@@ -2631,7 +2630,7 @@ app.patch(
   "/api/orders/:id/status",
   auth,
   role("admin", "delivery"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     try {
       const allowedStatuses = [
         "Pending",
