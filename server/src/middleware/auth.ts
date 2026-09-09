@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction, RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
 
@@ -15,11 +15,12 @@ export interface AuthRequest extends Request {
  * - Loads the latest user role from MongoDB
  * - Prevents stale/wrong role information inside old JWTs
  */
-export async function auth(
-  req: AuthRequest,
+export const auth: RequestHandler = async (
+  req: Request,
   res: Response,
   next: NextFunction
-) {
+) => {
+  const authReq = req as AuthRequest;
   const header = req.headers.authorization;
 
   if (!header || !header.startsWith("Bearer ")) {
@@ -73,12 +74,12 @@ export async function auth(
       });
     }
 
-    req.user = {
+    authReq.user = {
       id: user._id.toString(),
       role: user.role,
     };
 
-    next();
+    return next();
   } catch (error) {
     console.error("AUTH ERROR:", error);
 
@@ -87,18 +88,16 @@ export async function auth(
       message: "Invalid or expired token",
     });
   }
-}
+};
 
 /**
  * Role-based authorization middleware
  */
-export function role(...roles: string[]) {
-  return (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    const currentRole = String(req.user?.role || "")
+export function role(...roles: string[]): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthRequest;
+
+    const currentRole = String(authReq.user?.role || "")
       .trim()
       .toLowerCase();
 
