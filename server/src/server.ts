@@ -51,9 +51,9 @@ const mainAdminOnly = async (req: AuthRequest, res: any, next: any) => {
 const allowedOrigins = [
   "https://freshbasket-grocery-shop.vercel.app",
   "http://localhost:5173",
+  "http://localhost",
   "https://localhost",
 ];
-
 app.use(
   cors({
     origin: allowedOrigins,
