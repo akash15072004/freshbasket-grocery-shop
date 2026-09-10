@@ -50,6 +50,9 @@ import {
   Save,
   Mail,
   Store,
+  BadgeCheck,
+  Printer,
+  Upload,
 } from "lucide-react";
 
 const IS_NATIVE_APP =
@@ -252,26 +255,54 @@ function FitDeliveryMap({
 }
 
 async function geocodeDeliveryAddress(address: string, city: string, pincode: string): Promise<DeliveryCoordinate | null> {
-  const queries = [
-    [address, city, pincode, "India"].filter(Boolean).join(", "),
-    [city, pincode, "India"].filter(Boolean).join(", "),
-    [pincode, "India"].filter(Boolean).join(", "),
-  ];
+  // Never fall back to city/pincode-only coordinates. Those usually point to
+  // the centre of an area and can send the delivery partner to the wrong place.
+  const query = [address, city, pincode, "India"].filter(Boolean).join(", ");
+  if (!address || !city || !pincode) return null;
 
-  for (const query of queries) {
-    try {
-      const response = await axios.get("https://nominatim.openstreetmap.org/search", {
-        params: { q: query, format: "jsonv2", limit: 1, countrycodes: "in" },
-        timeout: 10000,
-      });
-      const hit = response.data?.[0];
-      if (hit && isValidCoordinate(hit.lat, hit.lon)) {
-        return { latitude: Number(hit.lat), longitude: Number(hit.lon) };
-      }
-    } catch {
-      // Try the next, less specific query.
+  try {
+    const response = await axios.get("https://nominatim.openstreetmap.org/search", {
+      params: {
+        q: query,
+        format: "jsonv2",
+        addressdetails: 1,
+        limit: 3,
+        countrycodes: "in",
+      },
+      timeout: 12000,
+    });
+
+    const hits = Array.isArray(response.data) ? response.data : [];
+    const normalizedPin = String(pincode).replace(/\D/g, "");
+    const normalizedCity = String(city).trim().toLowerCase();
+
+    // Prefer a result whose postcode/city actually matches the entered
+    // delivery address. Do not silently use a broad pincode-centre result.
+    const ranked = [...hits].sort((a: any, b: any) => {
+      const score = (hit: any) => {
+        const postcode = String(hit?.address?.postcode || "").replace(/\D/g, "");
+        const hitCity = String(
+          hit?.address?.city ||
+          hit?.address?.town ||
+          hit?.address?.village ||
+          hit?.address?.municipality ||
+          ""
+        ).trim().toLowerCase();
+        return (postcode === normalizedPin ? 2 : 0) +
+          (hitCity === normalizedCity ? 1 : 0) +
+          (String(hit?.type || "").toLowerCase() === "house" ? 1 : 0);
+      };
+      return score(b) - score(a);
+    });
+
+    const hit = ranked.find((item: any) => isValidCoordinate(item?.lat, item?.lon));
+    if (hit && isValidCoordinate(hit.lat, hit.lon)) {
+      return { latitude: Number(hit.lat), longitude: Number(hit.lon) };
     }
+  } catch (error) {
+    console.error("DELIVERY ADDRESS GEOCODING ERROR:", error);
   }
+
   return null;
 }
 
@@ -5963,6 +5994,55 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
     };
   }, [store.user?.role]);
 
+  const getFreshDeliveryLocation = (): Promise<DeliveryCoordinate | null> =>
+    new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const latitude = Number(position.coords.latitude);
+          const longitude = Number(position.coords.longitude);
+          if (!isValidCoordinate(latitude, longitude)) {
+            resolve(null);
+            return;
+          }
+
+          const fresh = { latitude, longitude };
+          setMyLocation(fresh);
+          lastLiveLocationUpdate.current = Date.now();
+          axios.post(
+            API + "/delivery/location",
+            fresh,
+            { headers: adminHeaders() }
+          ).catch(() => {});
+          setLocationError("");
+          resolve(fresh);
+        },
+        (geoError) => {
+          console.error("FRESH DELIVERY LOCATION ERROR:", geoError);
+          setLocationError(
+            "Could not get your exact current location. Please enable precise location/GPS permission and try again."
+          );
+          resolve(null);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 0,
+        }
+      );
+    });
+
+  const handleOutForDelivery = async (id: string) => {
+    // Capture a fresh GPS fix at the exact moment the rider starts the trip.
+    // This prevents the route from using the previous pickup/old GPS position.
+    await getFreshDeliveryLocation();
+    await updateStatus(id, "Out for Delivery");
+  };
+
   const updateStatus = async (id: string, status: string) => {
     try {
       await axios.patch(
@@ -6055,13 +6135,18 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
       : null;
   };
 
-  const openNavigation = (
+  const openNavigation = async (
     pickup: DeliveryCoordinate,
     destination: DeliveryCoordinate
   ) => {
+    // Always request a fresh GPS fix before opening navigation. The delivery
+    // partner may have moved several hundred metres since the last watch tick.
+    const fresh = await getFreshDeliveryLocation();
+    const origin = fresh || myLocation || pickup;
+
     const url =
       "https://www.google.com/maps/dir/?api=1" +
-      `&origin=${pickup.latitude},${pickup.longitude}` +
+      `&origin=${origin.latitude},${origin.longitude}` +
       `&destination=${destination.latitude},${destination.longitude}` +
       "&travelmode=driving";
 
@@ -6360,10 +6445,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
                             {o.status === "Packed" && (
                               <button
                                 onClick={() =>
-                                  updateStatus(
-                                    o._id,
-                                    "Out for Delivery"
-                                  )
+                                  handleOutForDelivery(o._id)
                                 }
                                 className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold"
                               >
@@ -7396,6 +7478,152 @@ function AdminDeliveryPartners() {
   );
 }
 
+function IdentityBarcode({ value }: { value: string }) {
+  const bars = useMemo(() => {
+    const patterns: Record<string, string> = {
+      "0":"nnnwwnwnn","1":"wnnwnnnnw","2":"nnwwnnnnw","3":"wnwwnnnnn","4":"nnnwwnnnw","5":"wnnwwnnnn","6":"nnwwwnnnn","7":"nnnwnnwnw","8":"wnnwnnwnn","9":"nnwwnnwnn",
+      A:"wnnnnwnnw",B:"nnwnnwnnw",C:"wnwnnwnnn",D:"nnnnwwnnw",E:"wnnnwwnnn",F:"nnwnwwnnn",G:"nnnnnwwnw",H:"wnnnnwwnn",I:"nnwnnwwnn",J:"nnnnwwwnn",
+      K:"wnnnnnnww",L:"nnwnnnnww",M:"wnwnnnnwn",N:"nnnnwnnww",O:"wnnnwnnwn",P:"nnwnwnnwn",Q:"nnnnnnwww",R:"wnnnnnwwn",S:"nnwnnnwwn",T:"nnnnwnwwn",
+      U:"wwnnnnnnw",V:"nwwnnnnnw",W:"wwwnnnnnn",X:"nwnnwnnnw",Y:"wwnnwnnnn",Z:"nwwnwnnnn", "-":"nwnnnnwnw", ".":"wwnnnnwnn", " ":"nwwnnnwnn", "$":"nwnwnwnnn", "/":"nwnwnnnwn", "+":"nwnnnwnwn", "%":"nnnwnwnwn"
+    };
+    const normalized = String(value || "").toUpperCase().replace(/[^0-9A-Z. $/+%-]/g, "-");
+    const chars = `*${normalized}*`;
+    const widths: number[] = [];
+    for (const ch of chars) {
+      const pattern = patterns[ch] || patterns["-"];
+      for (const unit of pattern) widths.push(unit === "w" ? 3 : 1);
+      widths.push(1);
+    }
+    return widths;
+  }, [value]);
+  const total = bars.reduce((a, b) => a + b, 0);
+  let x = 0;
+  return <svg viewBox={`0 0 ${total} 42`} className="w-full h-12" preserveAspectRatio="none" aria-label="Verification barcode">
+    {bars.map((w, i) => { const node = <rect key={i} x={x} y="0" width={w} height="34" fill={i % 2 === 0 ? "#0f172a" : "white"} />; x += w; return node; })}
+    <text x="50%" y="41" textAnchor="middle" fontSize="5" fill="#0f172a" letterSpacing="1">{value}</text>
+  </svg>;
+}
+
+function ProfessionalIdCard({ card, printId = "fb-id-card-print" }: { card: any; printId?: string }) {
+  const typeLabel = card.holderType === "delivery" ? "DELIVERY PARTNER" : card.holderType === "store-admin" ? "STORE ADMIN" : "EMPLOYEE";
+  const issue = card.issueDate ? new Date(card.issueDate).toLocaleDateString("en-IN") : "—";
+  const expiry = card.expiryDate ? new Date(card.expiryDate).toLocaleDateString("en-IN") : "—";
+  return <div id={printId} className="w-[820px] max-w-full aspect-[1.586/1] bg-white rounded-[28px] overflow-hidden border border-slate-200 shadow-xl text-slate-900">
+    <div className="h-2 bg-emerald-500" />
+    <div className="p-7 h-full flex flex-col">
+      <div className="flex items-start justify-between gap-5">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 grid place-items-center"><Leaf size={25} /></div>
+          <div><div className="font-black text-2xl tracking-tight">FreshBasket</div><div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Official Identity Card</div></div>
+        </div>
+        <div className="text-right"><div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full text-[11px] font-black"><BadgeCheck size={14}/> {typeLabel}</div><div className="text-[10px] text-slate-400 mt-2">ID: {card.cardNumber}</div></div>
+      </div>
+      <div className="flex gap-6 mt-6 flex-1 min-h-0">
+        <div className="w-32 h-40 shrink-0 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden grid place-items-center">
+          {card.photo ? <img src={card.photo} alt={card.name} className="w-full h-full object-cover" /> : <User size={48} className="text-slate-300" />}
+        </div>
+        <div className="flex-1 grid grid-cols-2 gap-x-7 gap-y-3 content-start">
+          <div className="col-span-2"><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Name</div><div className="font-black text-xl">{card.name}</div></div>
+          <div><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Designation</div><div className="font-bold text-sm">{card.designation || "—"}</div></div>
+          <div><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Employee ID</div><div className="font-bold text-sm">{card.employeeId || card.cardNumber}</div></div>
+          <div><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Mobile</div><div className="font-semibold text-sm">{card.phone || "—"}</div></div>
+          <div><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Email</div><div className="font-semibold text-sm truncate">{card.email || "—"}</div></div>
+          <div className="col-span-2"><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Store / Department</div><div className="font-semibold text-sm">{card.storeAdmin?.name || card.department || "FreshBasket"}</div></div>
+          <div className="col-span-2"><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Address</div><div className="font-semibold text-xs line-clamp-2">{card.address || "FreshBasket official team member"}</div></div>
+        </div>
+      </div>
+      <div className="border-t border-slate-100 pt-3 flex items-end gap-5">
+        <div className="flex-1"><IdentityBarcode value={card.cardNumber}/></div>
+        <div className="text-[9px] text-slate-400 leading-4 w-40"><b className="text-slate-600">Issued:</b> {issue}<br/><b className="text-slate-600">Valid until:</b> {expiry}<br/><b className="text-slate-600">Emergency:</b> {card.emergencyContact || "—"}</div>
+      </div>
+    </div>
+  </div>;
+}
+
+function MainAdminIdCardGenerator() {
+  const [cards, setCards] = useState<any[]>([]);
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<any>({ holderType: "delivery", sourceId: "", name: "", email: "", phone: "", employeeId: "", designation: "Delivery Partner", department: "Logistics", address: "", emergencyContact: "", photo: "", storeAdminId: "", expiryDate: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10) });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [c, a, p] = await Promise.all([
+        axios.get(API + "/admin/identity-cards", { headers: adminHeaders() }),
+        axios.get(API + "/admin/admins", { headers: adminHeaders() }),
+        axios.get(API + "/admin/delivery-partners", { headers: adminHeaders() }),
+      ]);
+      setCards(c.data.data || []); setAdmins(a.data.data || []); setPartners(p.data.data || []);
+    } catch (e: any) { alert(e?.response?.data?.message || "Unable to load identity card data."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const chooseSource = (id: string) => {
+    setForm((f: any) => {
+      const list = f.holderType === "delivery" ? partners : admins;
+      const person = list.find((x: any) => String(x._id) === String(id));
+      if (!person) return { ...f, sourceId: id };
+      return { ...f, sourceId: id, name: person.name || "", email: person.email || "", phone: person.phone || "", storeAdminId: f.holderType === "store-admin" ? person._id : (person.storeAdmin || ""), designation: f.holderType === "delivery" ? "Delivery Partner" : "Store Admin", department: f.holderType === "delivery" ? "Logistics & Delivery" : "Store Operations" };
+    });
+  };
+
+  const changeType = (holderType: string) => {
+    setForm((f: any) => ({ ...f, holderType, sourceId: "", name: "", email: "", phone: "", employeeId: "", designation: holderType === "delivery" ? "Delivery Partner" : holderType === "store-admin" ? "Store Admin" : "Employee", department: holderType === "delivery" ? "Logistics & Delivery" : holderType === "store-admin" ? "Store Operations" : "" }));
+  };
+
+  const photo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (!file.type.startsWith("image/")) return alert("Please select an image file.");
+    if (file.size > 700 * 1024) return alert("Please use a photo smaller than 700 KB.");
+    const reader = new FileReader(); reader.onload = () => setForm((f: any) => ({ ...f, photo: String(reader.result || "") })); reader.readAsDataURL(file);
+  };
+
+  const generate = async () => {
+    if (!form.name.trim() || !form.designation.trim()) return alert("Name and designation are required.");
+    if (form.holderType === "store-admin" && !form.sourceId) return alert("Select the store admin.");
+    setSaving(true);
+    try {
+      const r = await axios.post(API + "/admin/identity-cards", { ...form }, { headers: adminHeaders() });
+      const card = r.data.data; setCards((x) => [card, ...x]); setSelectedCard(card); alert("Professional ID card generated successfully.");
+    } catch (e: any) { alert(e?.response?.data?.message || "Unable to generate ID card."); }
+    finally { setSaving(false); }
+  };
+
+  const printCard = (card: any) => { setSelectedCard(card); setTimeout(() => window.print(), 120); };
+
+  return <div className="space-y-5">
+    <style>{`@media print { body * { visibility:hidden !important; } #fb-id-card-print, #fb-id-card-print * { visibility:visible !important; } #fb-id-card-print { position:fixed !important; left:50% !important; top:50% !important; transform:translate(-50%,-50%) !important; width:820px !important; max-width:none !important; box-shadow:none !important; } @page { size:A4 landscape; margin:0; } }`}</style>
+    <div><p className="text-emerald-600 text-sm font-bold">MAIN ADMIN ONLY</p><h2 className="text-2xl font-bold">Professional ID Card Generator</h2><p className="text-sm text-slate-500 mt-1">Generate official FreshBasket identity cards for delivery partners, store admins and company employees. Only the main admin can create or revoke cards.</p></div>
+    <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 text-sm text-amber-900"><b>Verification:</b> Every generated card gets a unique FreshBasket ID number and a verification barcode. Keep the card details accurate and verify the holder's original documents before issuing it.</div>
+    <div className="bg-white border rounded-3xl p-6">
+      <h3 className="font-bold text-lg">Create new identity card</h3>
+      <div className="grid md:grid-cols-3 gap-4 mt-5">
+        <label className="text-sm font-semibold">Card for<select value={form.holderType} onChange={e => changeType(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="delivery">Delivery Partner</option><option value="store-admin">Store Admin</option><option value="employee">Company Employee</option></select></label>
+        {form.holderType !== "employee" && <label className="text-sm font-semibold">Select existing account<select value={form.sourceId} onChange={e => chooseSource(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="">Select...</option>{(form.holderType === "delivery" ? partners : admins).map((x:any)=><option key={x._id} value={x._id}>{x.name} · {x.email}</option>)}</select></label>}
+        <label className="text-sm font-semibold">Full name<input value={form.name} onChange={e => setForm({...form,name:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Designation<input value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Employee / Staff ID<input value={form.employeeId} onChange={e => setForm({...form,employeeId:e.target.value})} placeholder="Optional" className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Department<input value={form.department} onChange={e => setForm({...form,department:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Email<input value={form.email} onChange={e => setForm({...form,email:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Mobile<input value={form.phone} onChange={e => setForm({...form,phone:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Emergency contact<input value={form.emergencyContact} onChange={e => setForm({...form,emergencyContact:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Valid until<input type="date" value={form.expiryDate} onChange={e => setForm({...form,expiryDate:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold md:col-span-2">Residential / official address<textarea value={form.address} onChange={e => setForm({...form,address:e.target.value})} rows={2} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
+        <label className="text-sm font-semibold">Photo<input type="file" accept="image/*" onChange={photo} className="mt-2 w-full border rounded-xl px-3 py-2.5 bg-white" /><span className="block text-[11px] text-slate-400 mt-1">JPG/PNG/WebP · max 700 KB</span></label>
+      </div>
+      <button disabled={saving} onClick={generate} className="mt-5 inline-flex items-center gap-2 bg-slate-950 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50"><BadgeCheck size={18}/>{saving ? "Generating..." : "Generate Official ID Card"}</button>
+    </div>
+    {selectedCard && <div className="bg-slate-100 border rounded-3xl p-5"><div className="flex items-center justify-between mb-4"><div><h3 className="font-bold">Card Preview</h3><p className="text-xs text-slate-500">Print this card on an ID-card/PVC printer or save it through your browser's print dialog.</p></div><div className="flex gap-2"><button onClick={() => printCard(selectedCard)} className="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold"><Printer size={17}/> Print Card</button><button onClick={() => setSelectedCard(null)} className="border rounded-xl px-3 py-2.5"><X size={18}/></button></div></div><div className="overflow-auto"><ProfessionalIdCard card={selectedCard}/></div></div>}
+    <div className="bg-white border rounded-3xl overflow-hidden"><div className="px-5 py-4 border-b flex items-center justify-between"><div><b>Generated identity cards</b><p className="text-xs text-slate-500 mt-1">Main-admin controlled issuance register</p></div><button onClick={load} className="text-sm text-emerald-700 font-bold">Refresh</button></div>{loading ? <div className="p-10 text-center text-slate-500">Loading identity cards...</div> : cards.length ? <div className="divide-y">{cards.map(c => <div key={c._id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><b>{c.name}</b><p className="text-sm text-slate-500">{c.designation} · {c.cardNumber}</p><p className="text-xs text-slate-400">Valid until {c.expiryDate ? new Date(c.expiryDate).toLocaleDateString("en-IN") : "—"} · {c.status === "active" ? "Active" : "Revoked"}</p></div><button disabled={c.status !== "active"} onClick={() => printCard(c)} className="inline-flex items-center gap-2 border rounded-xl px-4 py-2 font-bold text-sm disabled:opacity-40"><Printer size={16}/> Print / Reprint</button></div>)}</div> : <div className="p-10 text-center text-slate-500">No identity cards generated yet.</div>}</div>
+    {selectedCard && <div className="fixed left-[-10000px] top-0"><ProfessionalIdCard card={selectedCard}/></div>}
+  </div>;
+}
+
 function AdminManagement({ store }: { store: ReturnType<typeof useStore> }) {
   const [admins, setAdmins] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -7771,7 +7999,7 @@ function Admin({
     ["coupons", Tag, "Coupons"],
     ["payment-settings", CircleDollarSign, "Payment / UPI"],
     ["rewards", Award, "Loyalty / Rewards"],
-    ...(store.user?.isMainAdmin ? [["admin-management", ShieldCheck, "Admin Management"]] : []),
+    ...(store.user?.isMainAdmin ? [["admin-management", ShieldCheck, "Admin Management"], ["id-card-generator", BadgeCheck, "ID Card Generator"]] : []),
     ["settings", Settings, "Settings / Security"],
     ["reports", BarChart3, "Reports"],
   ];
@@ -8064,6 +8292,7 @@ function Admin({
           {tab === "delivery-partners" && <AdminDeliveryPartners />}
           {tab === "store-location" && <AdminStoreLocation store={store} />}
           {tab === "admin-management" && isMainAdmin && <AdminManagement store={store} />}
+          {tab === "id-card-generator" && isMainAdmin && <MainAdminIdCardGenerator />}
           {tab === "coupons" && <CouponAdmin />}
           {tab === "payment-settings" && <AdminPaymentSettings />}
           {tab === "rewards" && <AdminRewards />}
