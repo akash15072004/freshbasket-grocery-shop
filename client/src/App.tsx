@@ -47,7 +47,6 @@ import {
   LockKeyhole,
   Save,
   Mail,
-  Phone,
 } from "lucide-react";
 
 const API_BASE =
@@ -70,6 +69,7 @@ type Product = {
   unit: string;
   stock: number;
   rating: number;
+  reviewCount?: number;
   lowStockThreshold?: number;
   isActive?: boolean;
 };
@@ -919,15 +919,148 @@ function ProductPage({
   const id = useLocation().pathname.split("/").pop();
   const p = store.products.find((x) => x._id === id);
 
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [reviewMessage, setReviewMessage] = useState("");
+  const [reviewError, setReviewError] = useState("");
+
+  const loadReviews = async () => {
+    if (!id) return;
+
+    setReviewLoading(true);
+    setReviewError("");
+
+    try {
+      const r = await axios.get(API + `/products/${id}/reviews`);
+      const data = r.data?.data || {};
+
+      setReviews(Array.isArray(data.reviews) ? data.reviews : []);
+
+      // Keep the product rating in sync only when real reviews exist.
+      // If there are no reviews yet, preserve the existing catalog rating.
+      if (
+        p &&
+        Number(data.total || 0) > 0 &&
+        Number.isFinite(Number(data.average))
+      ) {
+        store.setProducts(
+          store.products.map((product) =>
+            product._id === p._id
+              ? {
+                  ...product,
+                  rating: Number(data.average),
+                  reviewCount: Number(data.total || 0),
+                }
+              : product
+          )
+        );
+      }
+    } catch (e: any) {
+      setReviewError(
+        e?.response?.data?.message ||
+          "Unable to load reviews."
+      );
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadReviews();
+  }, [id]);
+
   if (!p) {
     return (
       <Layout store={store}>
         <main className="max-w-6xl mx-auto px-4 py-10">
-          <EmptyState icon={Package} title="Product not found" text="This product may have been removed or is no longer available." />
+          <EmptyState
+            icon={Package}
+            title="Product not found"
+            text="This product may have been removed or is no longer available."
+          />
         </main>
       </Layout>
     );
   }
+
+  const submitReview = async () => {
+    setReviewMessage("");
+    setReviewError("");
+
+    if (!store.user) {
+      setReviewError("Please sign in to submit a review.");
+      return;
+    }
+
+    if (store.user.role !== "customer") {
+      setReviewError("Only customers can submit product reviews.");
+      return;
+    }
+
+    const cleanComment = comment.trim();
+
+    if (cleanComment.length < 3) {
+      setReviewError("Review must contain at least 3 characters.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+
+    try {
+      const token = localStorage.getItem("fb-token");
+
+      const r = await axios.post(
+        API + `/products/${p._id}/reviews`,
+        {
+          rating,
+          comment: cleanComment,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const newRating = Number(
+        r.data?.data?.rating ?? p.rating ?? 0
+      );
+      const newReviewCount = Number(
+        r.data?.data?.reviewCount ?? reviews.length + 1
+      );
+
+      store.setProducts(
+        store.products.map((product) =>
+          product._id === p._id
+            ? {
+                ...product,
+                rating: newRating,
+                reviewCount: newReviewCount,
+              }
+            : product
+        )
+      );
+
+      setReviewMessage(
+        r.data?.message || "Review submitted successfully."
+      );
+      setComment("");
+      setRating(5);
+
+      // Reload so the newly submitted review appears immediately.
+      await loadReviews();
+    } catch (e: any) {
+      setReviewError(
+        e?.response?.data?.message ||
+          "Unable to submit review."
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   return (
     <Layout store={store}>
@@ -940,22 +1073,44 @@ function ProductPage({
               className="w-full aspect-square object-cover rounded-[1.5rem]"
             />
           </div>
+
           <div className="py-3">
             <p className="text-emerald-600 font-bold text-sm">
               {p.category.toUpperCase()}
             </p>
-            <h1 className="text-4xl font-bold mt-2">{p.name}</h1>
+
+            <h1 className="text-4xl font-bold mt-2">
+              {p.name}
+            </h1>
+
             <p className="text-slate-500 mt-2">
               {p.brand} · {p.unit}
             </p>
-            <div className="flex gap-2 mt-4">
+
+            <div className="flex gap-2 mt-4 flex-wrap">
               <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-sm font-bold">
-                ★ {p.rating} rating
+                ★ {Number(p.rating || 0).toFixed(1)} rating
               </span>
-              <span className={`px-3 py-1 rounded-full text-sm font-bold ${p.stock > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                {p.stock > 0 ? `${p.stock} in stock` : "Out of stock"}
+
+              {p.reviewCount !== undefined && (
+                <span className="bg-slate-50 text-slate-600 px-3 py-1 rounded-full text-sm font-bold">
+                  {p.reviewCount} review{p.reviewCount === 1 ? "" : "s"}
+                </span>
+              )}
+
+              <span
+                className={`px-3 py-1 rounded-full text-sm font-bold ${
+                  p.stock > 0
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-red-50 text-red-700"
+                }`}
+              >
+                {p.stock > 0
+                  ? `${p.stock} in stock`
+                  : "Out of stock"}
               </span>
             </div>
+
             <div className="mt-7">
               <b className="text-4xl">
                 {money(p.sellingPrice)}
@@ -964,28 +1119,53 @@ function ProductPage({
                 {money(p.mrp)}
               </del>
             </div>
+
             <p className="text-slate-600 leading-7 mt-6">
               {p.description} Carefully selected for freshness and
               reliable everyday quality.
             </p>
+
             <div className="flex gap-3 mt-8">
               <button
-                onClick={() => p.stock > 0 && p.isActive !== false && store.add(p)}
-                disabled={p.stock <= 0 || p.isActive === false}
-                className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 ${p.stock > 0 && p.isActive !== false ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500 cursor-not-allowed"}`}
+                onClick={() =>
+                  p.stock > 0 &&
+                  p.isActive !== false &&
+                  store.add(p)
+                }
+                disabled={
+                  p.stock <= 0 || p.isActive === false
+                }
+                className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 ${
+                  p.stock > 0 && p.isActive !== false
+                    ? "bg-emerald-600 text-white"
+                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                }`}
               >
                 <ShoppingCart size={19} /> Add to cart
               </button>
+
               <button
                 type="button"
                 onClick={() => store.toggleWishlist(p._id)}
                 className={`px-5 py-4 border rounded-2xl font-bold inline-flex items-center justify-center gap-2 ${
-                  store.isWishlisted(p._id) ? "text-red-500 border-red-200 bg-red-50" : "text-slate-700"
+                  store.isWishlisted(p._id)
+                    ? "text-red-500 border-red-200 bg-red-50"
+                    : "text-slate-700"
                 }`}
               >
-                <Heart size={19} fill={store.isWishlisted(p._id) ? "currentColor" : "none"} />
-                {store.isWishlisted(p._id) ? "Saved" : "Wishlist"}
+                <Heart
+                  size={19}
+                  fill={
+                    store.isWishlisted(p._id)
+                      ? "currentColor"
+                      : "none"
+                  }
+                />
+                {store.isWishlisted(p._id)
+                  ? "Saved"
+                  : "Wishlist"}
               </button>
+
               <Link
                 to="/cart"
                 className="px-6 py-4 border rounded-2xl font-bold"
@@ -995,6 +1175,155 @@ function ProductPage({
             </div>
           </div>
         </div>
+
+        {/* CUSTOMER REVIEWS */}
+        <section className="mt-12">
+          <div className="flex items-end justify-between gap-4 mb-5">
+            <div>
+              <p className="text-emerald-600 font-bold text-sm">
+                CUSTOMER FEEDBACK
+              </p>
+              <h2 className="text-2xl md:text-3xl font-bold">
+                Customer reviews
+              </h2>
+              <p className="text-slate-500 mt-1">
+                See what customers think about this product.
+              </p>
+            </div>
+
+            <div className="bg-amber-50 text-amber-700 px-4 py-2 rounded-xl font-bold">
+              ★ {Number(p.rating || 0).toFixed(1)}
+            </div>
+          </div>
+
+          {store.user?.role === "customer" && (
+            <div className="bg-white border rounded-3xl p-6 mb-6">
+              <h3 className="text-lg font-bold">
+                Write a review
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                You can review this product after your order has been delivered.
+              </p>
+
+              <div className="mt-5">
+                <p className="text-sm font-semibold mb-2">
+                  Your rating
+                </p>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(star)}
+                      className={`text-3xl leading-none transition ${
+                        star <= rating
+                          ? "text-amber-500"
+                          : "text-slate-300"
+                      }`}
+                      aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Share your experience with this product..."
+                maxLength={1000}
+                className="w-full border rounded-2xl p-4 mt-4 min-h-32 outline-none focus:ring-2 focus:ring-emerald-100"
+              />
+
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-slate-400">
+                  {comment.length}/1000
+                </span>
+
+                <button
+                  type="button"
+                  onClick={submitReview}
+                  disabled={reviewSubmitting}
+                  className="bg-emerald-600 text-white px-5 py-3 rounded-xl font-bold disabled:opacity-50"
+                >
+                  {reviewSubmitting
+                    ? "Submitting..."
+                    : "Submit review"}
+                </button>
+              </div>
+
+              {reviewMessage && (
+                <p className="text-emerald-700 text-sm font-semibold mt-4">
+                  {reviewMessage}
+                </p>
+              )}
+
+              {reviewError && (
+                <p className="text-red-500 text-sm mt-4">
+                  {reviewError}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {reviewLoading ? (
+              <div className="bg-white border rounded-3xl p-10 text-center text-slate-500">
+                Loading reviews...
+              </div>
+            ) : reviewError && reviews.length === 0 ? (
+              <div className="bg-white border rounded-3xl p-8 text-center text-red-500">
+                {reviewError}
+              </div>
+            ) : reviews.length === 0 ? (
+              <div className="bg-white border rounded-3xl p-10 text-center">
+                <div className="text-4xl text-amber-400">★</div>
+                <h3 className="font-bold text-lg mt-3">
+                  No reviews yet
+                </h3>
+                <p className="text-slate-500 mt-1">
+                  Be the first customer to review this product.
+                </p>
+              </div>
+            ) : (
+              reviews.map((review: any) => (
+                <div
+                  key={review._id}
+                  className="bg-white border rounded-3xl p-5"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-bold">
+                        {review.user?.name || "Customer"}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {review.createdAt
+                          ? new Date(review.createdAt).toLocaleDateString(
+                              "en-IN",
+                              {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              }
+                            )
+                          : ""}
+                      </p>
+                    </div>
+
+                    <div className="text-amber-500 font-bold whitespace-nowrap">
+                      {"★".repeat(Number(review.rating || 0))}
+                    </div>
+                  </div>
+
+                  <p className="text-slate-600 mt-4 leading-7">
+                    {review.comment}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </main>
     </Layout>
   );
@@ -1245,7 +1574,6 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         if (password.length < 8) return setError("Password must be at least 8 characters.");
         if (password !== confirmPassword) return setError("Passwords do not match.");
         if (!/^[6-9]\d{9}$/.test(phone.replace(/\D/g, ""))) return setError("Enter a valid 10-digit mobile number.");
-       /* if (!emailVerified || !mobileVerified) return setError("Please verify both email and mobile OTP before creating the account.");*/
       }
 
       if (mode === "register") {
@@ -1312,69 +1640,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
           </>}
           <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailVerified(false)}} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
 
-          
-        {/*
-  Registration Email OTP Verification — Temporarily Disabled
-
-  This block is intentionally kept for future use.
-  Re-enable when email OTP verification is required again.
-
-  {mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
-    <div className="flex items-center gap-2 text-sm font-bold"><Mail size={17}/> Email verification</div>
-    {!emailVerified ? <>
-      <div className="flex gap-2">
-        <input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3 bg-white"/>
-        <button type="button" onClick={()=>sendEmailOtp("register")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">
-          {emailSent?'Resend':'Send OTP'}
-        </button>
-      </div>
-
-      {emailSent && <button type="button" onClick={()=>verifyEmailOtp("register")} disabled={loadingOtp==="verify-email"} className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold">
-        Verify email
-      </button>}
-    </> : <p className="text-emerald-700 text-sm font-bold">✓ Email verified</p>}
-  </div>}
-*/}
-
-          {/*
-{mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
-  <div className="flex items-center gap-2 text-sm font-bold">
-    <Phone size={17}/> Mobile verification
-  </div>
-  {!mobileVerified ? <>
-    <div className="flex gap-2">
-      <input
-        value={mobileOtp}
-        onChange={e=>setMobileOtp(e.target.value)}
-        placeholder="Mobile OTP"
-        className="flex-1 border rounded-xl p-3 bg-white"
-      />
-      <button
-        type="button"
-        onClick={sendMobileOtp}
-        disabled={loadingOtp==="mobile"}
-        className="px-3 rounded-xl bg-slate-950 text-white font-bold"
-      >
-        {mobileSent?'Resend':'Send OTP'}
-      </button>
-    </div>
-    {mobileSent && (
-      <button
-        type="button"
-        onClick={verifyMobileOtp}
-        disabled={loadingOtp==="verify-mobile"}
-        className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold"
-      >
-        Verify mobile
-      </button>
-    )}
-  </> : <p className="text-emerald-700 text-sm font-bold">
-    ✓ Mobile verified
-  </p>}
-</div>}
-*/}
-
-          {mode !== "forgot" && <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />}
+                    {mode !== "forgot" && <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />}
           {mode === "register" && <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full border rounded-xl p-3 outline-none" />}
 
           {mode === "forgot" && <>
@@ -1982,13 +2248,7 @@ function ProfilePage({
   const [profile, setProfile] = useState({ name: "", phone: "", email: "" });
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPassword, setAccountPassword] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-  const [savingAccount, setSavingAccount] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
-  const [emailChangeOtp, setEmailChangeOtp] = useState("");
-  const [emailChangeSent, setEmailChangeSent] = useState(false);
-  const [mobileChangeOtp, setMobileChangeOtp] = useState("");
-  const [mobileChangeSent, setMobileChangeSent] = useState(false);
-  const [devOtp, setDevOtp] = useState("");
   const [addresses, setAddresses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -2020,62 +2280,50 @@ function ProfilePage({
   useEffect(() => { load(); }, [store.user?.id]);
 
   const saveProfile = async () => {
-    setSavingProfile(true); setMessage(""); setError("");
-    try {
-      const r = await axios.patch(API + "/profile", { name: profile.name }, { headers: adminHeaders() });
-      const u = r.data.data;
-      store.setUser({ ...store.user, name: u.name, phone: u.phone, email: u.email });
-      localStorage.setItem("fb-user", JSON.stringify({ ...store.user, name: u.name, phone: u.phone, email: u.email }));
-      setMessage("Profile updated successfully.");
-    } catch (e: any) { setError(e?.response?.data?.message || "Unable to update profile."); }
-    finally { setSavingProfile(false); }
-  };
+    setSavingProfile(true);
+    setMessage("");
+    setError("");
 
-  const sendAccountEmailOtp = async () => {
-    setSavingAccount(true); setMessage(""); setError(""); setDevOtp("");
     try {
-      const r = await axios.post(API + "/profile/send-email-otp", { email: accountEmail }, { headers: adminHeaders() });
-      setEmailChangeSent(true); setMessage(r.data.message || "Email OTP sent.");
-      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
-    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send email OTP."); }
-    finally { setSavingAccount(false); }
-  };
+      const r = await axios.patch(
+        API + "/profile",
+        {
+          name: profile.name,
+          email: accountEmail,
+          phone: profile.phone,
+        },
+        { headers: adminHeaders() }
+      );
 
-  const verifyAccountEmailOtp = async () => {
-    setSavingAccount(true); setMessage(""); setError("");
-    try {
-      const r = await axios.post(API + "/profile/verify-email-otp", { email: accountEmail, otp: emailChangeOtp }, { headers: adminHeaders() });
       const u = r.data.data || {};
-      const nextUser = { ...store.user, email: u.email || accountEmail, emailVerified: true };
+      const nextUser = {
+        ...store.user,
+        name: u.name || profile.name,
+        phone: u.phone || profile.phone,
+        email: u.email || accountEmail,
+        emailVerified: true,
+        phoneVerified: true,
+      };
+
       store.setUser(nextUser as any);
       localStorage.setItem("fb-user", JSON.stringify(nextUser));
-      setAccountEmail(u.email || accountEmail); setProfile((current) => ({ ...current, email: u.email || accountEmail }));
-      setEmailChangeSent(false); setEmailChangeOtp(""); setDevOtp(""); setMessage("Login email verified and updated successfully.");
-    } catch (e: any) { setError(e?.response?.data?.message || "Invalid email OTP."); }
-    finally { setSavingAccount(false); }
-  };
 
-  const sendAccountMobileOtp = async () => {
-    setSavingAccount(true); setMessage(""); setError(""); setDevOtp("");
-    try {
-      const r = await axios.post(API + "/profile/send-mobile-otp", { phone: profile.phone }, { headers: adminHeaders() });
-      setMobileChangeSent(true); setMessage(r.data.message || "Mobile OTP sent.");
-      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
-    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send mobile OTP."); }
-    finally { setSavingAccount(false); }
-  };
+      setProfile({
+        name: u.name || profile.name,
+        phone: u.phone || profile.phone,
+        email: u.email || accountEmail,
+      });
+      setAccountEmail(u.email || accountEmail);
 
-  const verifyAccountMobileOtp = async () => {
-    setSavingAccount(true); setMessage(""); setError("");
-    try {
-      const r = await axios.post(API + "/profile/verify-mobile-otp", { phone: profile.phone, otp: mobileChangeOtp }, { headers: adminHeaders() });
-      const u = r.data.data || {};
-      const nextUser = { ...store.user, phone: u.phone || profile.phone, phoneVerified: true };
-      store.setUser(nextUser as any); localStorage.setItem("fb-user", JSON.stringify(nextUser));
-      setProfile((current) => ({ ...current, phone: u.phone || current.phone }));
-      setMobileChangeSent(false); setMobileChangeOtp(""); setDevOtp(""); setMessage("Mobile number verified and updated successfully.");
-    } catch (e: any) { setError(e?.response?.data?.message || "Invalid mobile OTP."); }
-    finally { setSavingAccount(false); }
+      setMessage("Profile updated successfully.");
+    } catch (e: any) {
+      setError(
+        e?.response?.data?.message ||
+          "Unable to update profile."
+      );
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const changeCustomerPassword = async () => {
@@ -2128,29 +2376,120 @@ function ProfilePage({
             {message && <div className="mt-5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl p-4 text-sm font-semibold">{message}</div>}
             {error && <div className="mt-5 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm">{error}</div>}
             <section className="bg-white border rounded-3xl p-6 mt-6">
-              <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center"><ShieldCheck size={20} className="text-slate-700" /></div><div><h2 className="text-xl font-bold">Account & security</h2><p className="text-sm text-slate-500">Verify your email and mobile number with OTP and manage your password.</p></div></div>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center">
+                  <ShieldCheck size={20} className="text-slate-700" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Account & security</h2>
+                  <p className="text-sm text-slate-500">
+                    Manage your login email, mobile number and password.
+                  </p>
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-5 mt-5">
                 <div className="border rounded-2xl p-4">
-                  <div className="flex items-center justify-between gap-2"><label className="text-sm font-semibold">Login email</label><span className={`text-xs font-bold px-2 py-1 rounded-full ${store.user?.emailVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{store.user?.emailVerified ? "Verified" : "Not verified"}</span></div>
-                  <input type="email" value={accountEmail} onChange={e=>{setAccountEmail(e.target.value);setEmailChangeSent(false)}} className="mt-2 w-full border rounded-xl p-3" placeholder="you@example.com" />
-                  {!store.user?.emailVerified || accountEmail.toLowerCase() !== String(store.user?.email || "").toLowerCase() ? <>
-                    <div className="flex gap-2 mt-3"><input value={emailChangeOtp} onChange={e=>setEmailChangeOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={sendAccountEmailOtp} disabled={savingAccount} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailChangeSent ? "Resend" : "Send OTP"}</button></div>
-                    {emailChangeSent && <button type="button" onClick={verifyAccountEmailOtp} disabled={savingAccount} className="w-full mt-2 bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify & update email</button>}
-                  </> : <p className="text-xs text-slate-500 mt-2">Changing this email requires OTP verification.</p>}
+                  <label className="text-sm font-semibold">Login email</label>
+                  <input
+                    type="email"
+                    value={accountEmail}
+                    onChange={e => setAccountEmail(e.target.value)}
+                    className="mt-2 w-full border rounded-xl p-3"
+                    placeholder="you@example.com"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Update your login email directly.
+                  </p>
                 </div>
+
                 <div className="border rounded-2xl p-4">
-                  <div className="flex items-center justify-between gap-2"><label className="text-sm font-semibold">Mobile number</label><span className={`text-xs font-bold px-2 py-1 rounded-full ${store.user?.phoneVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{store.user?.phoneVerified ? "Verified" : "Not verified"}</span></div>
-                  <input value={profile.phone} onChange={e=>{setProfile({...profile, phone:e.target.value});setMobileChangeSent(false)}} className="mt-2 w-full border rounded-xl p-3" placeholder="10-digit mobile" />
-                  <div className="flex gap-2 mt-3"><input value={mobileChangeOtp} onChange={e=>setMobileChangeOtp(e.target.value)} placeholder="Mobile OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={sendAccountMobileOtp} disabled={savingAccount} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{mobileChangeSent ? "Resend" : "Send OTP"}</button></div>
-                  {mobileChangeSent && <button type="button" onClick={verifyAccountMobileOtp} disabled={savingAccount} className="w-full mt-2 bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify & update mobile</button>}
+                  <label className="text-sm font-semibold">Mobile number</label>
+                  <input
+                    value={profile.phone}
+                    onChange={e =>
+                      setProfile({
+                        ...profile,
+                        phone: e.target.value,
+                      })
+                    }
+                    className="mt-2 w-full border rounded-xl p-3"
+                    placeholder="10-digit mobile"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Update your mobile number directly.
+                  </p>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={saveProfile}
+                disabled={savingProfile}
+                className="mt-5 bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50"
+              >
+                {savingProfile
+                  ? "Saving..."
+                  : "Save account details"}
+              </button>
+
               <div className="border rounded-2xl p-4 mt-5">
-                <label className="text-sm font-semibold">Change password</label>
-                <div className="grid md:grid-cols-3 gap-2 mt-2"><input type="password" value={accountPassword.currentPassword} onChange={e=>setAccountPassword({...accountPassword,currentPassword:e.target.value})} placeholder="Current password" className="w-full border rounded-xl p-3"/><input type="password" value={accountPassword.newPassword} onChange={e=>setAccountPassword({...accountPassword,newPassword:e.target.value})} placeholder="New password (min 8)" className="w-full border rounded-xl p-3"/><input type="password" value={accountPassword.confirmPassword} onChange={e=>setAccountPassword({...accountPassword,confirmPassword:e.target.value})} placeholder="Confirm password" className="w-full border rounded-xl p-3"/></div>
-                <button onClick={changeCustomerPassword} disabled={changingPassword} className="mt-3 bg-slate-950 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{changingPassword ? "Changing..." : "Change password"}</button>
+                <label className="text-sm font-semibold">
+                  Change password
+                </label>
+
+                <div className="grid md:grid-cols-3 gap-2 mt-2">
+                  <input
+                    type="password"
+                    value={accountPassword.currentPassword}
+                    onChange={e =>
+                      setAccountPassword({
+                        ...accountPassword,
+                        currentPassword: e.target.value,
+                      })
+                    }
+                    placeholder="Current password"
+                    className="w-full border rounded-xl p-3"
+                  />
+
+                  <input
+                    type="password"
+                    value={accountPassword.newPassword}
+                    onChange={e =>
+                      setAccountPassword({
+                        ...accountPassword,
+                        newPassword: e.target.value,
+                      })
+                    }
+                    placeholder="New password (min 8)"
+                    className="w-full border rounded-xl p-3"
+                  />
+
+                  <input
+                    type="password"
+                    value={accountPassword.confirmPassword}
+                    onChange={e =>
+                      setAccountPassword({
+                        ...accountPassword,
+                        confirmPassword: e.target.value,
+                      })
+                    }
+                    placeholder="Confirm password"
+                    className="w-full border rounded-xl p-3"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={changeCustomerPassword}
+                  disabled={changingPassword}
+                  className="mt-3 bg-slate-950 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50"
+                >
+                  {changingPassword
+                    ? "Changing..."
+                    : "Change password"}
+                </button>
               </div>
-              {devOtp && <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">Development OTP: <b>{devOtp}</b>. Configure the email/SMS provider in `.env` for real delivery.</div>}
             </section>
 
             <section className="mt-6">
@@ -2401,12 +2740,26 @@ function Orders({
               </button>
             )}
             {o.status === "Delivered" && Array.isArray(o.items) && o.items.length > 0 && (
-              <Link
-                to={`/product/${typeof o.items[0].product === "object" ? o.items[0].product._id : o.items[0].product}`}
-                className="border border-amber-200 text-amber-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-50"
-              >
-                Review product
-              </Link>
+              <div className="flex flex-wrap items-center justify-end gap-2 w-full">
+                {o.items.map((item: any, index: number) => {
+                  const productId =
+                    typeof item.product === "object"
+                      ? item.product?._id
+                      : item.product;
+
+                  if (!productId) return null;
+
+                  return (
+                    <Link
+                      key={index}
+                      to={`/product/${productId}`}
+                      className="border border-amber-200 text-amber-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-50"
+                    >
+                      ★ Review {item.name || "product"}
+                    </Link>
+                  );
+                })}
+              </div>
             )}
             {["Pending", "Confirmed"].includes(o.status) && (
               <button
