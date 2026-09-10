@@ -41,6 +41,26 @@ const paymentSettingSchema = new mongoose.Schema({
 }, { timestamps: true });
 const PaymentSetting = mongoose.models.PaymentSetting || mongoose.model("PaymentSetting", paymentSettingSchema);
 
+const identityCardSchema = new mongoose.Schema({
+  cardNumber: { type: String, required: true, unique: true, index: true },
+  holderType: { type: String, enum: ["delivery", "store-admin", "employee"], required: true },
+  name: { type: String, required: true, trim: true, maxlength: 120 },
+  email: { type: String, default: "", trim: true, maxlength: 160 },
+  phone: { type: String, default: "", trim: true, maxlength: 20 },
+  employeeId: { type: String, default: "", trim: true, maxlength: 60 },
+  designation: { type: String, required: true, trim: true, maxlength: 100 },
+  department: { type: String, default: "", trim: true, maxlength: 100 },
+  address: { type: String, default: "", trim: true, maxlength: 300 },
+  emergencyContact: { type: String, default: "", trim: true, maxlength: 120 },
+  photo: { type: String, default: "", maxlength: 1000000 },
+  storeAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+  issueDate: { type: Date, default: Date.now },
+  expiryDate: { type: Date, required: true },
+  status: { type: String, enum: ["active", "revoked"], default: "active" },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+}, { timestamps: true });
+const IdentityCard = mongoose.models.IdentityCard || mongoose.model("IdentityCard", identityCardSchema);
+
 
 // Multi-store isolation fields are added at runtime so the existing model files
 // do not need to be replaced. Existing documents remain compatible.
@@ -2627,6 +2647,100 @@ app.get(
     }
   }
 );
+
+/* =========================================================
+   MAIN ADMIN IDENTITY CARD GENERATOR
+========================================================= */
+
+app.get("/api/admin/identity-cards", auth, mainAdminOnly, async (_req, res) => {
+  try {
+    const cards = await IdentityCard.find()
+      .sort({ createdAt: -1 })
+      .populate("storeAdmin", "name email")
+      .lean();
+    return res.json({ success: true, data: cards });
+  } catch (error) {
+    console.error("IDENTITY CARD LIST ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load identity cards" });
+  }
+});
+
+app.post("/api/admin/identity-cards", auth, mainAdminOnly, async (req: AuthRequest, res) => {
+  try {
+    const holderType = String(req.body.holderType || "").trim();
+    const name = String(req.body.name || "").trim();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const phone = String(req.body.phone || "").trim();
+    const employeeId = String(req.body.employeeId || "").trim();
+    const designation = String(req.body.designation || "").trim();
+    const department = String(req.body.department || "").trim();
+    const address = String(req.body.address || "").trim();
+    const emergencyContact = String(req.body.emergencyContact || "").trim();
+    const photo = String(req.body.photo || "").trim();
+    const storeAdminId = String(req.body.storeAdminId || "").trim();
+    const expiryDate = new Date(req.body.expiryDate);
+
+    if (!["delivery", "store-admin", "employee"].includes(holderType)) {
+      return res.status(400).json({ success: false, message: "Select a valid ID card type" });
+    }
+    if (name.length < 2) return res.status(400).json({ success: false, message: "Full name is required" });
+    if (designation.length < 2) return res.status(400).json({ success: false, message: "Designation is required" });
+    if (!Number.isFinite(expiryDate.getTime()) || expiryDate <= new Date()) {
+      return res.status(400).json({ success: false, message: "Expiry date must be a valid future date" });
+    }
+    if (photo && !/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(photo) && !/^https?:\/\//i.test(photo)) {
+      return res.status(400).json({ success: false, message: "Photo must be an image" });
+    }
+
+    let resolvedStoreAdmin: any = null;
+    if (holderType === "store-admin") {
+      if (!mongoose.Types.ObjectId.isValid(storeAdminId)) {
+        return res.status(400).json({ success: false, message: "Select a store admin" });
+      }
+      const admin: any = await User.findOne({ _id: storeAdminId, role: "admin" }).select("_id").lean();
+      if (!admin) return res.status(404).json({ success: false, message: "Store admin not found" });
+      resolvedStoreAdmin = admin._id;
+    } else if (storeAdminId && mongoose.Types.ObjectId.isValid(storeAdminId)) {
+      const admin: any = await User.findOne({ _id: storeAdminId, role: "admin" }).select("_id").lean();
+      if (admin) resolvedStoreAdmin = admin._id;
+    }
+
+    if (holderType === "delivery" && email) {
+      const partner: any = await User.findOne({ email, role: "delivery" }).select("_id storeAdmin").lean();
+      if (partner) resolvedStoreAdmin = partner.storeAdmin || null;
+    }
+
+    const prefix = holderType === "delivery" ? "DEL" : holderType === "store-admin" ? "ADM" : "EMP";
+    let cardNumber = "";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      cardNumber = `FB-${prefix}-${new Date().getFullYear()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+      if (!(await IdentityCard.exists({ cardNumber }))) break;
+    }
+
+    const card = await IdentityCard.create({
+      cardNumber, holderType, name, email, phone, employeeId, designation, department,
+      address, emergencyContact, photo, storeAdmin: resolvedStoreAdmin,
+      expiryDate, createdBy: req.user!.id,
+    });
+
+    return res.status(201).json({ success: true, message: "Professional identity card generated", data: card });
+  } catch (error) {
+    console.error("IDENTITY CARD CREATE ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to generate identity card" });
+  }
+});
+
+app.patch("/api/admin/identity-cards/:id/revoke", auth, mainAdminOnly, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: "Identity card not found" });
+    const card = await IdentityCard.findByIdAndUpdate(req.params.id, { status: "revoked" }, { new: true });
+    if (!card) return res.status(404).json({ success: false, message: "Identity card not found" });
+    return res.json({ success: true, message: "Identity card revoked", data: card });
+  } catch (error) {
+    console.error("IDENTITY CARD REVOKE ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to revoke identity card" });
+  }
+});
 
 /* =========================================================
    ADMIN MANAGEMENT
