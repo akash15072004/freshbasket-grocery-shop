@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Printer } from "@capgo/capacitor-printer";
 import {
   Routes,
   Route,
@@ -49,13 +50,11 @@ import {
   Mail,
 } from "lucide-react";
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  (window.location.hostname === "localhost"
-    ? "http://localhost:5000"
-    : "https://freshbasket-grocery-shop.onrender.com");
+const API_BASE = "https://freshbasket-grocery-shop.onrender.com";
 
 const API = `${API_BASE}/api`;
+
+
 
 type Product = {
   _id: string;
@@ -1499,77 +1498,20 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
   const nav = useNavigate();
   const [email, setEmail] = useState("customer@grocery.com");
   const [password, setPassword] = useState("Customer@123");
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "register">("login");
+
   const [loginRole, setLoginRole] = useState<"customer" | "admin" | "delivery">("customer");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [emailOtp, setEmailOtp] = useState("");
-  const [mobileOtp, setMobileOtp] = useState("");
-  const [emailSent, setEmailSent] = useState(false);
-  const [mobileSent, setMobileSent] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
-  const [loadingOtp, setLoadingOtp] = useState("");
-  const [resetPassword, setResetPassword] = useState("");
-  const [resetConfirm, setResetConfirm] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [devOtp, setDevOtp] = useState("");
 
-  const clearMessages = () => { setError(""); setMessage(""); setDevOtp(""); };
-
-  const sendEmailOtp = async (purpose: "register" | "forgot") => {
-    clearMessages(); setLoadingOtp("email");
-    try {
-      const r = await axios.post(API + "/auth/send-email-otp", { email, purpose });
-      setEmailSent(true); setMessage(r.data.message || "Email OTP sent.");
-      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
-    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send email OTP."); }
-    finally { setLoadingOtp(""); }
-  };
-
-  const verifyEmailOtp = async (purpose: "register" | "forgot") => {
-    clearMessages(); setLoadingOtp("verify-email");
-    try {
-      await axios.post(API + "/auth/verify-email-otp", { email, otp: emailOtp, purpose });
-      setEmailVerified(true); setMessage("Email verified successfully.");
-    } catch (e: any) { setError(e?.response?.data?.message || "Invalid email OTP."); }
-    finally { setLoadingOtp(""); }
-  };
-
-  const sendMobileOtp = async () => {
-    clearMessages(); setLoadingOtp("mobile");
-    try {
-      const r = await axios.post(API + "/auth/send-mobile-otp", { phone, purpose: "register" });
-      setMobileSent(true); setMessage(r.data.message || "Mobile OTP sent.");
-      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
-    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send mobile OTP."); }
-    finally { setLoadingOtp(""); }
-  };
-
-  const verifyMobileOtp = async () => {
-    clearMessages(); setLoadingOtp("verify-mobile");
-    try {
-      await axios.post(API + "/auth/verify-mobile-otp", { phone, otp: mobileOtp, purpose: "register" });
-      setMobileVerified(true); setMessage("Mobile number verified successfully.");
-    } catch (e: any) { setError(e?.response?.data?.message || "Invalid mobile OTP."); }
-    finally { setLoadingOtp(""); }
-  };
+  const clearMessages = () => { setError(""); setMessage(""); };
 
   const submit = async (e: any) => {
     e.preventDefault(); clearMessages();
     try {
-      if (mode === "forgot") {
-        if (!emailVerified) return setError("Verify the email OTP first.");
-        if (resetPassword.length < 8) return setError("New password must be at least 8 characters.");
-        if (resetPassword !== resetConfirm) return setError("Passwords do not match.");
-        await axios.post(API + "/auth/reset-password", { email, newPassword: resetPassword });
-        setMessage("Password reset successfully. You can now sign in.");
-        setMode("login"); setPassword(""); setEmailOtp(""); setEmailSent(false); setEmailVerified(false);
-        return;
-      }
-
       if (mode === "register") {
         if (password.length < 8) return setError("Password must be at least 8 characters.");
         if (password !== confirmPassword) return setError("Passwords do not match.");
@@ -1609,9 +1551,16 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
     }
   };
 
-  const switchMode = (next: "login" | "register" | "forgot") => {
-    clearMessages(); setMode(next); setEmailOtp(""); setMobileOtp(""); setEmailSent(false); setMobileSent(false); setEmailVerified(false); setMobileVerified(false);
-    if (next === "register") { setEmail(""); setPassword(""); setName(""); setPhone(""); setConfirmPassword(""); }
+  const switchMode = (next: "login" | "register") => {
+    clearMessages();
+    setMode(next);
+    if (next === "register") {
+      setEmail("");
+      setPassword("");
+      setName("");
+      setPhone("");
+      setConfirmPassword("");
+    }
   };
 
   return (
@@ -1620,7 +1569,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         <Link to="/" className="flex justify-center items-center gap-2 font-bold text-xl">
           <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Leaf /></span>FreshBasket
         </Link>
-        <h1 className="text-2xl font-bold text-center mt-7">{mode === "login" ? "Welcome back" : mode === "register" ? "Create your account" : "Forgot password"}</h1>
+        <h1 className="text-2xl font-bold text-center mt-7">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
 
         {mode === "login" && (
           <div className="mt-6">
@@ -1636,28 +1585,19 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         <form onSubmit={submit} className="space-y-4 mt-7">
           {mode === "register" && <>
             <input required value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" className="w-full border rounded-xl p-3 outline-none" />
-            <input required value={phone} onChange={e=>{setPhone(e.target.value);setMobileVerified(false)}} placeholder="10-digit mobile number" className="w-full border rounded-xl p-3 outline-none" />
+            <input required value={phone} onChange={e=>setPhone(e.target.value)} placeholder="10-digit mobile number" className="w-full border rounded-xl p-3 outline-none" />
           </>}
-          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailVerified(false)}} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
+          <input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
 
-                    {mode !== "forgot" && <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />}
+                    <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />
           {mode === "register" && <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full border rounded-xl p-3 outline-none" />}
 
-          {mode === "forgot" && <>
-            <div className="flex gap-2"><input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={()=>sendEmailOtp("forgot")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailSent?'Resend':'Send OTP'}</button></div>
-            {emailSent && !emailVerified && <button type="button" onClick={()=>verifyEmailOtp("forgot")} className="w-full bg-emerald-600 text-white rounded-xl py-3 font-bold">Verify OTP</button>}
-            <input required type="password" value={resetPassword} onChange={e=>setResetPassword(e.target.value)} placeholder="New password (min 8 characters)" className="w-full border rounded-xl p-3" />
-            <input required type="password" value={resetConfirm} onChange={e=>setResetConfirm(e.target.value)} placeholder="Confirm new password" className="w-full border rounded-xl p-3" />
-          </>}
-
-          {devOtp && <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">Development OTP: <b>{devOtp}</b>. Configure the email/SMS provider in `.env` for real delivery.</div>}
           {message && <p className="text-emerald-700 text-sm font-semibold">{message}</p>}
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button className="w-full bg-emerald-600 text-white rounded-xl py-3.5 font-bold">{mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Reset password"}</button>
+          <button className="w-full bg-emerald-600 text-white rounded-xl py-3.5 font-bold">{mode === "login" ? "Sign in" : "Create account"}</button>
         </form>
 
-        {mode === "login" && <button type="button" onClick={()=>switchMode("forgot")} className="w-full text-center text-emerald-700 font-bold text-sm mt-4">Forgot password?</button>}
-        <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':mode==='register'?'Already have an account? ':'Remembered your password? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
+        <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':'Already have an account? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
       </div>
     </div>
   );
@@ -3341,6 +3281,7 @@ function OrderTracking({
 }
 
 
+
 function Invoice({
   store,
 }: {
@@ -3353,12 +3294,15 @@ function Invoice({
 
   const load = async () => {
     if (!id) return;
+
     setLoading(true);
     setError("");
+
     try {
       const r = await axios.get(API + `/orders/${id}`, {
         headers: adminHeaders(),
       });
+
       setOrder(r.data.data || null);
     } catch (e: any) {
       setError(
@@ -3379,8 +3323,14 @@ function Invoice({
     return (
       <Layout store={store}>
         <main className="max-w-4xl mx-auto px-4 py-20 text-center">
-          <RefreshCw className="mx-auto text-emerald-500 animate-spin" size={32} />
-          <p className="text-slate-500 mt-3">Loading invoice...</p>
+          <RefreshCw
+            className="mx-auto text-emerald-500 animate-spin"
+            size={32}
+          />
+
+          <p className="text-slate-500 mt-3">
+            Loading invoice...
+          </p>
         </main>
       </Layout>
     );
@@ -3390,7 +3340,10 @@ function Invoice({
     return (
       <Layout store={store}>
         <main className="max-w-4xl mx-auto px-4 py-10">
-          <PageError message={error || "Invoice not found."} onRetry={load} />
+          <PageError
+            message={error || "Invoice not found."}
+            onRetry={load}
+          />
         </main>
       </Layout>
     );
@@ -3403,17 +3356,70 @@ function Invoice({
     String(order._id).slice(-8).toUpperCase();
 
   const items = Array.isArray(order.items) ? order.items : [];
+
   const subtotal = Number(order.subtotal || 0);
   const discount = Number(order.discount || 0);
   const delivery = Number(order.deliveryCharge || 0);
   const total = Number(order.total || 0);
 
+  /*
+   * PRINT INVOICE
+   *
+   * Android:
+   * Uses native Android PrintManager through Capacitor plugin.
+   *
+   * Windows/Web:
+   * Uses normal browser window.print().
+   */
+  const handlePrint = async () => {
+    try {
+      const capacitor = (window as any).Capacitor;
+
+      const isNative =
+        capacitor?.isNativePlatform?.() === true;
+
+      /*
+       * Android / Capacitor
+       */
+      if (isNative) {
+        await Printer.printWebView({
+          name: `FreshBasket Invoice ${invoiceNumber}`,
+        });
+
+        return;
+      }
+
+      /*
+       * Windows / normal browser
+       */
+      window.print();
+    } catch (err) {
+      console.error("Print error:", err);
+
+      /*
+       * Fallback
+       */
+      try {
+        window.print();
+      } catch {
+        alert("Unable to open print dialog.");
+      }
+    }
+  };
+
   return (
     <Layout store={store}>
       <style>{`
         @media print {
-          body * { visibility: hidden !important; }
-          .invoice-print, .invoice-print * { visibility: visible !important; }
+          body * {
+            visibility: hidden !important;
+          }
+
+          .invoice-print,
+          .invoice-print * {
+            visibility: visible !important;
+          }
+
           .invoice-print {
             position: absolute !important;
             left: 0 !important;
@@ -3423,11 +3429,20 @@ function Invoice({
             box-shadow: none !important;
             border: 0 !important;
           }
-          .no-print { display: none !important; }
+
+          .no-print {
+            display: none !important;
+          }
+
+          @page {
+            size: A4;
+            margin: 10mm;
+          }
         }
       `}</style>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* ACTION BAR */}
         <div className="no-print flex items-center justify-between gap-3 mb-5">
           <Link
             to={`/orders/${order._id}`}
@@ -3437,14 +3452,17 @@ function Invoice({
           </Link>
 
           <button
-            onClick={() => window.print()}
-            className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 hover:bg-emerald-700"
+            type="button"
+            onClick={handlePrint}
+            className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 hover:bg-emerald-700 active:scale-95 transition"
           >
             Print / Save PDF
           </button>
         </div>
 
+        {/* INVOICE */}
         <section className="invoice-print bg-white border rounded-3xl shadow-sm overflow-hidden">
+          {/* HEADER */}
           <div className="p-7 sm:p-9 border-b">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
               <div>
@@ -3452,10 +3470,15 @@ function Invoice({
                   <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center">
                     <Leaf size={21} />
                   </span>
+
                   <h1 className="text-2xl font-bold">
-                    Fresh<span className="text-emerald-600">Basket</span>
+                    Fresh
+                    <span className="text-emerald-600">
+                      Basket
+                    </span>
                   </h1>
                 </div>
+
                 <p className="text-sm text-slate-500 mt-3">
                   Your neighborhood grocery store
                 </p>
@@ -3465,10 +3488,18 @@ function Invoice({
                 <p className="text-xs text-slate-400 uppercase font-bold">
                   Invoice
                 </p>
-                <h2 className="text-xl font-bold mt-1">{invoiceNumber}</h2>
+
+                <h2 className="text-xl font-bold mt-1">
+                  {invoiceNumber}
+                </h2>
+
                 <p className="text-sm text-slate-500 mt-1">
-                  Date: {new Date(order.createdAt).toLocaleDateString("en-IN")}
+                  Date:{" "}
+                  {new Date(
+                    order.createdAt
+                  ).toLocaleDateString("en-IN")}
                 </p>
+
                 <span
                   className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold ${statusClass(
                     order.status
@@ -3480,17 +3511,25 @@ function Invoice({
             </div>
           </div>
 
+          {/* CUSTOMER + ADDRESS */}
           <div className="p-7 sm:p-9 grid md:grid-cols-2 gap-6 border-b">
             <div>
               <p className="text-xs text-slate-400 uppercase font-bold">
                 Bill To
               </p>
+
               <p className="font-bold mt-2">
-                {order.address?.name || order.user?.name || "Customer"}
+                {order.address?.name ||
+                  order.user?.name ||
+                  "Customer"}
               </p>
+
               {order.user?.email && (
-                <p className="text-sm text-slate-500 mt-1">{order.user.email}</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  {order.user.email}
+                </p>
               )}
+
               {order.address?.phone && (
                 <p className="text-sm text-slate-500 mt-1">
                   {order.address.phone}
@@ -3502,83 +3541,157 @@ function Invoice({
               <p className="text-xs text-slate-400 uppercase font-bold">
                 Delivery Address
               </p>
+
               <p className="text-sm text-slate-600 mt-2 leading-6">
-                {order.address?.address || "Address not available"}
-                {order.address?.city ? `, ${order.address.city}` : ""}
-                {order.address?.pincode ? ` - ${order.address.pincode}` : ""}
+                {order.address?.address ||
+                  "Address not available"}
+
+                {order.address?.city
+                  ? `, ${order.address.city}`
+                  : ""}
+
+                {order.address?.pincode
+                  ? ` - ${order.address.pincode}`
+                  : ""}
               </p>
+
               <p className="text-sm text-slate-500 mt-2">
-                Slot: {order.deliverySlot || "Standard delivery"}
+                Slot:{" "}
+                {order.deliverySlot ||
+                  "Standard delivery"}
               </p>
             </div>
           </div>
 
+          {/* ITEMS */}
           <div className="p-7 sm:p-9">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="py-3 pr-3">Item</th>
-                    <th className="py-3 px-3 text-center">Qty</th>
-                    <th className="py-3 px-3 text-right">Price</th>
-                    <th className="py-3 pl-3 text-right">Amount</th>
+                    <th className="py-3 pr-3">
+                      Item
+                    </th>
+
+                    <th className="py-3 px-3 text-center">
+                      Qty
+                    </th>
+
+                    <th className="py-3 px-3 text-right">
+                      Price
+                    </th>
+
+                    <th className="py-3 pl-3 text-right">
+                      Amount
+                    </th>
                   </tr>
                 </thead>
+
                 <tbody className="divide-y">
-                  {items.map((item: any, index: number) => (
-                    <tr key={String(item.product || index) + index}>
-                      <td className="py-4 pr-3">
-                        <p className="font-semibold">{item.name || "Product"}</p>
-                        {item.unit && (
-                          <p className="text-xs text-slate-400 mt-1">
-                            {item.unit}
+                  {items.map(
+                    (item: any, index: number) => (
+                      <tr
+                        key={
+                          String(
+                            item.product || index
+                          ) + index
+                        }
+                      >
+                        <td className="py-4 pr-3">
+                          <p className="font-semibold">
+                            {item.name || "Product"}
                           </p>
-                        )}
-                      </td>
-                      <td className="py-4 px-3 text-center">{item.quantity}</td>
-                      <td className="py-4 px-3 text-right">
-                        {money(Number(item.price || 0))}
-                      </td>
-                      <td className="py-4 pl-3 text-right font-semibold">
-                        {money(
-                          Number(item.price || 0) * Number(item.quantity || 0)
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+
+                          {item.unit && (
+                            <p className="text-xs text-slate-400 mt-1">
+                              {item.unit}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="py-4 px-3 text-center">
+                          {item.quantity}
+                        </td>
+
+                        <td className="py-4 px-3 text-right">
+                          {money(
+                            Number(item.price || 0)
+                          )}
+                        </td>
+
+                        <td className="py-4 pl-3 text-right font-semibold">
+                          {money(
+                            Number(item.price || 0) *
+                              Number(
+                                item.quantity || 0
+                              )
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             </div>
 
+            {/* TOTALS */}
             <div className="ml-auto max-w-sm mt-7 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Subtotal</span>
+                <span className="text-slate-500">
+                  Subtotal
+                </span>
+
                 <b>{money(subtotal)}</b>
               </div>
+
               <div className="flex justify-between">
-                <span className="text-slate-500">Discount</span>
+                <span className="text-slate-500">
+                  Discount
+                </span>
+
                 <b>{money(discount)}</b>
               </div>
+
               <div className="flex justify-between">
-                <span className="text-slate-500">Delivery</span>
-                <b>{delivery ? money(delivery) : "FREE"}</b>
+                <span className="text-slate-500">
+                  Delivery
+                </span>
+
+                <b>
+                  {delivery
+                    ? money(delivery)
+                    : "FREE"}
+                </b>
               </div>
+
               <div className="border-t pt-3 mt-3 flex justify-between text-lg">
-                <span className="font-bold">Grand Total</span>
-                <b className="text-emerald-700">{money(total)}</b>
+                <span className="font-bold">
+                  Grand Total
+                </span>
+
+                <b className="text-emerald-700">
+                  {money(total)}
+                </b>
               </div>
             </div>
           </div>
 
+          {/* FOOTER */}
           <div className="px-7 sm:px-9 py-5 border-t bg-slate-50 text-sm">
             <div className="flex flex-col sm:flex-row justify-between gap-2">
               <span>
-                Payment method: <b>{order.paymentMethod || "COD"}</b>
+                Payment method:{" "}
+                <b>
+                  {order.paymentMethod || "COD"}
+                </b>
               </span>
+
               <span className="text-slate-500">
-                Order #{String(order._id).slice(-8)}
+                Order #
+                {String(order._id).slice(-8)}
               </span>
             </div>
+
             <p className="text-xs text-slate-400 mt-3">
               Thank you for shopping with FreshBasket.
             </p>
@@ -3588,6 +3701,7 @@ function Invoice({
     </Layout>
   );
 }
+
 
 function ProductAdmin({
   store,
