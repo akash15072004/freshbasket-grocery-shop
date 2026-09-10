@@ -409,11 +409,10 @@ try {
       role: "customer",
       blocked: false,
     });
-    await User.collection.updateOne({ _id: user._id }, { $set: { emailVerified: true, phoneVerified: true } });
-    await OtpVerification.deleteMany({ $or: [
-      { target: normalizedEmail, purpose: "register" },
-      { target: normalizedPhone, purpose: "register" },
-    ] });
+    await User.collection.updateOne(
+  { _id: user._id },
+  { $set: { emailVerified: true, phoneVerified: true } }
+);
 
     return res.status(201).json({
       success: true,
