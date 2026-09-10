@@ -23,10 +23,59 @@ import LoyaltySetting from "./models/LoyaltySetting";
 import Address from "./models/Address";
 import OtpVerification from "./models/OtpVerification";
 
+const storeLocationSchema = new mongoose.Schema({
+  key: { type: String, unique: true, default: "main" },
+  name: { type: String, default: "FreshBasket Store", trim: true, maxlength: 120 },
+  address: { type: String, default: "", trim: true, maxlength: 300 },
+  latitude: { type: Number, default: null },
+  longitude: { type: Number, default: null },
+}, { timestamps: true });
+
+const StoreLocation = mongoose.models.StoreLocation || mongoose.model("StoreLocation", storeLocationSchema);
+const paymentSettingSchema = new mongoose.Schema({
+  storeAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User", unique: true, sparse: true, index: true },
+  upiId: { type: String, default: "", trim: true, maxlength: 120 },
+  merchantName: { type: String, default: "FreshBasket", trim: true, maxlength: 120 },
+  qrImage: { type: String, default: "", trim: true, maxlength: 100000 },
+  isEnabled: { type: Boolean, default: true },
+}, { timestamps: true });
+const PaymentSetting = mongoose.models.PaymentSetting || mongoose.model("PaymentSetting", paymentSettingSchema);
+
+
+// Multi-store isolation fields are added at runtime so the existing model files
+// do not need to be replaced. Existing documents remain compatible.
+const tenantObjectIdPath = { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true };
+(Product as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(Order as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(User as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(Category as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(Banner as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(StoreLocation as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(Coupon as any).schema.add({ storeAdmin: tenantObjectIdPath });
+(User as any).schema.add({ latitude: { type: Number, default: null }, longitude: { type: Number, default: null }, locationUpdatedAt: { type: Date, default: null } });
+
 import { auth, role, AuthRequest } from "./middleware/auth";
 
 const app = express();
 const MAIN_ADMIN_EMAIL = String(process.env.MAIN_ADMIN_EMAIL || "admin@grocery.com").trim().toLowerCase();
+
+// Delivery map pickup/store configuration.
+// Set these on Render as STORE_LAT, STORE_LNG and optionally STORE_ADDRESS.
+const STORE_LAT_RAW = String(process.env.STORE_LAT || "").trim();
+const STORE_LNG_RAW = String(process.env.STORE_LNG || "").trim();
+const STORE_LAT = STORE_LAT_RAW === "" ? null : Number(STORE_LAT_RAW);
+const STORE_LNG = STORE_LNG_RAW === "" ? null : Number(STORE_LNG_RAW);
+const STORE_ADDRESS = String(process.env.STORE_ADDRESS || "FreshBasket Store").trim();
+
+const hasValidStoreCoordinates =
+  STORE_LAT !== null &&
+  STORE_LNG !== null &&
+  Number.isFinite(STORE_LAT) &&
+  Number.isFinite(STORE_LNG) &&
+  STORE_LAT >= -90 &&
+  STORE_LAT <= 90 &&
+  STORE_LNG >= -180 &&
+  STORE_LNG <= 180;
 
 const mainAdminOnly = async (req: AuthRequest, res: any, next: any) => {
   try {
@@ -48,12 +97,54 @@ const mainAdminOnly = async (req: AuthRequest, res: any, next: any) => {
 };
 
 
+const getMainAdminId = async () => {
+  const main: any = await User.findOne({ role: "admin", email: MAIN_ADMIN_EMAIL }).select("_id").lean();
+  return main?._id || null;
+};
+
+const getTenantAdminId = async (req: AuthRequest) => {
+  if (!req.user?.id) return null;
+  if (req.user.role === "admin") return new mongoose.Types.ObjectId(req.user.id);
+  if (req.user.role === "delivery") {
+    const partner: any = await User.findById(req.user.id).select("storeAdmin").lean();
+    if (partner?.storeAdmin) return partner.storeAdmin;
+    return await getMainAdminId();
+  }
+  return null;
+};
+
+const tenantFilter = async (req: AuthRequest, field = "storeAdmin") => {
+  const tenant = await getTenantAdminId(req);
+  if (!tenant) return { [field]: null };
+  const isMain = req.user?.role === "admin" && String(req.user.id) === String(tenant);
+  if (isMain) {
+    // Legacy records without a tenant remain part of the original/main store.
+    // Also accept the temporary string representation used by older orders so
+    // those orders remain visible after the tenant field was introduced.
+    return { $or: [{ [field]: tenant }, { [field]: String(tenant) }, { [field]: null }, { [field]: { $exists: false } }] };
+  }
+  // Tenant IDs are stored as ObjectIds. The string fallback keeps previously
+  // created orders visible if an older build wrote storeAdmin as a string.
+  return { $or: [{ [field]: tenant }, { [field]: String(tenant) }] };
+};
+
+const belongsToTenant = async (req: AuthRequest, doc: any, field = "storeAdmin") => {
+  const tenant = await getTenantAdminId(req);
+  if (!tenant) return false;
+  const owner = doc?.[field];
+  if (!owner) return String(tenant) === String(await getMainAdminId());
+  return String(owner) === String(tenant);
+};
+
+
 const allowedOrigins = [
   "https://freshbasket-grocery-shop.vercel.app",
   "http://localhost:5173",
+  // Capacitor Android WebView origin
   "http://localhost",
   "https://localhost",
 ];
+
 app.use(
   cors({
     origin: allowedOrigins,
@@ -117,9 +208,13 @@ const notifyUser = async ({ user, title, message, type = "info", order }: { user
   }
 };
 
-const notifyAdmins = async ({ title, message, type = "info", order }: { title: string; message: string; type?: string; order?: any }) => {
+const notifyAdmins = async ({ title, message, type = "info", order, storeAdmin }: { title: string; message: string; type?: string; order?: any; storeAdmin?: any }) => {
   try {
-    const admins = await User.find({ role: "admin", blocked: { $ne: true } }).select("_id").lean();
+    const admins = await User.find({
+      role: "admin",
+      blocked: { $ne: true },
+      ...(storeAdmin ? { $or: [{ _id: storeAdmin }, { storeAdmin: storeAdmin }] } : {}),
+    }).select("_id").lean();
     if (!admins.length) return;
     await Notification.insertMany(admins.map((admin: any) => ({ user: admin._id, title, message, type, ...(order ? { order } : {}) })));
   } catch (error) {
@@ -786,6 +881,20 @@ app.post("/api/addresses", auth, role("customer"), async (req: AuthRequest, res)
     const pincode = String(req.body.pincode || "").replace(/\D/g, "");
     const isDefault = Boolean(req.body.isDefault);
 
+    const latitude =
+      req.body.latitude !== undefined &&
+      req.body.latitude !== null &&
+      req.body.latitude !== ""
+        ? Number(req.body.latitude)
+        : null;
+
+    const longitude =
+      req.body.longitude !== undefined &&
+      req.body.longitude !== null &&
+      req.body.longitude !== ""
+        ? Number(req.body.longitude)
+        : null;
+
     if (label.length < 2) return res.status(400).json({ success: false, message: "Please enter an address label" });
     if (name.length < 2) return res.status(400).json({ success: false, message: "Please enter your full name" });
     if (!/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ success: false, message: "Please enter a valid 10-digit mobile number" });
@@ -793,12 +902,36 @@ app.post("/api/addresses", auth, role("customer"), async (req: AuthRequest, res)
     if (city.length < 2) return res.status(400).json({ success: false, message: "Please enter your city" });
     if (!/^\d{6}$/.test(pincode)) return res.status(400).json({ success: false, message: "Please enter a valid 6-digit pincode" });
 
+    if (
+      latitude !== null &&
+      (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)
+    ) {
+      return res.status(400).json({ success: false, message: "Invalid latitude" });
+    }
+
+    if (
+      longitude !== null &&
+      (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)
+    ) {
+      return res.status(400).json({ success: false, message: "Invalid longitude" });
+    }
+
     const count = await Address.countDocuments({ user: req.user!.id });
     const makeDefault = isDefault || count === 0;
     if (makeDefault) await Address.updateMany({ user: req.user!.id }, { $set: { isDefault: false } });
 
     const created = await Address.create({
-      user: req.user!.id, label, name, phone, address, city, state, pincode, isDefault: makeDefault,
+      user: req.user!.id,
+      label,
+      name,
+      phone,
+      address,
+      city,
+      state,
+      pincode,
+      latitude,
+      longitude,
+      isDefault: makeDefault,
     });
     return res.status(201).json({ success: true, message: "Address added successfully", data: created });
   } catch (error) {
@@ -822,13 +955,49 @@ app.put("/api/addresses/:id", auth, role("customer"), async (req: AuthRequest, r
     const pincode = String(req.body.pincode || "").replace(/\D/g, "");
     const isDefault = Boolean(req.body.isDefault);
 
+    const latitude =
+      req.body.latitude !== undefined &&
+      req.body.latitude !== null &&
+      req.body.latitude !== ""
+        ? Number(req.body.latitude)
+        : null;
+
+    const longitude =
+      req.body.longitude !== undefined &&
+      req.body.longitude !== null &&
+      req.body.longitude !== ""
+        ? Number(req.body.longitude)
+        : null;
+
     if (label.length < 2 || name.length < 2 || address.length < 5 || city.length < 2) return res.status(400).json({ success: false, message: "Please complete all address details" });
     if (!/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ success: false, message: "Please enter a valid 10-digit mobile number" });
     if (!/^\d{6}$/.test(pincode)) return res.status(400).json({ success: false, message: "Please enter a valid 6-digit pincode" });
 
+    if (
+      latitude !== null &&
+      (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)
+    ) {
+      return res.status(400).json({ success: false, message: "Invalid latitude" });
+    }
+
+    if (
+      longitude !== null &&
+      (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)
+    ) {
+      return res.status(400).json({ success: false, message: "Invalid longitude" });
+    }
+
     if (isDefault) await Address.updateMany({ user: req.user!.id, _id: { $ne: addressDoc._id } }, { $set: { isDefault: false } });
-    addressDoc.label = label; addressDoc.name = name; addressDoc.phone = phone; addressDoc.address = address;
-    addressDoc.city = city; addressDoc.state = state; addressDoc.pincode = pincode; addressDoc.isDefault = isDefault;
+    addressDoc.label = label;
+    addressDoc.name = name;
+    addressDoc.phone = phone;
+    addressDoc.address = address;
+    addressDoc.city = city;
+    addressDoc.state = state;
+    addressDoc.pincode = pincode;
+    addressDoc.latitude = latitude;
+    addressDoc.longitude = longitude;
+    addressDoc.isDefault = isDefault;
     await addressDoc.save();
     return res.json({ success: true, message: "Address updated successfully", data: addressDoc });
   } catch (error) {
@@ -870,15 +1039,112 @@ app.patch("/api/addresses/:id/default", auth, role("customer"), async (req: Auth
 });
 
 /* =========================================================
+   PUBLIC STORE DIRECTORY
+========================================================= */
+
+const buildStoreDirectory = async () => {
+  const [admins, mainId] = await Promise.all([
+    User.find({ role: "admin", blocked: { $ne: true } })
+      .select("_id name blocked createdAt")
+      .sort({ createdAt: 1, name: 1 })
+      .lean(),
+    getMainAdminId(),
+  ]);
+
+  return Promise.all(admins.map(async (admin: any) => {
+    const isMain = Boolean(mainId && String(admin._id) === String(mainId));
+    const location: any = await StoreLocation.findOne(
+      isMain
+        ? { $or: [{ key: "main", storeAdmin: admin._id }, { key: "main", storeAdmin: null }, { key: "main", storeAdmin: { $exists: false } }] }
+        : { key: String(admin._id), storeAdmin: admin._id }
+    ).lean();
+
+    const productFilter: any = isMain
+      ? { $and: [{ isActive: true }, { $or: [{ storeAdmin: admin._id }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] }] }
+      : { storeAdmin: admin._id, isActive: true };
+
+    const [productCount, categoryCount, bannerCount] = await Promise.all([
+      Product.countDocuments(productFilter),
+      Category.countDocuments(isMain
+        ? { $or: [{ storeAdmin: admin._id }, { storeAdmin: null }, { storeAdmin: { $exists: false } }], isActive: { $ne: false } }
+        : { storeAdmin: admin._id, isActive: { $ne: false } }),
+      Banner.countDocuments(isMain
+        ? { $or: [{ storeAdmin: admin._id }, { storeAdmin: null }, { storeAdmin: { $exists: false } }], isActive: { $ne: false } }
+        : { storeAdmin: admin._id, isActive: { $ne: false } }),
+    ]);
+
+    return {
+      id: String(admin._id),
+      name: location?.name || admin.name || "Local Store",
+      address: location?.address || "",
+      latitude: location?.latitude ?? null,
+      longitude: location?.longitude ?? null,
+      productCount,
+      categoryCount,
+      bannerCount,
+      isMainStore: isMain,
+      configured: Number.isFinite(Number(location?.latitude)) && Number.isFinite(Number(location?.longitude)),
+    };
+  }));
+};
+
+// Public discovery endpoint. It intentionally exposes only store/catalogue metadata,
+// never admin email, phone, password, customer records, orders or private analytics.
+app.get("/api/stores", async (_req, res) => {
+  try {
+    return res.json({ success: true, data: await buildStoreDirectory() });
+  } catch (error) {
+    console.error("PUBLIC STORES ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load stores" });
+  }
+});
+
+// Logged-in customer store directory. The customer does not need a separate
+// copy of every store in their User document; the directory is derived from
+// active store-admin accounts, while orders preserve the actual store owner.
+app.get("/api/customer/stores", auth, role("customer"), async (_req: AuthRequest, res) => {
+  try {
+    return res.json({ success: true, data: await buildStoreDirectory() });
+  } catch (error) {
+    console.error("CUSTOMER STORES ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load stores" });
+  }
+});
+
+// Main admin can see every store and its catalogue summary without entering
+// another admin's workspace.
+app.get("/api/admin/stores", auth, mainAdminOnly, async (_req, res) => {
+  try {
+    return res.json({ success: true, data: await buildStoreDirectory() });
+  } catch (error) {
+    console.error("ADMIN STORES ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load stores" });
+  }
+});
+
+/* =========================================================
    BANNERS / OFFERS
 ========================================================= */
 
-app.get("/api/banners", async (_req, res) => {
+app.get("/api/banners", async (req, res) => {
   try {
     const now = new Date();
+    const requestedStore = String(req.query.storeAdminId || "").trim();
+    const mainId = await getMainAdminId();
+    const isMainStoreRequest = Boolean(
+      requestedStore &&
+      mainId &&
+      String(requestedStore) === String(mainId)
+    );
+    const storeFilter: any = requestedStore && mongoose.Types.ObjectId.isValid(requestedStore)
+      ? (isMainStoreRequest
+          ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] }
+          : { storeAdmin: requestedStore })
+      : (mainId ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] } : { storeAdmin: null });
     const banners = await Banner.find({
-      isActive: true,
       $and: [
+        storeFilter,
+        { isActive: true },
         { $or: [{ startDate: { $exists: false } }, { startDate: null }, { startDate: { $lte: now } }] },
         { $or: [{ endDate: { $exists: false } }, { endDate: null }, { endDate: { $gte: now } }] },
       ],
@@ -893,9 +1159,9 @@ app.get("/api/banners", async (_req, res) => {
   }
 });
 
-app.get("/api/admin/banners", auth, role("admin"), async (_req, res) => {
+app.get("/api/admin/banners", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
-    const banners = await Banner.find().sort({ sortOrder: 1, createdAt: -1 }).lean();
+    const banners = await Banner.find(await tenantFilter(req)).sort({ sortOrder: 1, createdAt: -1 }).lean();
     return res.json({ success: true, data: banners });
   } catch (error) {
     console.error("ADMIN BANNER LIST ERROR:", error);
@@ -903,7 +1169,7 @@ app.get("/api/admin/banners", auth, role("admin"), async (_req, res) => {
   }
 });
 
-app.post("/api/admin/banners", auth, role("admin"), async (req, res) => {
+app.post("/api/admin/banners", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
     const title = String(req.body.title || "").trim();
     const subtitle = String(req.body.subtitle || "").trim();
@@ -930,6 +1196,7 @@ app.post("/api/admin/banners", auth, role("admin"), async (req, res) => {
       ...(endDate ? { endDate } : {}),
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
       isActive: req.body.isActive !== false,
+      storeAdmin: await getTenantAdminId(req),
     });
 
     return res.status(201).json({ success: true, message: "Banner created successfully", data: banner });
@@ -945,7 +1212,7 @@ app.put("/api/admin/banners/:id", auth, role("admin"), async (req, res) => {
       return res.status(404).json({ success: false, message: "Banner not found" });
     }
 
-    const before: any = await Banner.findById(req.params.id);
+    const before: any = await Banner.findOne({ _id: req.params.id, ...(await tenantFilter(req as AuthRequest)) });
     if (!before) return res.status(404).json({ success: false, message: "Banner not found" });
 
     const title = String(req.body.title ?? before.title).trim();
@@ -968,8 +1235,8 @@ app.put("/api/admin/banners/:id", auth, role("admin"), async (req, res) => {
       return res.status(400).json({ success: false, message: "End date must be after start date" });
     }
 
-    const banner = await Banner.findByIdAndUpdate(
-      req.params.id,
+    const banner = await Banner.findOneAndUpdate(
+      { _id: req.params.id, ...(await tenantFilter(req as AuthRequest)) },
       { title, subtitle, offerLabel, image, buttonText, link, startDate, endDate, sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0, isActive },
       { new: true, runValidators: true }
     );
@@ -986,7 +1253,7 @@ app.delete("/api/admin/banners/:id", auth, role("admin"), async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(404).json({ success: false, message: "Banner not found" });
     }
-    const banner = await Banner.findByIdAndDelete(req.params.id);
+    const banner = await Banner.findOneAndDelete({ _id: req.params.id, ...(await tenantFilter(req as AuthRequest)) });
     if (!banner) return res.status(404).json({ success: false, message: "Banner not found" });
     return res.json({ success: true, message: "Banner deleted successfully" });
   } catch (error) {
@@ -999,9 +1266,21 @@ app.delete("/api/admin/banners/:id", auth, role("admin"), async (req, res) => {
    CATEGORIES
 ========================================================= */
 
-app.get("/api/categories", async (_req, res) => {
+app.get("/api/categories", async (req, res) => {
   try {
-    const categories = await Category.find({ isActive: true }).sort({ name: 1 }).lean();
+    const requestedStore = String(req.query.storeAdminId || "").trim();
+    const mainId = await getMainAdminId();
+    const isMainStoreRequest = Boolean(
+      requestedStore &&
+      mainId &&
+      String(requestedStore) === String(mainId)
+    );
+    const storeFilter: any = requestedStore && mongoose.Types.ObjectId.isValid(requestedStore)
+      ? (isMainStoreRequest
+          ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] }
+          : { storeAdmin: requestedStore })
+      : (mainId ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] } : { storeAdmin: null });
+    const categories = await Category.find({ $and: [storeFilter, { isActive: true }] }).sort({ name: 1 }).lean();
     return res.json({ success: true, data: categories });
   } catch (error) {
     console.error("CATEGORY LIST ERROR:", error);
@@ -1009,19 +1288,21 @@ app.get("/api/categories", async (_req, res) => {
   }
 });
 
-app.get("/api/admin/categories", auth, role("admin"), async (_req, res) => {
+app.get("/api/admin/categories", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
-    const productCategories = await Product.distinct("category", { category: { $nin: [null, ""] } });
+    const storeFilter = await tenantFilter(req);
+    const productCategories = await Product.distinct("category", { ...storeFilter, category: { $nin: [null, ""] } });
     for (const rawName of productCategories) {
       const name = String(rawName || "").trim();
       if (!name) continue;
+      const owner = await getTenantAdminId(req);
       await Category.updateOne(
-        { name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
-        { $setOnInsert: { name, image: "", isActive: true } },
+        { ...(await tenantFilter(req)), name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
+        { $setOnInsert: { name, image: "", isActive: true, storeAdmin: owner } },
         { upsert: true }
       );
     }
-    const categories = await Category.find().sort({ name: 1 }).lean();
+    const categories = await Category.find({}).sort({ name: 1 }).lean();
     return res.json({ success: true, data: categories });
   } catch (error) {
     console.error("ADMIN CATEGORY LIST ERROR:", error);
@@ -1029,16 +1310,18 @@ app.get("/api/admin/categories", auth, role("admin"), async (_req, res) => {
   }
 });
 
-app.post("/api/admin/categories", auth, role("admin"), async (req, res) => {
+app.post("/api/admin/categories", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
     const name = String(req.body.name || "").trim();
     const image = String(req.body.image || "").trim();
     if (name.length < 2) return res.status(400).json({ success: false, message: "Category name is required" });
 
-    const existing = await Category.findOne({ name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
+    const existing = await Category.findOne({ ...(await tenantFilter(req)), name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
     if (existing) return res.status(400).json({ success: false, message: "Category already exists" });
 
     const category = await Category.create({ name, image, isActive: true });
+    const owner = await getTenantAdminId(req);
+    if (owner) await Category.collection.updateOne({ _id: category._id }, { $set: { storeAdmin: owner } });
     return res.status(201).json({ success: true, message: "Category created successfully", data: category });
   } catch (error) {
     console.error("CATEGORY CREATE ERROR:", error);
@@ -1049,7 +1332,7 @@ app.post("/api/admin/categories", auth, role("admin"), async (req, res) => {
 app.put("/api/admin/categories/:id", auth, role("admin"), async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: "Category not found" });
-    const before = await Category.findById(req.params.id);
+    const before = await Category.findOne({ _id: req.params.id, storeAdmin: req.user!.id });
     if (!before) return res.status(404).json({ success: false, message: "Category not found" });
 
     const name = String(req.body.name ?? before.name).trim();
@@ -1057,7 +1340,7 @@ app.put("/api/admin/categories/:id", auth, role("admin"), async (req, res) => {
     const isActive = req.body.isActive === undefined ? before.isActive : Boolean(req.body.isActive);
     if (name.length < 2) return res.status(400).json({ success: false, message: "Category name is required" });
 
-    const duplicate = await Category.findOne({ _id: { $ne: before._id }, name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
+    const duplicate = await Category.findOne({ ...(await tenantFilter(req as AuthRequest)), _id: { $ne: before._id }, name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
     if (duplicate) return res.status(400).json({ success: false, message: "Category already exists" });
 
     const category = await Category.findByIdAndUpdate(req.params.id, { name, image, isActive }, { new: true, runValidators: true });
@@ -1071,10 +1354,10 @@ app.put("/api/admin/categories/:id", auth, role("admin"), async (req, res) => {
 app.delete("/api/admin/categories/:id", auth, role("admin"), async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: "Category not found" });
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findOne({ _id: req.params.id, storeAdmin: req.user!.id });
     if (!category) return res.status(404).json({ success: false, message: "Category not found" });
 
-    const used = await Product.exists({ category: category.name });
+    const used = await Product.exists({ category: category.name, storeAdmin: req.user!.id });
     if (used) return res.status(400).json({ success: false, message: "Category is assigned to products. Disable it instead." });
 
     await category.deleteOne();
@@ -1095,11 +1378,45 @@ app.get("/api/products", async (req, res) => {
     const category = String(req.query.category || "").trim();
 
     const filter: any = {
-      isActive: true,
+      $and: [{ isActive: true }],
     };
 
+    // Optional storeAdminId lets a customer storefront be tied to one store.
+    const requestedStore = String(req.query.storeAdminId || "").trim();
+    const mainId = await getMainAdminId();
+
+    if (requestedStore && mongoose.Types.ObjectId.isValid(requestedStore)) {
+      // The main store must also include legacy products created before
+      // multi-store support, where storeAdmin is null/missing.
+      const isMainStoreRequest = Boolean(
+        mainId && String(requestedStore) === String(mainId)
+      );
+
+      if (isMainStoreRequest) {
+        filter.$and.push({
+          $or: [
+            { storeAdmin: mainId },
+            { storeAdmin: null },
+            { storeAdmin: { $exists: false } },
+          ],
+        });
+      } else {
+        // Every non-main store sees only its own catalogue.
+        filter.$and.push({ storeAdmin: requestedStore });
+      }
+    } else if (mainId) {
+      // No store selected = main store for backwards compatibility.
+      filter.$and.push({
+        $or: [
+          { storeAdmin: mainId },
+          { storeAdmin: null },
+          { storeAdmin: { $exists: false } },
+        ],
+      });
+    }
+
     if (q) {
-      filter.$or = [
+      filter.$and.push({ $or: [
         {
           name: {
             $regex: q,
@@ -1118,7 +1435,7 @@ app.get("/api/products", async (req, res) => {
             $options: "i",
           },
         },
-      ];
+      ] });
     }
 
     if (category) {
@@ -1148,9 +1465,9 @@ app.get(
   "/api/admin/products",
   auth,
   role("admin"),
-  async (_, res) => {
+  async (req: AuthRequest, res) => {
     try {
-      const products = await Product.find().sort({ createdAt: -1 });
+      const products = await Product.find(await tenantFilter(req)).sort({ createdAt: -1 });
 
       return res.json({
         success: true,
@@ -1334,6 +1651,8 @@ app.post(
   async (req: AuthRequest, res) => {
     try {
       const product = await Product.create(req.body);
+      const tenant = await getTenantAdminId(req);
+      if (tenant) await Product.collection.updateOne({ _id: product._id }, { $set: { storeAdmin: tenant } });
 
       const initialStock = Number(product.stock || 0);
       if (initialStock > 0) {
@@ -1369,7 +1688,7 @@ app.put(
   role("admin"),
   async (req, res) => {
     try {
-      const before = await Product.findById(req.params.id);
+      const before = await Product.findOne({ _id: req.params.id, ...(await tenantFilter(req)) });
       if (!before) {
         return res.status(404).json({
           success: false,
@@ -1380,8 +1699,8 @@ app.put(
       const requestedStock =
         req.body.stock === undefined ? Number(before.stock || 0) : Number(req.body.stock);
 
-      const product = await Product.findByIdAndUpdate(
-        req.params.id,
+      const product = await Product.findOneAndUpdate(
+        { _id: req.params.id, ...(await tenantFilter(req)) },
         req.body,
         {
           new: true,
@@ -1431,7 +1750,7 @@ app.get(
   async (req, res) => {
     try {
       const productId = String(req.query.productId || "").trim();
-      const filter: any = {};
+      const filter: any = { ...(await tenantFilter(req)) };
 
       if (productId) {
         if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -1476,7 +1795,7 @@ app.patch(
         return res.status(400).json({ success: false, message: "Reason is required" });
       }
 
-      const product = await Product.findById(req.params.id);
+      const product = await Product.findOne({ _id: req.params.id, ...(await tenantFilter(req)) });
       if (!product) {
         return res.status(404).json({ success: false, message: "Product not found" });
       }
@@ -1517,8 +1836,8 @@ app.delete(
   role("admin"),
   async (req, res) => {
     try {
-      const product = await Product.findByIdAndDelete(
-        req.params.id
+      const product = await Product.findOneAndDelete(
+        { _id: req.params.id, ...(await tenantFilter(req)) }
       );
 
       if (!product) {
@@ -1548,10 +1867,22 @@ app.delete(
    COUPONS
 ========================================================= */
 
-app.get("/api/coupons", async (_req, res) => {
+app.get("/api/coupons", async (req, res) => {
   try {
     const now = new Date();
-    const coupons = await Coupon.find({ isActive: true, startDate: { $lte: now }, expiryDate: { $gte: now } })
+    const requestedStore = String(req.query.storeAdminId || "").trim();
+    const mainId = await getMainAdminId();
+    const isMainStoreRequest = Boolean(
+      requestedStore &&
+      mainId &&
+      String(requestedStore) === String(mainId)
+    );
+    const storeFilter: any = requestedStore && mongoose.Types.ObjectId.isValid(requestedStore)
+      ? (isMainStoreRequest
+          ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] }
+          : { storeAdmin: requestedStore })
+      : (mainId ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] } : { storeAdmin: null });
+    const coupons = await Coupon.find({ $and: [storeFilter, { isActive: true, startDate: { $lte: now }, expiryDate: { $gte: now } }] })
       .select("code discountType value minOrderAmount maxDiscount expiryDate")
       .sort({ createdAt: -1 })
       .lean();
@@ -1570,7 +1901,19 @@ app.post("/api/coupons/validate", async (req: AuthRequest, res) => {
     if (!Number.isFinite(subtotal) || subtotal < 0) return res.status(400).json({ success: false, message: "Invalid subtotal" });
 
     const now = new Date();
-    const coupon: any = await Coupon.findOne({ code });
+    const requestedStore = String(req.body.storeAdminId || "").trim();
+    const mainId = await getMainAdminId();
+    const isMainStoreRequest = Boolean(
+      requestedStore &&
+      mainId &&
+      String(requestedStore) === String(mainId)
+    );
+    const storeFilter: any = requestedStore && mongoose.Types.ObjectId.isValid(requestedStore)
+      ? (isMainStoreRequest
+          ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] }
+          : { storeAdmin: requestedStore })
+      : (mainId ? { $or: [{ storeAdmin: mainId }, { storeAdmin: null }, { storeAdmin: { $exists: false } }] } : { storeAdmin: null });
+    const coupon: any = await Coupon.findOne({ $and: [storeFilter, { code }] });
     if (!coupon || !coupon.isActive) return res.status(400).json({ success: false, message: "Invalid or inactive coupon" });
     if (now < coupon.startDate) return res.status(400).json({ success: false, message: "Coupon is not active yet" });
     if (now > coupon.expiryDate) return res.status(400).json({ success: false, message: "Coupon has expired" });
@@ -1588,9 +1931,9 @@ app.post("/api/coupons/validate", async (req: AuthRequest, res) => {
   }
 });
 
-app.get("/api/admin/coupons", auth, mainAdminOnly, async (_req, res) => {
+app.get("/api/admin/coupons", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
-    const coupons = await Coupon.find().sort({ createdAt: -1 }).lean();
+    const coupons = await Coupon.find(await tenantFilter(req)).sort({ createdAt: -1 }).lean();
     return res.json({ success: true, data: coupons });
   } catch (error) {
     console.error("ADMIN COUPON LIST ERROR:", error);
@@ -1598,7 +1941,7 @@ app.get("/api/admin/coupons", auth, mainAdminOnly, async (_req, res) => {
   }
 });
 
-app.post("/api/admin/coupons", auth, mainAdminOnly, async (req, res) => {
+app.post("/api/admin/coupons", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
     const payload = req.body || {};
     const code = String(payload.code || "").trim().toUpperCase();
@@ -1618,10 +1961,11 @@ app.post("/api/admin/coupons", auth, mainAdminOnly, async (req, res) => {
     if (usageLimit !== undefined && (!Number.isInteger(usageLimit) || usageLimit <= 0)) return res.status(400).json({ success: false, message: "Invalid usage limit" });
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(expiryDate.getTime()) || expiryDate <= startDate) return res.status(400).json({ success: false, message: "Invalid coupon dates" });
 
-    const existing = await Coupon.findOne({ code });
+    const owner = await getTenantAdminId(req);
+    const existing = await Coupon.findOne({ code, ...(owner ? { storeAdmin: owner } : {}) });
     if (existing) return res.status(409).json({ success: false, message: "Coupon code already exists" });
 
-    const coupon = await Coupon.create({ code, discountType, value, minOrderAmount, maxDiscount, startDate, expiryDate, usageLimit, isActive: payload.isActive !== false, usedCount: 0 });
+    const coupon = await Coupon.create({ code, discountType, value, minOrderAmount, maxDiscount, startDate, expiryDate, usageLimit, isActive: payload.isActive !== false, usedCount: 0, storeAdmin: owner });
     return res.status(201).json({ success: true, message: "Coupon created successfully", data: coupon });
   } catch (error) {
     console.error("COUPON CREATE ERROR:", error);
@@ -1629,7 +1973,7 @@ app.post("/api/admin/coupons", auth, mainAdminOnly, async (req, res) => {
   }
 });
 
-app.put("/api/admin/coupons/:id", auth, mainAdminOnly, async (req, res) => {
+app.put("/api/admin/coupons/:id", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: "Coupon not found" });
     const update: any = { ...req.body };
@@ -1642,7 +1986,7 @@ app.put("/api/admin/coupons/:id", auth, mainAdminOnly, async (req, res) => {
     else update.usageLimit = Number(update.usageLimit);
     if (update.startDate) update.startDate = new Date(update.startDate);
     if (update.expiryDate) update.expiryDate = new Date(update.expiryDate);
-    const coupon: any = await Coupon.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+    const coupon: any = await Coupon.findOneAndUpdate({ _id: req.params.id, ...(await tenantFilter(req)) }, update, { new: true, runValidators: true });
     if (!coupon) return res.status(404).json({ success: false, message: "Coupon not found" });
     return res.json({ success: true, message: "Coupon updated successfully", data: coupon });
   } catch (error: any) {
@@ -1651,10 +1995,10 @@ app.put("/api/admin/coupons/:id", auth, mainAdminOnly, async (req, res) => {
   }
 });
 
-app.delete("/api/admin/coupons/:id", auth, mainAdminOnly, async (req, res) => {
+app.delete("/api/admin/coupons/:id", auth, role("admin"), async (req: AuthRequest, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: "Coupon not found" });
-    const coupon = await Coupon.findByIdAndDelete(req.params.id);
+    const coupon = await Coupon.findOneAndDelete({ _id: req.params.id, ...(await tenantFilter(req)) });
     if (!coupon) return res.status(404).json({ success: false, message: "Coupon not found" });
     return res.json({ success: true, message: "Coupon deleted successfully" });
   } catch (error) {
@@ -1866,7 +2210,9 @@ app.get(
           // can show delivery history without affecting active assignments.
           status: { $in: ["Packed", "Out for Delivery", "Delivered"] },
         };
-      } else if (req.user!.role !== "admin") {
+      } else if (req.user!.role === "admin") {
+        filter = await tenantFilter(req);
+      } else {
         return res.status(403).json({
           success: false,
           message: "Forbidden",
@@ -1947,6 +2293,20 @@ app.post(
         }
       }
 
+      const mainAdminId = await getMainAdminId();
+      const productOwners = new Set<string>();
+      for (const item of items) {
+        const product: any = await Product.findById(item.product).select("storeAdmin").lean();
+        const owner = product?.storeAdmin ? String(product.storeAdmin) : (mainAdminId ? String(mainAdminId) : "");
+        if (owner) productOwners.add(owner);
+      }
+      if (productOwners.size > 1) {
+        return res.status(400).json({ success: false, message: "Products from different stores cannot be combined in one order." });
+      }
+      const orderStoreAdmin = productOwners.size
+        ? new mongoose.Types.ObjectId(Array.from(productOwners)[0])
+        : (mainAdminId || null);
+
       const subtotal = items.reduce(
         (sum: number, item: any) =>
           sum + Number(item.price) * Number(item.quantity),
@@ -1956,7 +2316,7 @@ app.post(
       let safeDiscount = 0;
       let appliedCoupon: any = null;
       if (couponCode) {
-        const coupon: any = await Coupon.findOne({ code: String(couponCode).trim().toUpperCase() });
+        const coupon: any = await Coupon.findOne({ code: String(couponCode).trim().toUpperCase(), ...(orderStoreAdmin ? { storeAdmin: orderStoreAdmin } : {}) });
         const now = new Date();
         if (!coupon || !coupon.isActive || now < coupon.startDate || now > coupon.expiryDate || (coupon.usageLimit != null && coupon.usedCount >= coupon.usageLimit) || subtotal < coupon.minOrderAmount) {
           return res.status(400).json({ success: false, message: "Coupon is no longer valid for this order" });
@@ -2014,6 +2374,7 @@ app.post(
         deliverySlot,
         status: "Pending",
       });
+      if (orderStoreAdmin) await Order.collection.updateOne({ _id: order._id }, { $set: { storeAdmin: orderStoreAdmin } });
 
       if (safeRewardPoints > 0) {
         await User.collection.updateOne(
@@ -2068,6 +2429,7 @@ app.post(
         message: `New order #${String(order._id).slice(-8).toUpperCase()} has been placed.`,
         type: "order",
         order: order._id,
+        ...(orderStoreAdmin ? { storeAdmin: orderStoreAdmin } : {}),
       });
 
       return res.status(201).json({
@@ -2117,9 +2479,16 @@ app.get(
         req.query.status || ""
       ).trim();
 
-      const filter: any = {};
+      // Orders management shows only active orders. Delivered/cancelled
+      // orders are moved to the separate Order History section.
+      const filter: any = {
+        $and: [
+          await tenantFilter(req as AuthRequest),
+          { status: { $nin: ["Delivered", "Cancelled"] } },
+        ],
+      };
 
-      if (status) {
+      if (status && !["Delivered", "Cancelled"].includes(status)) {
         filter.status = status;
       }
 
@@ -2162,7 +2531,7 @@ app.get(
         }
 
         if (orderConditions.length) {
-          filter.$or = orderConditions;
+          filter.$and.push({ $or: orderConditions });
         } else {
           return res.json({
             success: true,
@@ -2211,6 +2580,49 @@ app.get(
       return res.status(500).json({
         success: false,
         message: "Unable to load admin orders",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ADMIN ORDER HISTORY
+========================================================= */
+
+app.get(
+  "/api/admin/orders/history",
+  auth,
+  role("admin"),
+  async (req, res) => {
+    try {
+      const page = Math.max(1, Number(req.query.page || 1));
+      const limit = Math.min(50, Math.max(1, Number(req.query.limit || 10)));
+      const filter: any = {
+        $and: [
+          await tenantFilter(req as AuthRequest),
+          { status: { $in: ["Delivered", "Cancelled"] } },
+        ],
+      };
+
+      const total = await Order.countDocuments(filter);
+      const orders = await Order.find(filter)
+        .populate("user", "name email phone blocked")
+        .populate("deliveryPartner", "name email phone role blocked")
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
+
+      return res.json({
+        success: true,
+        data: orders,
+        meta: { page, limit, total, pages: Math.ceil(total / limit) },
+      });
+    } catch (error) {
+      console.error("ADMIN ORDER HISTORY ERROR:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to load order history",
       });
     }
   }
@@ -2283,6 +2695,7 @@ app.post(
         role: "admin",
         blocked: false,
       });
+      await User.collection.updateOne({ _id: admin._id }, { $set: { storeAdmin: admin._id } });
 
       return res.status(201).json({
         success: true,
@@ -2363,10 +2776,8 @@ app.get(
   role("admin"),
   async (_req, res) => {
     try {
-      const partners = await User.find({
-        role: "delivery",
-      })
-        .select("name email phone role blocked")
+      const partners = await User.find({ role: "delivery" })
+        .select("name email phone role blocked latitude longitude locationUpdatedAt storeAdmin")
         .sort({ name: 1 })
         .lean();
 
@@ -2419,6 +2830,8 @@ app.post(
         role: "delivery",
         blocked: false,
       });
+      const owner = await getTenantAdminId(req as AuthRequest);
+      if (owner) await User.collection.updateOne({ _id: partner._id }, { $set: { storeAdmin: owner } });
 
       return res.status(201).json({
         success: true,
@@ -2530,9 +2943,22 @@ app.patch(
   role("admin"),
   async (req, res) => {
     try {
-      const { deliveryPartnerId } = req.body;
+      let { deliveryPartnerId } = req.body;
 
-      const order = await Order.findById(req.params.id);
+      if (req.body.autoNearest === true) {
+        const orderPreview: any = await Order.findOne({ _id: req.params.id, ...(await tenantFilter(req as AuthRequest)) }).select("storeAdmin").lean();
+        const storeOwner = orderPreview?.storeAdmin;
+        const storeLocation: any = storeOwner ? await StoreLocation.findOne({ storeAdmin: storeOwner }).lean() : null;
+        const slat = Number(storeLocation?.latitude); const slng = Number(storeLocation?.longitude);
+        if (Number.isFinite(slat) && Number.isFinite(slng)) {
+          const partners: any[] = await User.find({ role: "delivery", blocked: { $ne: true }, latitude: { $ne: null }, longitude: { $ne: null } }).select("_id latitude longitude").lean();
+          const distance = (a:number,b:number,c:number,d:number) => { const R=6371, r=(x:number)=>x*Math.PI/180; const da=r(c-a), db=r(d-b); const h=Math.sin(da/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(db/2)**2; return 2*R*Math.asin(Math.sqrt(h)); };
+          partners.sort((a,b)=>distance(slat,slng,Number(a.latitude),Number(a.longitude))-distance(slat,slng,Number(b.latitude),Number(b.longitude)));
+          deliveryPartnerId = partners[0]?._id || null;
+        }
+      }
+
+      const order = await Order.findOne({ _id: req.params.id, ...(await tenantFilter(req as AuthRequest)) });
       if (!order) {
         return res.status(404).json({
           success: false,
@@ -2555,6 +2981,9 @@ app.patch(
           });
         }
 
+        const owner = await getTenantAdminId(req as AuthRequest);
+        const mainId = await getMainAdminId();
+        const isMain = mainId && String(owner) === String(mainId);
         const partner = await User.findOne({
           _id: deliveryPartnerId,
           role: "delivery",
@@ -2607,6 +3036,180 @@ app.patch(
 );
 
 /* =========================================================
+   STORE PAYMENT SETTINGS
+========================================================= */
+
+app.get("/api/payment-settings", async (req, res) => {
+  try {
+    const storeAdminId = String(req.query.storeAdminId || "").trim();
+    const mainId = await getMainAdminId();
+    const owner = storeAdminId && mongoose.Types.ObjectId.isValid(storeAdminId) ? storeAdminId : mainId;
+    const settings: any = owner ? await PaymentSetting.findOne({ storeAdmin: owner }).lean() : null;
+    return res.json({ success: true, data: settings || { upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: false } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load payment settings" });
+  }
+});
+
+app.get("/api/admin/payment-settings", auth, role("admin"), async (req: AuthRequest, res) => {
+  try {
+    const owner = await getTenantAdminId(req);
+    const settings: any = owner ? await PaymentSetting.findOne({ storeAdmin: owner }).lean() : null;
+    return res.json({ success: true, data: settings || { upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: true } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load payment settings" });
+  }
+});
+
+app.put("/api/admin/payment-settings", auth, role("admin"), async (req: AuthRequest, res) => {
+  try {
+    const owner = await getTenantAdminId(req);
+    if (!owner) return res.status(400).json({ success: false, message: "Store account not found" });
+    const upiId = String(req.body.upiId || "").trim();
+    const merchantName = String(req.body.merchantName || "FreshBasket").trim();
+    const qrImage = String(req.body.qrImage || "").trim();
+    const isEnabled = req.body.isEnabled !== false;
+    if (upiId && !/^[^\s@]+@[^\s@]+$/.test(upiId)) return res.status(400).json({ success: false, message: "Enter a valid UPI ID" });
+    const saved = await PaymentSetting.findOneAndUpdate({ storeAdmin: owner }, { $set: { storeAdmin: owner, upiId, merchantName, qrImage, isEnabled } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    return res.json({ success: true, message: "Payment settings saved successfully", data: saved });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Unable to save payment settings" });
+  }
+});
+
+app.get("/api/orders/:id/payment-settings", auth, async (req: AuthRequest, res) => {
+  try {
+    const order: any = await Order.findById(req.params.id).select("user deliveryPartner storeAdmin").lean();
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    const allowed = req.user?.role === "admin" ? await belongsToTenant(req, order) : req.user?.role === "customer" ? String(order.user) === String(req.user.id) : req.user?.role === "delivery" ? String(order.deliveryPartner) === String(req.user.id) : false;
+    if (!allowed) return res.status(403).json({ success: false, message: "Forbidden" });
+    const settings: any = order.storeAdmin ? await PaymentSetting.findOne({ storeAdmin: order.storeAdmin }).lean() : null;
+    return res.json({ success: true, data: settings || { upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: false } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load payment settings" });
+  }
+});
+
+/* =========================================================
+   DELIVERY MAP / PICKUP LOCATION
+========================================================= */
+
+app.get(
+  "/api/admin/store-location",
+  auth,
+  role("admin"),
+  async (req: AuthRequest, res) => {
+    try {
+      const owner = await getTenantAdminId(req);
+      const mainId = await getMainAdminId();
+      const isMain = mainId && String(owner) === String(mainId);
+      const query: any = isMain
+        ? { $or: [
+            { key: "main", storeAdmin: owner },
+            { key: "main", storeAdmin: null },
+            { key: "main", storeAdmin: { $exists: false } },
+          ] }
+        : { key: String(owner), storeAdmin: owner };
+      const saved: any = await StoreLocation.findOne(query).lean();
+      const latitude = saved?.latitude ?? (isMain && hasValidStoreCoordinates ? STORE_LAT : null);
+      const longitude = saved?.longitude ?? (isMain && hasValidStoreCoordinates ? STORE_LNG : null);
+      const address = saved?.address || (isMain ? STORE_ADDRESS : "");
+      const name = saved?.name || "FreshBasket Store";
+      const configured = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) && Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
+      return res.json({ success: true, data: { name, address, latitude: configured ? Number(latitude) : null, longitude: configured ? Number(longitude) : null, configured } });
+    } catch (error) {
+      console.error("ADMIN STORE LOCATION ERROR:", error);
+      return res.status(500).json({ success: false, message: "Unable to load store location" });
+    }
+  }
+);
+
+app.put(
+  "/api/admin/store-location",
+  auth,
+  role("admin"),
+  async (req: AuthRequest, res) => {
+    try {
+      const name = String(req.body.name || "FreshBasket Store").trim();
+      const address = String(req.body.address || "").trim();
+      const latitude = Number(req.body.latitude);
+      const longitude = Number(req.body.longitude);
+
+      if (!name) return res.status(400).json({ success: false, message: "Store name is required" });
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return res.status(400).json({ success: false, message: "Enter a valid latitude" });
+      if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return res.status(400).json({ success: false, message: "Enter a valid longitude" });
+
+      const owner = await getTenantAdminId(req);
+      const mainId = await getMainAdminId();
+      const isMain = mainId && String(owner) === String(mainId);
+      const key = isMain ? "main" : String(owner);
+      const saved = await StoreLocation.findOneAndUpdate(
+        { key },
+        { $set: { key, storeAdmin: owner, name, address, latitude, longitude } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      return res.json({ success: true, message: "Store location saved successfully", data: saved });
+    } catch (error) {
+      console.error("ADMIN STORE LOCATION SAVE ERROR:", error);
+      return res.status(500).json({ success: false, message: "Unable to save store location" });
+    }
+  }
+);
+
+app.post("/api/delivery/location", auth, role("delivery"), async (req: AuthRequest, res) => {
+  try {
+    const latitude = Number(req.body.latitude);
+    const longitude = Number(req.body.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return res.status(400).json({ success: false, message: "Invalid location" });
+    await User.updateOne({ _id: req.user!.id, role: "delivery" }, { $set: { latitude, longitude, locationUpdatedAt: new Date() } });
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to update delivery location" });
+  }
+});
+
+app.get(
+  "/api/delivery/location",
+  auth,
+  role("delivery", "admin"),
+  async (req: AuthRequest, res) => {
+    try {
+      const owner = await getTenantAdminId(req);
+      const mainId = await getMainAdminId();
+      const isMain = mainId && String(owner) === String(mainId);
+      const key = isMain ? "main" : String(owner);
+      const saved: any = await StoreLocation.findOne({ key }).lean();
+      const latitude = saved?.latitude ?? (isMain && hasValidStoreCoordinates ? STORE_LAT : null);
+      const longitude = saved?.longitude ?? (isMain && hasValidStoreCoordinates ? STORE_LNG : null);
+      const address = saved?.address || (isMain ? STORE_ADDRESS : "");
+      const name = saved?.name || "FreshBasket Store";
+      const configured = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) && Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
+      return res.json({ success: true, data: { name, address, latitude: configured ? Number(latitude) : null, longitude: configured ? Number(longitude) : null, configured } });
+    } catch (error) {
+      console.error("DELIVERY LOCATION ERROR:", error);
+      return res.status(500).json({ success: false, message: "Unable to load pickup location" });
+    }
+  }
+);
+
+app.get("/api/orders/:id/pickup-location", auth, async (req: AuthRequest, res) => {
+  try {
+    const order: any = await Order.findById(req.params.id).select("user deliveryPartner storeAdmin").lean();
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    const allowed = req.user?.role === "delivery" ? String(order.deliveryPartner) === String(req.user.id) : req.user?.role === "admin" ? await belongsToTenant(req, order) : req.user?.role === "customer" ? String(order.user) === String(req.user.id) : false;
+    if (!allowed) return res.status(403).json({ success: false, message: "Forbidden" });
+    const mainId = await getMainAdminId();
+    const owner = order.storeAdmin || mainId;
+    const isMain = mainId && String(owner) === String(mainId);
+    const location: any = await StoreLocation.findOne(isMain ? { $or: [{ key: "main", storeAdmin: owner }, { key: "main", storeAdmin: null }, { key: "main", storeAdmin: { $exists: false } }] } : { key: String(owner), storeAdmin: owner }).lean();
+    const latitude = location?.latitude ?? (isMain && hasValidStoreCoordinates ? STORE_LAT : null);
+    const longitude = location?.longitude ?? (isMain && hasValidStoreCoordinates ? STORE_LNG : null);
+    return res.json({ success: true, data: { name: location?.name || "Store Pickup", address: location?.address || (isMain ? STORE_ADDRESS : ""), latitude, longitude, configured: Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) } });
+  } catch (error) { return res.status(500).json({ success: false, message: "Unable to load pickup location" }); }
+});
+
+/* =========================================================
    GET SINGLE ORDER / TRACK ORDER
 ========================================================= */
 
@@ -2633,13 +3236,17 @@ app.get(
         });
       }
 
-      // Customers can track only their own orders. Admins can track any order.
+      // Customers can track only their own orders. Admins can track only their store.
       // Delivery partners can track only orders assigned to them.
       if (req.user!.role === "customer" && String(order.user?._id || order.user) !== String(req.user!.id)) {
         return res.status(403).json({
           success: false,
           message: "Forbidden",
         });
+      }
+
+      if (req.user!.role === "admin" && !(await belongsToTenant(req, order))) {
+        return res.status(403).json({ success: false, message: "Forbidden" });
       }
 
       if (req.user!.role === "delivery" && String(order.deliveryPartner?._id || order.deliveryPartner) !== String(req.user!.id)) {
@@ -2816,9 +3423,10 @@ app.patch(
         });
       }
 
-      const order = await Order.findById(
-        req.params.id
-      );
+      const order = await Order.findOne({
+        _id: req.params.id,
+        ...(req.user!.role === "admin" ? await tenantFilter(req) : {}),
+      });
 
       if (!order) {
         return res.status(404).json({
@@ -3009,11 +3617,8 @@ app.patch(
         });
       }
 
-      if ((order as any).paymentMethod !== "COD") {
-        return res.status(400).json({
-          success: false,
-          message: "Payment collection is only available for COD orders",
-        });
+      if (!['COD', 'ONLINE'].includes(String((order as any).paymentMethod || 'COD'))) {
+        return res.status(400).json({ success: false, message: "Unsupported payment method" });
       }
 
       if ((order as any).status !== "Out for Delivery") {
@@ -3103,8 +3708,12 @@ app.get(
         req.query.search || ""
       ).trim();
 
+      const storeFilter = await tenantFilter(req as AuthRequest);
+      const storeOrders = await Order.find(storeFilter).select("user").lean();
+      const storeCustomerIds = Array.from(new Set(storeOrders.map((o: any) => String(o.user)).filter(Boolean)));
       const filter: any = {
         role: "customer",
+        ...(storeCustomerIds.length ? { _id: { $in: storeCustomerIds } } : { _id: { $in: [] } }),
       };
 
       if (search) {
@@ -3139,6 +3748,7 @@ app.get(
           ? await Order.aggregate([
               {
                 $match: {
+                  ...storeFilter,
                   user: {
                     $in: customerIds,
                   },
@@ -3247,6 +3857,7 @@ app.patch(
           {
             _id: req.params.id,
             role: "customer",
+            _id: { $in: (await Order.distinct("user", await tenantFilter(req as AuthRequest))) },
           },
           {
             blocked,
@@ -3293,18 +3904,20 @@ app.get(
   "/api/admin/stats",
   auth,
   role("admin"),
-  async (_, res) => {
+  async (req: AuthRequest, res) => {
     try {
+      const storeFilter = await tenantFilter(req);
       const [
         orders,
         customers,
         products,
       ] = await Promise.all([
-        Order.find().lean(),
-        User.countDocuments({
-          role: "customer",
-        }),
-        Product.countDocuments(),
+        Order.find(storeFilter).lean(),
+        (async () => {
+          const ids = await Order.distinct("user", storeFilter);
+          return User.countDocuments({ role: "customer", _id: { $in: ids } });
+        })(),
+        Product.countDocuments(storeFilter),
       ]);
 
       const validOrders =
@@ -3363,6 +3976,7 @@ app.get(
 
       const lowStock =
         await Product.countDocuments({
+          ...storeFilter,
           $expr: {
             $lte: [
               "$stock",
@@ -3503,12 +4117,14 @@ app.get(
           (days - 1)
       );
 
-      const orders =
-        await Order.find({
-          createdAt: {
-            $gte: start,
-          },
-        }).lean();
+      let reportFilter: any = { createdAt: { $gte: start } };
+      const requestedAdminId = String(req.query.storeAdminId || "").trim();
+      if (requestedAdminId && req.user?.role === "admin" && String(req.user.id) === String(await getMainAdminId()) && mongoose.Types.ObjectId.isValid(requestedAdminId)) {
+        reportFilter.storeAdmin = requestedAdminId;
+      } else {
+        reportFilter = { $and: [reportFilter, await tenantFilter(req as AuthRequest)] };
+      }
+      const orders = await Order.find(reportFilter).lean();
 
       const validOrders =
         orders.filter(
@@ -3734,6 +4350,12 @@ app.get(
 /* =========================================================
    SERVER START
 ========================================================= */
+
+if ((STORE_LAT_RAW || STORE_LNG_RAW) && !hasValidStoreCoordinates) {
+  console.warn(
+    "Invalid STORE_LAT/STORE_LNG. Delivery pickup map will be unavailable until valid coordinates are configured."
+  );
+}
 
 const PORT = Number(
   process.env.PORT || 5000
