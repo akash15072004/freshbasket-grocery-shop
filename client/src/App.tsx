@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Printer } from "@capgo/capacitor-printer";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Routes,
   Route,
@@ -9,6 +8,8 @@ import {
   useParams,
 } from "react-router-dom";
 import axios from "axios";
+import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import {
   ShoppingCart,
   Search,
@@ -48,13 +49,21 @@ import {
   LockKeyhole,
   Save,
   Mail,
+  Store,
 } from "lucide-react";
 
-const API_BASE = "https://freshbasket-grocery-shop.onrender.com";
+const IS_NATIVE_APP =
+  Boolean((window as any).Capacitor?.isNativePlatform?.());
+
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  (IS_NATIVE_APP
+    ? "https://freshbasket-grocery-shop.onrender.com"
+    : window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://freshbasket-grocery-shop.onrender.com");
 
 const API = `${API_BASE}/api`;
-
-
 
 type Product = {
   _id: string;
@@ -209,7 +218,249 @@ function statusClass(status: string) {
   return "bg-amber-50 text-amber-700";
 }
 
+
+type DeliveryCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+const isValidCoordinate = (latitude: any, longitude: any) =>
+  Number.isFinite(Number(latitude)) &&
+  Number.isFinite(Number(longitude)) &&
+  Number(latitude) >= -90 &&
+  Number(latitude) <= 90 &&
+  Number(longitude) >= -180 &&
+  Number(longitude) <= 180;
+
+function FitDeliveryMap({
+  points,
+}: {
+  points: [number, number][];
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (points.length > 0) {
+      map.fitBounds(points as any, {
+        padding: [35, 35],
+        maxZoom: 15,
+      });
+    }
+  }, [map, points]);
+
+  return null;
+}
+
+async function geocodeDeliveryAddress(address: string, city: string, pincode: string): Promise<DeliveryCoordinate | null> {
+  const queries = [
+    [address, city, pincode, "India"].filter(Boolean).join(", "),
+    [city, pincode, "India"].filter(Boolean).join(", "),
+    [pincode, "India"].filter(Boolean).join(", "),
+  ];
+
+  for (const query of queries) {
+    try {
+      const response = await axios.get("https://nominatim.openstreetmap.org/search", {
+        params: { q: query, format: "jsonv2", limit: 1, countrycodes: "in" },
+        timeout: 10000,
+      });
+      const hit = response.data?.[0];
+      if (hit && isValidCoordinate(hit.lat, hit.lon)) {
+        return { latitude: Number(hit.lat), longitude: Number(hit.lon) };
+      }
+    } catch {
+      // Try the next, less specific query.
+    }
+  }
+  return null;
+}
+
+function DeliveryRouteMap({
+  origin,
+  destination,
+  originLabel = "Your location",
+  destinationLabel = "Customer",
+}: {
+  origin: DeliveryCoordinate;
+  destination: DeliveryCoordinate;
+  originLabel?: string;
+  destinationLabel?: string;
+}) {
+  const [route, setRoute] = useState<[number, number][]>([]);
+  const [routeLoading, setRouteLoading] = useState(true);
+  const [routeError, setRouteError] = useState("");
+
+  const points: [number, number][] = [
+    [Number(origin.latitude), Number(origin.longitude)],
+    [Number(destination.latitude), Number(destination.longitude)],
+  ];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRoute = async () => {
+      setRouteLoading(true);
+      setRouteError("");
+      setRoute([]);
+
+      try {
+        const url =
+          "https://router.project-osrm.org/route/v1/driving/" +
+          `${Number(origin.longitude)},${Number(origin.latitude)};` +
+          `${Number(destination.longitude)},${Number(destination.latitude)}` +
+          "?overview=full&geometries=geojson";
+
+        const response = await axios.get(url, { timeout: 15000 });
+        const coordinates =
+          response.data?.routes?.[0]?.geometry?.coordinates;
+
+        if (!Array.isArray(coordinates) || coordinates.length < 2) {
+          throw new Error("Route unavailable");
+        }
+
+        const converted: [number, number][] = coordinates
+          .filter(
+            (point: any) =>
+              Array.isArray(point) &&
+              point.length >= 2 &&
+              Number.isFinite(Number(point[0])) &&
+              Number.isFinite(Number(point[1]))
+          )
+          .map((point: any) => [
+            Number(point[1]),
+            Number(point[0]),
+          ]);
+
+        if (!cancelled) setRoute(converted);
+      } catch {
+        if (!cancelled) {
+          setRouteError(
+            "Live route could not be loaded. You can still open navigation."
+          );
+        }
+      } finally {
+        if (!cancelled) setRouteLoading(false);
+      }
+    };
+
+    loadRoute();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    origin.latitude,
+    origin.longitude,
+    destination.latitude,
+    destination.longitude,
+  ]);
+
+  const openNavigation = () => {
+    const url =
+      "https://www.google.com/maps/dir/?api=1" +
+      `&origin=${Number(origin.latitude)},${Number(origin.longitude)}` +
+      `&destination=${Number(destination.latitude)},${Number(destination.longitude)}` +
+      "&travelmode=driving";
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div className="mt-5 rounded-2xl border overflow-hidden bg-slate-50">
+      <div className="p-4 bg-white border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <p className="font-bold text-slate-900">Delivery route</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {originLabel === destinationLabel ? destinationLabel : `${originLabel} → ${destinationLabel}`}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={openNavigation}
+          className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm inline-flex items-center justify-center gap-2"
+        >
+          <MapPin size={16} />
+          Start Navigation
+        </button>
+      </div>
+
+      <MapContainer
+        center={points[0]}
+        zoom={13}
+        scrollWheelZoom={false}
+        className="w-full h-[300px] sm:h-[360px]"
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        <FitDeliveryMap points={points} />
+
+        <CircleMarker
+          center={points[0]}
+          radius={10}
+          pathOptions={{
+            color: "#047857",
+            fillColor: "#10b981",
+            fillOpacity: 0.95,
+            weight: 3,
+          }}
+        >
+          <Popup>
+            <b>{originLabel}</b>
+          </Popup>
+        </CircleMarker>
+
+        <CircleMarker
+          center={points[1]}
+          radius={10}
+          pathOptions={{
+            color: "#b91c1c",
+            fillColor: "#ef4444",
+            fillOpacity: 0.95,
+            weight: 3,
+          }}
+        >
+          <Popup>
+            <b>{destinationLabel}</b>
+            <br />
+            Delivery destination
+          </Popup>
+        </CircleMarker>
+
+        {route.length > 1 && (
+          <Polyline
+            positions={route}
+            pathOptions={{
+              color: "#2563eb",
+              weight: 5,
+              opacity: 0.85,
+            }}
+          />
+        )}
+      </MapContainer>
+
+      <div className="p-3 bg-white border-t">
+        {routeLoading ? (
+          <p className="text-xs text-slate-500">
+            Loading driving route...
+          </p>
+        ) : routeError ? (
+          <p className="text-xs text-amber-700">{routeError}</p>
+        ) : (
+          <p className="text-xs text-emerald-700 font-semibold">
+            Route loaded. Follow the blue route from the store to the customer.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function useStore() {
+  const location = useLocation();
   const [products, setProducts] = useState<Product[]>(demoProducts);
   const [cart, setCart] = useState<any[]>(
     () => JSON.parse(localStorage.getItem("fb-cart") || "[]")
@@ -247,11 +498,21 @@ function useStore() {
   }, []);
 
   useEffect(() => {
-    axios
-      .get(API + "/products")
-      .then((r) => setProducts(r.data.data))
-      .catch(() => {});
-  }, []);
+    const params = new URLSearchParams(location.search);
+    const requestedStore = params.get("storeAdminId");
+    const previousStore = localStorage.getItem("fb-store-admin-id") || "";
+    const storeAdminId = requestedStore !== null ? requestedStore : previousStore;
+    if (storeAdminId) localStorage.setItem("fb-store-admin-id", storeAdminId);
+    else localStorage.removeItem("fb-store-admin-id");
+    if (previousStore !== storeAdminId) {
+      setCart([]);
+      localStorage.setItem("fb-cart", "[]");
+    }
+    const url = storeAdminId
+      ? API + "/products?storeAdminId=" + encodeURIComponent(storeAdminId)
+      : API + "/products";
+    axios.get(url).then((r) => setProducts(Array.isArray(r.data.data) ? r.data.data : [])).catch(() => setProducts([]));
+  }, [location.search]);
 
   const add = (p: Product) =>
     setCart((c) => {
@@ -396,6 +657,12 @@ function Layout({
               className="w-full rounded-2xl bg-slate-100 pl-11 pr-4 py-3 outline-none focus:ring-2 ring-emerald-200"
             />
           </div>
+
+          {store.user?.role === "customer" && (
+            <Link to="/stores" className="hidden md:flex items-center gap-1.5 px-2 py-2 text-sm font-bold text-slate-600 hover:text-emerald-700">
+              <Store size={18} /> Stores
+            </Link>
+          )}
 
           <Link
             to="/wishlist"
@@ -615,11 +882,74 @@ function ProductCard({
   );
 }
 
+function StoreDirectory({ store }: { store: ReturnType<typeof useStore> }) {
+  const [stores, setStores] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadStores = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const endpoint = store.user?.role === "customer" ? "/customer/stores" : "/stores";
+      const r = await axios.get(API + endpoint, store.user ? { headers: adminHeaders() } : undefined);
+      setStores(Array.isArray(r.data.data) ? r.data.data : []);
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Unable to load stores.");
+      setStores([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadStores(); }, [store.user?.role]);
+
+  const openStore = (id: string) => {
+    const previous = localStorage.getItem("fb-store-admin-id") || "";
+    if (previous !== id) {
+      store.clearCart();
+      localStorage.setItem("fb-cart", "[]");
+    }
+    localStorage.setItem("fb-store-admin-id", id);
+    window.location.href = "/?storeAdminId=" + encodeURIComponent(id);
+  };
+
+  if (!store.user || store.user.role !== "customer") {
+    return <Layout store={store}><main className="max-w-7xl mx-auto px-4 py-12"><EmptyState icon={Store} title="Customer login required" text="Sign in as a customer to browse local stores and shop from their individual catalogues." /></main></Layout>;
+  }
+
+  return <Layout store={store}><main className="max-w-7xl mx-auto px-4 py-8">
+    <div className="mb-7">
+      <p className="text-emerald-600 text-sm font-bold">LOCAL STORE NETWORK</p>
+      <h1 className="text-3xl font-bold">Choose a store</h1>
+      <p className="text-slate-500 mt-1">All stores available to your customer account are shown here. Each store has its own products, offers, coupons and pricing.</p>
+    </div>
+
+    {error && <PageError message={error} onRetry={loadStores} />}
+    {loading ? <div className="py-16 text-center text-slate-500">Loading stores...</div> : stores.length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">{stores.map((st) => (
+      <div key={st.id} className="bg-white border rounded-3xl p-6 shadow-sm hover:shadow-md transition">
+        <div className="flex items-start justify-between gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 grid place-items-center"><Store size={22}/></div>
+          {st.isMainStore && <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">Main Store</span>}
+        </div>
+        <h2 className="font-bold text-xl mt-4">{st.name}</h2>
+        <p className="text-sm text-slate-500 mt-1 line-clamp-2">{st.address || "Local grocery store"}</p>
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <div className="bg-slate-50 rounded-xl p-3"><b className="block text-lg">{st.productCount || 0}</b><span className="text-xs text-slate-500">Products</span></div>
+          <div className="bg-slate-50 rounded-xl p-3"><b className="block text-lg">{st.bannerCount || 0}</b><span className="text-xs text-slate-500">Offers</span></div>
+        </div>
+        <button onClick={() => openStore(String(st.id))} className="mt-5 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3 font-bold">Visit store & shop</button>
+      </div>
+    ))}</div> : <EmptyState icon={Store} title="No stores available" text="Store owners will appear here when their store accounts are active."/>}
+  </main></Layout>;
+}
+
 function Home({ store }: { store: ReturnType<typeof useStore> }) {
   const [banners, setBanners] = useState<any[]>([]);
 
   useEffect(() => {
-    axios.get(API + "/banners")
+    const storeAdminId = localStorage.getItem("fb-store-admin-id") || "";
+    axios.get(API + "/banners" + (storeAdminId ? "?storeAdminId=" + encodeURIComponent(storeAdminId) : ""))
       .then((r) => setBanners(Array.isArray(r.data.data) ? r.data.data : []))
       .catch(() => setBanners([]));
   }, []);
@@ -823,7 +1153,8 @@ function Shop({ store }: { store: ReturnType<typeof useStore> }) {
   const [categories, setCategories] = useState<any[]>([]);
 
   useEffect(() => {
-    axios.get(API + "/categories").then((r) => {
+    const storeAdminId = localStorage.getItem("fb-store-admin-id") || "";
+    axios.get(API + "/categories" + (storeAdminId ? "?storeAdminId=" + encodeURIComponent(storeAdminId) : "")).then((r) => {
       if (Array.isArray(r.data.data)) setCategories(r.data.data);
     }).catch(() => {});
   }, []);
@@ -1498,20 +1829,77 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
   const nav = useNavigate();
   const [email, setEmail] = useState("customer@grocery.com");
   const [password, setPassword] = useState("Customer@123");
-  const [mode, setMode] = useState<"login" | "register">("login");
-
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [loginRole, setLoginRole] = useState<"customer" | "admin" | "delivery">("customer");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailOtp, setEmailOtp] = useState("");
+  const [mobileOtp, setMobileOtp] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [mobileSent, setMobileSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [mobileVerified, setMobileVerified] = useState(false);
+  const [loadingOtp, setLoadingOtp] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [devOtp, setDevOtp] = useState("");
 
-  const clearMessages = () => { setError(""); setMessage(""); };
+  const clearMessages = () => { setError(""); setMessage(""); setDevOtp(""); };
+
+  const sendEmailOtp = async (purpose: "register" | "forgot") => {
+    clearMessages(); setLoadingOtp("email");
+    try {
+      const r = await axios.post(API + "/auth/send-email-otp", { email, purpose });
+      setEmailSent(true); setMessage(r.data.message || "Email OTP sent.");
+      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
+    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send email OTP."); }
+    finally { setLoadingOtp(""); }
+  };
+
+  const verifyEmailOtp = async (purpose: "register" | "forgot") => {
+    clearMessages(); setLoadingOtp("verify-email");
+    try {
+      await axios.post(API + "/auth/verify-email-otp", { email, otp: emailOtp, purpose });
+      setEmailVerified(true); setMessage("Email verified successfully.");
+    } catch (e: any) { setError(e?.response?.data?.message || "Invalid email OTP."); }
+    finally { setLoadingOtp(""); }
+  };
+
+  const sendMobileOtp = async () => {
+    clearMessages(); setLoadingOtp("mobile");
+    try {
+      const r = await axios.post(API + "/auth/send-mobile-otp", { phone, purpose: "register" });
+      setMobileSent(true); setMessage(r.data.message || "Mobile OTP sent.");
+      if (r.data.devOtp) setDevOtp(String(r.data.devOtp));
+    } catch (e: any) { setError(e?.response?.data?.message || "Unable to send mobile OTP."); }
+    finally { setLoadingOtp(""); }
+  };
+
+  const verifyMobileOtp = async () => {
+    clearMessages(); setLoadingOtp("verify-mobile");
+    try {
+      await axios.post(API + "/auth/verify-mobile-otp", { phone, otp: mobileOtp, purpose: "register" });
+      setMobileVerified(true); setMessage("Mobile number verified successfully.");
+    } catch (e: any) { setError(e?.response?.data?.message || "Invalid mobile OTP."); }
+    finally { setLoadingOtp(""); }
+  };
 
   const submit = async (e: any) => {
     e.preventDefault(); clearMessages();
     try {
+      if (mode === "forgot") {
+        if (!emailVerified) return setError("Verify the email OTP first.");
+        if (resetPassword.length < 8) return setError("New password must be at least 8 characters.");
+        if (resetPassword !== resetConfirm) return setError("Passwords do not match.");
+        await axios.post(API + "/auth/reset-password", { email, newPassword: resetPassword });
+        setMessage("Password reset successfully. You can now sign in.");
+        setMode("login"); setPassword(""); setEmailOtp(""); setEmailSent(false); setEmailVerified(false);
+        return;
+      }
+
       if (mode === "register") {
         if (password.length < 8) return setError("Password must be at least 8 characters.");
         if (password !== confirmPassword) return setError("Passwords do not match.");
@@ -1523,7 +1911,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         store.setUser(registerResponse.data.data.user);
         localStorage.setItem("fb-user", JSON.stringify(registerResponse.data.data.user));
         localStorage.setItem("fb-token", registerResponse.data.data.token);
-        nav("/");
+        nav("/stores");
         return;
       }
       const r = await axios.post(API + "/auth/login", { email, password, role: loginRole });
@@ -1531,7 +1919,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
       localStorage.setItem("fb-user", JSON.stringify(r.data.data.user));
       localStorage.setItem("fb-token", r.data.data.token);
       const role = r.data.data.user.role;
-      if (role === "admin") nav("/admin"); else if (role === "delivery") nav("/delivery"); else nav("/");
+      if (role === "admin") nav("/admin"); else if (role === "delivery") nav("/delivery"); else nav("/stores");
     } catch (err: any) {
       // Registration has its own endpoint; avoid an unnecessary login call for it.
       if (mode === "register") {
@@ -1540,7 +1928,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
           store.setUser(registerResponse.data.data.user);
           localStorage.setItem("fb-user", JSON.stringify(registerResponse.data.data.user));
           localStorage.setItem("fb-token", registerResponse.data.data.token);
-          nav("/");
+          nav("/stores");
           return;
         } catch (registerErr: any) {
           setError(registerErr?.response?.data?.message || "Registration failed.");
@@ -1551,16 +1939,9 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
     }
   };
 
-  const switchMode = (next: "login" | "register") => {
-    clearMessages();
-    setMode(next);
-    if (next === "register") {
-      setEmail("");
-      setPassword("");
-      setName("");
-      setPhone("");
-      setConfirmPassword("");
-    }
+  const switchMode = (next: "login" | "register" | "forgot") => {
+    clearMessages(); setMode(next); setEmailOtp(""); setMobileOtp(""); setEmailSent(false); setMobileSent(false); setEmailVerified(false); setMobileVerified(false);
+    if (next === "register") { setEmail(""); setPassword(""); setName(""); setPhone(""); setConfirmPassword(""); }
   };
 
   return (
@@ -1569,7 +1950,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         <Link to="/" className="flex justify-center items-center gap-2 font-bold text-xl">
           <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Leaf /></span>FreshBasket
         </Link>
-        <h1 className="text-2xl font-bold text-center mt-7">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+        <h1 className="text-2xl font-bold text-center mt-7">{mode === "login" ? "Welcome back" : mode === "register" ? "Create your account" : "Forgot password"}</h1>
 
         {mode === "login" && (
           <div className="mt-6">
@@ -1585,19 +1966,28 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         <form onSubmit={submit} className="space-y-4 mt-7">
           {mode === "register" && <>
             <input required value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" className="w-full border rounded-xl p-3 outline-none" />
-            <input required value={phone} onChange={e=>setPhone(e.target.value)} placeholder="10-digit mobile number" className="w-full border rounded-xl p-3 outline-none" />
+            <input required value={phone} onChange={e=>{setPhone(e.target.value);setMobileVerified(false)}} placeholder="10-digit mobile number" className="w-full border rounded-xl p-3 outline-none" />
           </>}
-          <input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
+          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailVerified(false)}} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
 
-                    <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />
+                    {mode !== "forgot" && <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />}
           {mode === "register" && <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full border rounded-xl p-3 outline-none" />}
 
+          {mode === "forgot" && <>
+            <div className="flex gap-2"><input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3"/><button type="button" onClick={()=>sendEmailOtp("forgot")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailSent?'Resend':'Send OTP'}</button></div>
+            {emailSent && !emailVerified && <button type="button" onClick={()=>verifyEmailOtp("forgot")} className="w-full bg-emerald-600 text-white rounded-xl py-3 font-bold">Verify OTP</button>}
+            <input required type="password" value={resetPassword} onChange={e=>setResetPassword(e.target.value)} placeholder="New password (min 8 characters)" className="w-full border rounded-xl p-3" />
+            <input required type="password" value={resetConfirm} onChange={e=>setResetConfirm(e.target.value)} placeholder="Confirm new password" className="w-full border rounded-xl p-3" />
+          </>}
+
+          {devOtp && <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">Development OTP: <b>{devOtp}</b>. Configure the email/SMS provider in `.env` for real delivery.</div>}
           {message && <p className="text-emerald-700 text-sm font-semibold">{message}</p>}
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button className="w-full bg-emerald-600 text-white rounded-xl py-3.5 font-bold">{mode === "login" ? "Sign in" : "Create account"}</button>
+          <button className="w-full bg-emerald-600 text-white rounded-xl py-3.5 font-bold">{mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Reset password"}</button>
         </form>
 
-        <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':'Already have an account? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
+        {mode === "login" && <button type="button" onClick={()=>switchMode("forgot")} className="w-full text-center text-emerald-700 font-bold text-sm mt-4">Forgot password?</button>}
+        <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':mode==='register'?'Already have an account? ':'Remembered your password? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
       </div>
     </div>
   );
@@ -1612,6 +2002,7 @@ function Checkout({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [couponCode, setCouponCode] = useState("");
+  const [paymentSettings, setPaymentSettings] = useState<any>(null);
   const [coupon, setCoupon] = useState<any | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponMessage, setCouponMessage] = useState("");
@@ -1627,6 +2018,8 @@ function Checkout({
     address: "",
     city: "Lucknow",
     pincode: "226001",
+    latitude: null as number | null,
+    longitude: null as number | null,
     slot: "6 PM – 9 PM",
     payment: "COD",
   });
@@ -1677,12 +2070,24 @@ function Checkout({
             address: defaultAddress.address || "",
             city: defaultAddress.city || "",
             pincode: defaultAddress.pincode || "",
+            latitude: isValidCoordinate(defaultAddress.latitude, defaultAddress.longitude)
+              ? Number(defaultAddress.latitude)
+              : null,
+            longitude: isValidCoordinate(defaultAddress.latitude, defaultAddress.longitude)
+              ? Number(defaultAddress.longitude)
+              : null,
           }));
         }
       })
       .catch(() => setSavedAddresses([]))
       .finally(() => setAddressLoading(false));
   }, [store.user]);
+
+  useEffect(() => {
+    axios.get(API + "/payment-settings" + ((localStorage.getItem("fb-store-admin-id") || "") ? "?storeAdminId=" + encodeURIComponent(localStorage.getItem("fb-store-admin-id") || "") : ""))
+      .then((r) => setPaymentSettings(r.data?.data || null))
+      .catch(() => setPaymentSettings(null));
+  }, []);
 
   const applyRewards = () => {
     const points = Number(redeemPoints || 0);
@@ -1709,7 +2114,7 @@ function Checkout({
     setCouponLoading(true);
     setCouponMessage("");
     try {
-      const r = await axios.post(API + "/coupons/validate", { code, subtotal: sub }, { headers: adminHeaders() });
+      const r = await axios.post(API + "/coupons/validate", { code, subtotal: sub, storeAdminId: localStorage.getItem("fb-store-admin-id") || undefined }, { headers: adminHeaders() });
       setCoupon(r.data.data);
       setCouponMessage(`${r.data.data.code} applied — ${money(r.data.data.discount)} discount`);
     } catch (e: any) {
@@ -1735,7 +2140,51 @@ function Checkout({
       address: address.address || "",
       city: address.city || "",
       pincode: address.pincode || "",
+      latitude: isValidCoordinate(address.latitude, address.longitude)
+        ? Number(address.latitude)
+        : null,
+      longitude: isValidCoordinate(address.latitude, address.longitude)
+        ? Number(address.longitude)
+        : null,
     }));
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Location is not supported on this device.");
+      return;
+    }
+
+    setError("");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude);
+        const longitude = Number(position.coords.longitude);
+
+        if (!isValidCoordinate(latitude, longitude)) {
+          setError("Unable to read a valid current location.");
+          return;
+        }
+
+        setForm((current) => ({
+          ...current,
+          latitude,
+          longitude,
+        }));
+      },
+      (geoError) => {
+        console.error("CHECKOUT LOCATION ERROR:", geoError);
+        setError(
+          "Unable to access your location. Please allow location permission and try again."
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      }
+    );
   };
 
   const validate = () => {
@@ -1781,6 +2230,32 @@ function Checkout({
 
     setSubmitting(true);
 
+    let deliveryCoordinates: DeliveryCoordinate | null =
+      isValidCoordinate(form.latitude, form.longitude)
+        ? { latitude: Number(form.latitude), longitude: Number(form.longitude) }
+        : null;
+
+    if (!deliveryCoordinates) {
+      deliveryCoordinates = await geocodeDeliveryAddress(
+        form.address.trim(),
+        form.city.trim(),
+        form.pincode.replace(/\D/g, "")
+      );
+      if (deliveryCoordinates) {
+        setForm((current) => ({
+          ...current,
+          latitude: deliveryCoordinates!.latitude,
+          longitude: deliveryCoordinates!.longitude,
+        }));
+      }
+    }
+
+    if (!deliveryCoordinates) {
+      setSubmitting(false);
+      setError("We could not locate this delivery address. Please verify the address and 6-digit pincode, or use the map location option.");
+      return;
+    }
+
     const payload = {
       items: store.cart.map((i) => ({
         product: i.product._id,
@@ -1796,9 +2271,12 @@ function Checkout({
         address: form.address.trim(),
         city: form.city.trim(),
         pincode: form.pincode.replace(/\D/g, ""),
+        latitude: deliveryCoordinates.latitude,
+        longitude: deliveryCoordinates.longitude,
       },
       paymentMethod: form.payment,
       deliverySlot: form.slot,
+      storeAdminId: localStorage.getItem("fb-store-admin-id") || undefined,
       couponCode: coupon?.code || undefined,
       rewardPoints: requestedRewardPoints || undefined,
     };
@@ -1885,13 +2363,36 @@ function Checkout({
                     placeholder={placeholder}
                     value={(form as any)[key]}
                     onChange={(e) =>
-                      setForm({ ...form, [key]: e.target.value })
+                      setForm({
+                        ...form,
+                        [key]: e.target.value,
+                        ...(key === "address" || key === "city" || key === "pincode"
+                          ? { latitude: null, longitude: null }
+                          : {}),
+                      })
                     }
                     className={`border rounded-xl p-3 ${
                       index === 2 ? "sm:col-span-2" : ""
                     }`}
                   />
                 ))}
+              </div>
+
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  className="border border-emerald-200 text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl font-bold text-sm inline-flex items-center justify-center gap-2"
+                >
+                  <MapPin size={16} />
+                  Use Current Location
+                </button>
+
+                <span className="text-xs text-slate-500">
+                  {isValidCoordinate(form.latitude, form.longitude)
+                    ? "Delivery location captured successfully."
+                    : "Use your current location only when you are ordering for where you are. Otherwise enter the delivery address + pincode; FreshBasket will locate that destination automatically."}
+                </span>
               </div>
             </div>
 
@@ -1939,9 +2440,19 @@ function Checkout({
                 ))}
               </div>
               {form.payment === "ONLINE" && (
-                <p className="text-xs text-slate-500 mt-3">
-                  Online payment is currently a test/placeholder flow.
-                </p>
+                <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                  {paymentSettings?.isEnabled && (paymentSettings?.upiId || paymentSettings?.qrImage) ? (
+                    <div className="flex flex-col sm:flex-row gap-4 items-center">
+                      {paymentSettings.qrImage ? <img src={paymentSettings.qrImage} alt="Store UPI QR" className="w-36 h-36 rounded-xl border bg-white object-contain" /> : null}
+                      <div className="text-sm">
+                        <p className="font-bold text-emerald-900">Pay this store online</p>
+                        {paymentSettings.merchantName && <p className="text-emerald-800 mt-1">{paymentSettings.merchantName}</p>}
+                        {paymentSettings.upiId && <p className="mt-2 font-semibold text-emerald-900">UPI: {paymentSettings.upiId}</p>}
+                        <p className="text-xs text-emerald-800 mt-2">Complete the UPI payment using the QR/UPI ID, then place the order.</p>
+                      </div>
+                    </div>
+                  ) : <p className="text-xs text-amber-700 font-semibold">This store has not configured online payment yet. Please choose Cash on Delivery.</p>}
+                </div>
               )}
             </div>
           </div>
@@ -2196,7 +2707,18 @@ function ProfilePage({
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const emptyAddress = { label: "Home", name: "", phone: "", address: "", city: "", state: "", pincode: "", isDefault: false };
+  const emptyAddress = {
+    label: "Home",
+    name: "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
+    isDefault: false,
+  };
   const [addressForm, setAddressForm] = useState<any>(emptyAddress);
 
   const load = async () => {
@@ -2283,6 +2805,46 @@ function ProfilePage({
   };
 
   const resetAddress = () => { setEditingId(null); setAddressForm({ ...emptyAddress, name: profile.name, phone: profile.phone }); setShowForm(false); };
+  const captureAddressLocation = () => {
+    setMessage("");
+    setError("");
+
+    if (!navigator.geolocation) {
+      setError("Location is not supported on this device.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude);
+        const longitude = Number(position.coords.longitude);
+
+        if (!isValidCoordinate(latitude, longitude)) {
+          setError("Unable to read a valid current location.");
+          return;
+        }
+
+        setAddressForm((current: any) => ({
+          ...current,
+          latitude,
+          longitude,
+        }));
+        setMessage("Current location captured successfully.");
+      },
+      (geoError) => {
+        console.error("ADDRESS LOCATION ERROR:", geoError);
+        setError(
+          "Unable to access your location. Please allow location permission and try again."
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      }
+    );
+  };
+
   const saveAddress = async () => {
     setMessage(""); setError("");
     try {
@@ -2291,7 +2853,26 @@ function ProfilePage({
       await load(); resetAddress(); setMessage(editingId ? "Address updated successfully." : "Address added successfully.");
     } catch (e: any) { setError(e?.response?.data?.message || "Unable to save address."); }
   };
-  const editAddress = (a: any) => { setEditingId(String(a._id)); setAddressForm({ label: a.label || "Home", name: a.name || "", phone: a.phone || "", address: a.address || "", city: a.city || "", state: a.state || "", pincode: a.pincode || "", isDefault: !!a.isDefault }); setShowForm(true); };
+  const editAddress = (a: any) => {
+    setEditingId(String(a._id));
+    setAddressForm({
+      label: a.label || "Home",
+      name: a.name || "",
+      phone: a.phone || "",
+      address: a.address || "",
+      city: a.city || "",
+      state: a.state || "",
+      pincode: a.pincode || "",
+      latitude: isValidCoordinate(a.latitude, a.longitude)
+        ? Number(a.latitude)
+        : null,
+      longitude: isValidCoordinate(a.latitude, a.longitude)
+        ? Number(a.longitude)
+        : null,
+      isDefault: !!a.isDefault,
+    });
+    setShowForm(true);
+  };
   const deleteAddress = async (id: string) => {
     if (!window.confirm("Delete this saved address?")) return;
     try { await axios.delete(API + "/addresses/" + id, { headers: adminHeaders() }); await load(); setMessage("Address deleted successfully."); }
@@ -2434,7 +3015,7 @@ function ProfilePage({
 
             <section className="mt-6">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Saved addresses</h2><p className="text-sm text-slate-500">Use these addresses quickly during checkout.</p></div><button onClick={() => { setEditingId(null); setAddressForm({ ...emptyAddress, name: profile.name, phone: profile.phone, isDefault: addresses.length === 0 }); setShowForm(true); }} className="bg-emerald-600 text-white rounded-xl px-4 py-3 font-bold flex items-center gap-2"><Plus size={18} /> Add address</button></div>
-              {showForm && <div className="bg-white border rounded-3xl p-6 mt-4"><div className="flex items-center justify-between"><h3 className="font-bold">{editingId ? "Edit address" : "Add address"}</h3><button onClick={resetAddress}><X /></button></div><div className="grid sm:grid-cols-2 gap-3 mt-4">{[["label","Label (Home / Work)"],["name","Full name"],["phone","Phone"],["address","House, street, area"],["city","City"],["state","State"],["pincode","Pincode"]].map(([k,p]) => <input key={k} placeholder={p} value={addressForm[k]} onChange={e => setAddressForm({ ...addressForm, [k]: e.target.value })} className={`border rounded-xl p-3 ${k === "address" ? "sm:col-span-2" : ""}`} />)}</div><label className="flex items-center gap-2 mt-4 text-sm font-semibold"><input type="checkbox" checked={!!addressForm.isDefault} onChange={e => setAddressForm({ ...addressForm, isDefault: e.target.checked })} /> Make this my default address</label><div className="flex gap-2 mt-5"><button onClick={saveAddress} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">{editingId ? "Update address" : "Save address"}</button><button onClick={resetAddress} className="border rounded-xl px-5 py-3 font-bold">Cancel</button></div></div>}
+              {showForm && <div className="bg-white border rounded-3xl p-6 mt-4"><div className="flex items-center justify-between"><h3 className="font-bold">{editingId ? "Edit address" : "Add address"}</h3><button onClick={resetAddress}><X /></button></div><div className="grid sm:grid-cols-2 gap-3 mt-4">{[["label","Label (Home / Work)"],["name","Full name"],["phone","Phone"],["address","House, street, area"],["city","City"],["state","State"],["pincode","Pincode"]].map(([k,p]) => <input key={k} placeholder={p} value={addressForm[k]} onChange={e => setAddressForm({ ...addressForm, [k]: e.target.value })} className={`border rounded-xl p-3 ${k === "address" ? "sm:col-span-2" : ""}`} />)}</div><div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3"><button type="button" onClick={captureAddressLocation} className="border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-xl px-4 py-2.5 font-bold text-sm inline-flex items-center justify-center gap-2"><MapPin size={16} /> Use Current Location</button><span className="text-xs text-slate-500">{isValidCoordinate(addressForm.latitude, addressForm.longitude) ? "Exact location saved for delivery." : "Capture the exact location for accurate delivery routing."}</span></div><label className="flex items-center gap-2 mt-4 text-sm font-semibold"><input type="checkbox" checked={!!addressForm.isDefault} onChange={e => setAddressForm({ ...addressForm, isDefault: e.target.checked })} /> Make this my default address</label><div className="flex gap-2 mt-5"><button onClick={saveAddress} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">{editingId ? "Update address" : "Save address"}</button><button onClick={resetAddress} className="border rounded-xl px-5 py-3 font-bold">Cancel</button></div></div>}
               {addresses.length ? <div className="grid md:grid-cols-2 gap-4 mt-4">{addresses.map((a: any) => <div key={a._id} className={`bg-white border rounded-3xl p-5 ${a.isDefault ? "border-emerald-300" : ""}`}><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><MapPin size={18} className="text-emerald-600" /><b>{a.label}</b></div>{a.isDefault && <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">Default</span>}</div><p className="font-semibold mt-4">{a.name}</p><p className="text-sm text-slate-600 mt-1">{a.phone}</p><p className="text-sm text-slate-600 mt-2">{a.address}</p><p className="text-sm text-slate-500 mt-1">{[a.city, a.state, a.pincode].filter(Boolean).join(", ")}</p><div className="flex flex-wrap gap-2 mt-5"><button onClick={() => editAddress(a)} className="border rounded-xl px-3 py-2 text-sm font-bold">Edit</button>{!a.isDefault && <button onClick={() => makeDefault(String(a._id))} className="border rounded-xl px-3 py-2 text-sm font-bold text-emerald-700">Make default</button>}<button onClick={() => deleteAddress(String(a._id))} className="border rounded-xl px-3 py-2 text-sm font-bold text-red-600">Delete</button></div></div>)}</div> : <div className="bg-white border rounded-3xl py-14 text-center mt-4"><MapPin className="mx-auto text-slate-300" size={42} /><p className="text-slate-500 mt-3">No saved addresses yet.</p><button onClick={() => { setAddressForm({ ...emptyAddress, name: profile.name, phone: profile.phone, isDefault: true }); setShowForm(true); }} className="text-emerald-700 font-bold mt-2">Add your first address →</button></div>}
             </section>
           </>
@@ -3281,7 +3862,6 @@ function OrderTracking({
 }
 
 
-
 function Invoice({
   store,
 }: {
@@ -3294,15 +3874,12 @@ function Invoice({
 
   const load = async () => {
     if (!id) return;
-
     setLoading(true);
     setError("");
-
     try {
       const r = await axios.get(API + `/orders/${id}`, {
         headers: adminHeaders(),
       });
-
       setOrder(r.data.data || null);
     } catch (e: any) {
       setError(
@@ -3323,14 +3900,8 @@ function Invoice({
     return (
       <Layout store={store}>
         <main className="max-w-4xl mx-auto px-4 py-20 text-center">
-          <RefreshCw
-            className="mx-auto text-emerald-500 animate-spin"
-            size={32}
-          />
-
-          <p className="text-slate-500 mt-3">
-            Loading invoice...
-          </p>
+          <RefreshCw className="mx-auto text-emerald-500 animate-spin" size={32} />
+          <p className="text-slate-500 mt-3">Loading invoice...</p>
         </main>
       </Layout>
     );
@@ -3340,10 +3911,7 @@ function Invoice({
     return (
       <Layout store={store}>
         <main className="max-w-4xl mx-auto px-4 py-10">
-          <PageError
-            message={error || "Invoice not found."}
-            onRetry={load}
-          />
+          <PageError message={error || "Invoice not found."} onRetry={load} />
         </main>
       </Layout>
     );
@@ -3356,70 +3924,17 @@ function Invoice({
     String(order._id).slice(-8).toUpperCase();
 
   const items = Array.isArray(order.items) ? order.items : [];
-
   const subtotal = Number(order.subtotal || 0);
   const discount = Number(order.discount || 0);
   const delivery = Number(order.deliveryCharge || 0);
   const total = Number(order.total || 0);
 
-  /*
-   * PRINT INVOICE
-   *
-   * Android:
-   * Uses native Android PrintManager through Capacitor plugin.
-   *
-   * Windows/Web:
-   * Uses normal browser window.print().
-   */
-  const handlePrint = async () => {
-    try {
-      const capacitor = (window as any).Capacitor;
-
-      const isNative =
-        capacitor?.isNativePlatform?.() === true;
-
-      /*
-       * Android / Capacitor
-       */
-      if (isNative) {
-        await Printer.printWebView({
-          name: `FreshBasket Invoice ${invoiceNumber}`,
-        });
-
-        return;
-      }
-
-      /*
-       * Windows / normal browser
-       */
-      window.print();
-    } catch (err) {
-      console.error("Print error:", err);
-
-      /*
-       * Fallback
-       */
-      try {
-        window.print();
-      } catch {
-        alert("Unable to open print dialog.");
-      }
-    }
-  };
-
   return (
     <Layout store={store}>
       <style>{`
         @media print {
-          body * {
-            visibility: hidden !important;
-          }
-
-          .invoice-print,
-          .invoice-print * {
-            visibility: visible !important;
-          }
-
+          body * { visibility: hidden !important; }
+          .invoice-print, .invoice-print * { visibility: visible !important; }
           .invoice-print {
             position: absolute !important;
             left: 0 !important;
@@ -3429,20 +3944,11 @@ function Invoice({
             box-shadow: none !important;
             border: 0 !important;
           }
-
-          .no-print {
-            display: none !important;
-          }
-
-          @page {
-            size: A4;
-            margin: 10mm;
-          }
+          .no-print { display: none !important; }
         }
       `}</style>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {/* ACTION BAR */}
         <div className="no-print flex items-center justify-between gap-3 mb-5">
           <Link
             to={`/orders/${order._id}`}
@@ -3452,17 +3958,14 @@ function Invoice({
           </Link>
 
           <button
-            type="button"
-            onClick={handlePrint}
-            className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 hover:bg-emerald-700 active:scale-95 transition"
+            onClick={() => window.print()}
+            className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 hover:bg-emerald-700"
           >
             Print / Save PDF
           </button>
         </div>
 
-        {/* INVOICE */}
         <section className="invoice-print bg-white border rounded-3xl shadow-sm overflow-hidden">
-          {/* HEADER */}
           <div className="p-7 sm:p-9 border-b">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
               <div>
@@ -3470,15 +3973,10 @@ function Invoice({
                   <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center">
                     <Leaf size={21} />
                   </span>
-
                   <h1 className="text-2xl font-bold">
-                    Fresh
-                    <span className="text-emerald-600">
-                      Basket
-                    </span>
+                    Fresh<span className="text-emerald-600">Basket</span>
                   </h1>
                 </div>
-
                 <p className="text-sm text-slate-500 mt-3">
                   Your neighborhood grocery store
                 </p>
@@ -3488,18 +3986,10 @@ function Invoice({
                 <p className="text-xs text-slate-400 uppercase font-bold">
                   Invoice
                 </p>
-
-                <h2 className="text-xl font-bold mt-1">
-                  {invoiceNumber}
-                </h2>
-
+                <h2 className="text-xl font-bold mt-1">{invoiceNumber}</h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  Date:{" "}
-                  {new Date(
-                    order.createdAt
-                  ).toLocaleDateString("en-IN")}
+                  Date: {new Date(order.createdAt).toLocaleDateString("en-IN")}
                 </p>
-
                 <span
                   className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold ${statusClass(
                     order.status
@@ -3511,25 +4001,17 @@ function Invoice({
             </div>
           </div>
 
-          {/* CUSTOMER + ADDRESS */}
           <div className="p-7 sm:p-9 grid md:grid-cols-2 gap-6 border-b">
             <div>
               <p className="text-xs text-slate-400 uppercase font-bold">
                 Bill To
               </p>
-
               <p className="font-bold mt-2">
-                {order.address?.name ||
-                  order.user?.name ||
-                  "Customer"}
+                {order.address?.name || order.user?.name || "Customer"}
               </p>
-
               {order.user?.email && (
-                <p className="text-sm text-slate-500 mt-1">
-                  {order.user.email}
-                </p>
+                <p className="text-sm text-slate-500 mt-1">{order.user.email}</p>
               )}
-
               {order.address?.phone && (
                 <p className="text-sm text-slate-500 mt-1">
                   {order.address.phone}
@@ -3541,157 +4023,83 @@ function Invoice({
               <p className="text-xs text-slate-400 uppercase font-bold">
                 Delivery Address
               </p>
-
               <p className="text-sm text-slate-600 mt-2 leading-6">
-                {order.address?.address ||
-                  "Address not available"}
-
-                {order.address?.city
-                  ? `, ${order.address.city}`
-                  : ""}
-
-                {order.address?.pincode
-                  ? ` - ${order.address.pincode}`
-                  : ""}
+                {order.address?.address || "Address not available"}
+                {order.address?.city ? `, ${order.address.city}` : ""}
+                {order.address?.pincode ? ` - ${order.address.pincode}` : ""}
               </p>
-
               <p className="text-sm text-slate-500 mt-2">
-                Slot:{" "}
-                {order.deliverySlot ||
-                  "Standard delivery"}
+                Slot: {order.deliverySlot || "Standard delivery"}
               </p>
             </div>
           </div>
 
-          {/* ITEMS */}
           <div className="p-7 sm:p-9">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="py-3 pr-3">
-                      Item
-                    </th>
-
-                    <th className="py-3 px-3 text-center">
-                      Qty
-                    </th>
-
-                    <th className="py-3 px-3 text-right">
-                      Price
-                    </th>
-
-                    <th className="py-3 pl-3 text-right">
-                      Amount
-                    </th>
+                    <th className="py-3 pr-3">Item</th>
+                    <th className="py-3 px-3 text-center">Qty</th>
+                    <th className="py-3 px-3 text-right">Price</th>
+                    <th className="py-3 pl-3 text-right">Amount</th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y">
-                  {items.map(
-                    (item: any, index: number) => (
-                      <tr
-                        key={
-                          String(
-                            item.product || index
-                          ) + index
-                        }
-                      >
-                        <td className="py-4 pr-3">
-                          <p className="font-semibold">
-                            {item.name || "Product"}
+                  {items.map((item: any, index: number) => (
+                    <tr key={String(item.product || index) + index}>
+                      <td className="py-4 pr-3">
+                        <p className="font-semibold">{item.name || "Product"}</p>
+                        {item.unit && (
+                          <p className="text-xs text-slate-400 mt-1">
+                            {item.unit}
                           </p>
-
-                          {item.unit && (
-                            <p className="text-xs text-slate-400 mt-1">
-                              {item.unit}
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="py-4 px-3 text-center">
-                          {item.quantity}
-                        </td>
-
-                        <td className="py-4 px-3 text-right">
-                          {money(
-                            Number(item.price || 0)
-                          )}
-                        </td>
-
-                        <td className="py-4 pl-3 text-right font-semibold">
-                          {money(
-                            Number(item.price || 0) *
-                              Number(
-                                item.quantity || 0
-                              )
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  )}
+                        )}
+                      </td>
+                      <td className="py-4 px-3 text-center">{item.quantity}</td>
+                      <td className="py-4 px-3 text-right">
+                        {money(Number(item.price || 0))}
+                      </td>
+                      <td className="py-4 pl-3 text-right font-semibold">
+                        {money(
+                          Number(item.price || 0) * Number(item.quantity || 0)
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
-            {/* TOTALS */}
             <div className="ml-auto max-w-sm mt-7 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">
-                  Subtotal
-                </span>
-
+                <span className="text-slate-500">Subtotal</span>
                 <b>{money(subtotal)}</b>
               </div>
-
               <div className="flex justify-between">
-                <span className="text-slate-500">
-                  Discount
-                </span>
-
+                <span className="text-slate-500">Discount</span>
                 <b>{money(discount)}</b>
               </div>
-
               <div className="flex justify-between">
-                <span className="text-slate-500">
-                  Delivery
-                </span>
-
-                <b>
-                  {delivery
-                    ? money(delivery)
-                    : "FREE"}
-                </b>
+                <span className="text-slate-500">Delivery</span>
+                <b>{delivery ? money(delivery) : "FREE"}</b>
               </div>
-
               <div className="border-t pt-3 mt-3 flex justify-between text-lg">
-                <span className="font-bold">
-                  Grand Total
-                </span>
-
-                <b className="text-emerald-700">
-                  {money(total)}
-                </b>
+                <span className="font-bold">Grand Total</span>
+                <b className="text-emerald-700">{money(total)}</b>
               </div>
             </div>
           </div>
 
-          {/* FOOTER */}
           <div className="px-7 sm:px-9 py-5 border-t bg-slate-50 text-sm">
             <div className="flex flex-col sm:flex-row justify-between gap-2">
               <span>
-                Payment method:{" "}
-                <b>
-                  {order.paymentMethod || "COD"}
-                </b>
+                Payment method: <b>{order.paymentMethod || "COD"}</b>
               </span>
-
               <span className="text-slate-500">
-                Order #
-                {String(order._id).slice(-8)}
+                Order #{String(order._id).slice(-8)}
               </span>
             </div>
-
             <p className="text-xs text-slate-400 mt-3">
               Thank you for shopping with FreshBasket.
             </p>
@@ -3701,7 +4109,6 @@ function Invoice({
     </Layout>
   );
 }
-
 
 function ProductAdmin({
   store,
@@ -4096,6 +4503,16 @@ function AdminOrders() {
     }
   };
 
+  const autoAssignNearest = async (id: string) => {
+    setAssigning(id);
+    try {
+      const r = await axios.patch(API + "/admin/orders/" + id + "/assign", { autoNearest: true }, { headers: adminHeaders() });
+      setOrders(current => current.map(o => String(o._id) === String(id) ? r.data.data : o));
+      if (selected && String(selected._id) === String(id)) setSelected(r.data.data);
+    } catch (e: any) { alert(e?.response?.data?.message || "Unable to find nearest delivery partner."); }
+    finally { setAssigning(null); }
+  };
+
   const updateStatus = async (
     id: string,
     nextStatus: string
@@ -4108,13 +4525,18 @@ function AdminOrders() {
         { headers: adminHeaders() }
       );
 
-      setOrders((current) =>
-        current.map((o) =>
-          String(o._id) === String(id)
-            ? r.data.data
-            : o
-        )
-      );
+      setOrders((current) => {
+        if (["Delivered", "Cancelled"].includes(nextStatus)) {
+          return current.filter((o) => String(o._id) !== String(id));
+        }
+        return current.map((o) =>
+          String(o._id) === String(id) ? r.data.data : o
+        );
+      });
+      if (["Delivered", "Cancelled"].includes(nextStatus)) {
+        setMeta((m: any) => ({ ...m, total: Math.max(0, Number(m.total || 0) - 1) }));
+        if (selected && String(selected._id) === String(id)) setSelected(null);
+      }
 
       if (
         selected &&
@@ -4187,8 +4609,6 @@ function AdminOrders() {
               "Processing",
               "Packed",
               "Out for Delivery",
-              "Delivered",
-              "Cancelled",
             ].map((s) => (
               <option key={s}>{s}</option>
             ))}
@@ -4291,6 +4711,14 @@ function AdminOrders() {
                             <option key={s}>{s}</option>
                           ))}
                         </select>
+                        <button
+                          type="button"
+                          disabled={assigning === String(o._id) || ["Delivered", "Cancelled"].includes(o.status)}
+                          onClick={() => autoAssignNearest(String(o._id))}
+                          className="mt-2 w-full border border-emerald-200 text-emerald-700 rounded-xl px-2 py-1.5 text-[11px] font-bold disabled:opacity-50"
+                        >
+                          Assign nearest to store
+                        </button>
                       </td>
 
                       <td className="p-4 min-w-[190px]">
@@ -4504,6 +4932,198 @@ function AdminOrders() {
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminOrderHistory() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<any>({});
+  const [selected, setSelected] = useState<any | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await axios.get(API + "/admin/orders/history", {
+        headers: adminHeaders(),
+        params: { page, limit: 10 },
+      });
+      setOrders(r.data.data || []);
+      setMeta(r.data.meta || {});
+    } catch (e) {
+      console.error(e);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [page]);
+
+  return (
+    <div>
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
+        <div>
+          <p className="text-emerald-600 text-sm font-bold">COMPLETED ORDERS</p>
+          <h2 className="text-2xl font-bold">Order History</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Delivered and cancelled orders are stored here separately from active orders.
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="border bg-white rounded-xl px-4 py-2.5 flex items-center gap-2 font-semibold"
+        >
+          <RefreshCw size={17} /> Refresh
+        </button>
+      </div>
+
+      <div className="bg-white border rounded-3xl overflow-hidden">
+        {loading ? (
+          <div className="py-20 text-center text-slate-500">Loading order history...</div>
+        ) : orders.length ? (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="text-left p-4">Order</th>
+                    <th className="text-left p-4">Customer</th>
+                    <th className="text-left p-4">Date</th>
+                    <th className="text-left p-4">Amount</th>
+                    <th className="text-left p-4">Status</th>
+                    <th className="text-left p-4">Delivery partner</th>
+                    <th className="text-right p-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={String(o._id)} className="border-t hover:bg-slate-50/70">
+                      <td className="p-4">
+                        <b>#{String(o._id).slice(-8)}</b>
+                        <p className="text-xs text-slate-400">{o.paymentMethod || "COD"}</p>
+                      </td>
+                      <td className="p-4">
+                        <b>{o.user?.name || "Customer"}</b>
+                        <p className="text-xs text-slate-400">{o.user?.email || "—"}</p>
+                      </td>
+                      <td className="p-4 text-slate-500">
+                        {new Date(o.createdAt).toLocaleString("en-IN", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </td>
+                      <td className="p-4 font-bold">{money(o.total)}</td>
+                      <td className="p-4">
+                        <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${statusClass(o.status)}`}>
+                          {o.status}
+                        </span>
+                      </td>
+                      <td className="p-4">{o.deliveryPartner?.name || "—"}</td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => setSelected(o)}
+                          className="inline-flex items-center gap-1 border rounded-xl px-3 py-2 font-semibold"
+                        >
+                          <Eye size={15} /> View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t p-4 flex items-center justify-between text-sm">
+              <span className="text-slate-500">{meta.total || orders.length} history orders</span>
+              <div className="flex gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="border rounded-xl px-4 py-2 disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-2">Page {page} of {Math.max(1, meta.pages || 1)}</span>
+                <button
+                  disabled={page >= (meta.pages || 1)}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="border rounded-xl px-4 py-2 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="py-20 text-center">
+            <History className="mx-auto text-slate-300" size={50} />
+            <h3 className="font-bold text-xl mt-3">No order history</h3>
+            <p className="text-slate-500 mt-1">Delivered orders will appear here automatically.</p>
+          </div>
+        )}
+      </div>
+
+      {selected && (
+        <div className="fixed inset-0 z-[100] bg-black/40 p-4 grid place-items-center">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400 uppercase font-bold">Order history</p>
+                <h3 className="text-xl font-bold">#{String(selected._id).slice(-8)}</h3>
+              </div>
+              <button onClick={() => setSelected(null)} className="p-2 rounded-xl hover:bg-slate-100"><X /></button>
+            </div>
+            <div className="p-5 space-y-5">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400">Customer</p>
+                  <b>{selected.user?.name || "Customer"}</b>
+                  <p className="text-sm text-slate-500">{selected.user?.email || "—"}</p>
+                  <p className="text-sm text-slate-500">{selected.user?.phone || "—"}</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-4">
+                  <p className="text-xs text-slate-400">Delivery</p>
+                  <b>{selected.deliverySlot || "Selected delivery slot"}</b>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {selected.address?.address || selected.address?.street || "Address not available"}
+                  </p>
+                  <p className="text-sm mt-3">
+                    <span className="text-slate-400">Delivery partner: </span>
+                    <b>{selected.deliveryPartner?.name || "—"}</b>
+                  </p>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-bold mb-3">Items</h4>
+                <div className="space-y-2">
+                  {(selected.items || []).map((item: any, i: number) => (
+                    <div key={i} className="border rounded-2xl p-3 flex justify-between">
+                      <div>
+                        <b>{item.name}</b>
+                        <p className="text-xs text-slate-500">{item.quantity} × {money(item.price)}</p>
+                      </div>
+                      <b>{money(Number(item.price || 0) * Number(item.quantity || 0))}</b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-slate-950 text-white rounded-2xl p-5 flex justify-between">
+                <span>Total</span><b className="text-xl">{money(selected.total)}</b>
+              </div>
+              <div className="flex justify-end">
+                <Link to={`/invoice/${selected._id}`} target="_blank" rel="noreferrer" className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-emerald-700">
+                  View Invoice
+                </Link>
               </div>
             </div>
           </div>
@@ -4942,13 +5562,16 @@ function AdminReports() {
   >("7d");
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [storeAdmins, setStoreAdmins] = useState<any[]>([]);
+  const [selectedAdminId, setSelectedAdminId] = useState("");
+  const isMainAdmin = Boolean(JSON.parse(localStorage.getItem("fb-user") || "{}")?.isMainAdmin || String(JSON.parse(localStorage.getItem("fb-user") || "{}")?.email || "").toLowerCase() === "admin@grocery.com");
 
   const load = async () => {
     setLoading(true);
     try {
       const r = await axios.get(API + "/admin/reports", {
         headers: adminHeaders(),
-        params: { period },
+        params: { period, ...(selectedAdminId ? { storeAdminId: selectedAdminId } : {}) },
       });
       setData(r.data.data);
     } catch (e) {
@@ -4961,7 +5584,12 @@ function AdminReports() {
 
   useEffect(() => {
     load();
-  }, [period]);
+  }, [period, selectedAdminId]);
+
+  useEffect(() => {
+    if (!isMainAdmin) return;
+    axios.get(API + "/admin/admins", { headers: adminHeaders() }).then(r => setStoreAdmins(Array.isArray(r.data.data) ? r.data.data.filter((a:any) => String(a.email || "").toLowerCase() !== "admin@grocery.com") : [])).catch(() => {});
+  }, [isMainAdmin]);
 
   const series = data?.series || [];
   const maxRevenue = Math.max(
@@ -4984,6 +5612,10 @@ function AdminReports() {
           </p>
         </div>
 
+        {isMainAdmin && <div className="bg-white border rounded-xl p-1 flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 px-2">View store</span>
+          <select value={selectedAdminId} onChange={e => setSelectedAdminId(e.target.value)} className="border rounded-lg px-3 py-2 text-sm"><option value="">My main store</option>{storeAdmins.map((a:any)=><option key={a._id} value={a._id}>{a.name}</option>)}</select>
+        </div>}
         <div className="bg-white border rounded-xl p-1 flex">
           {[
             ["7d", "7 Days"],
@@ -5221,6 +5853,13 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [paymentUpdating, setPaymentUpdating] = useState<string | null>(null);
+  const [pickupLocation, setPickupLocation] = useState<DeliveryCoordinate | null>(null);
+  const [pickupByOrder, setPickupByOrder] = useState<Record<string, DeliveryCoordinate | null>>({});
+  const [pickupLoading, setPickupLoading] = useState(true);
+  const [myLocation, setMyLocation] = useState<DeliveryCoordinate | null>(null);
+  const [locationError, setLocationError] = useState("");
+  const [paymentSettingsByOrder, setPaymentSettingsByOrder] = useState<Record<string, any>>({});
+  const lastLiveLocationUpdate = useRef(0);
 
   const load = async () => {
     setLoading(true);
@@ -5237,6 +5876,8 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
           ? data.orders
           : []
       );
+      const list = Array.isArray(data) ? data : Array.isArray(data?.orders) ? data.orders : [];
+      list.forEach((o: any) => { loadPickupForOrder(String(o._id)); loadPaymentSettingsForOrder(String(o._id)); });
     } catch (e: any) {
       setError(e?.response?.data?.message || "Unable to load deliveries.");
     } finally {
@@ -5244,8 +5885,82 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
     }
   };
 
+  const loadPaymentSettingsForOrder = async (orderId: string) => {
+    if (!orderId || paymentSettingsByOrder[orderId]) return;
+    try {
+      const r = await axios.get(API + "/orders/" + orderId + "/payment-settings", { headers: adminHeaders() });
+      setPaymentSettingsByOrder((prev) => ({ ...prev, [orderId]: r.data?.data || null }));
+    } catch {}
+  };
+
+  const loadPickupForOrder = async (orderId: string) => {
+    if (!orderId || Object.prototype.hasOwnProperty.call(pickupByOrder, orderId)) return;
+    try { const r = await axios.get(API + "/orders/" + orderId + "/pickup-location", { headers: adminHeaders() }); const d = r.data?.data || {}; setPickupByOrder(prev => ({ ...prev, [orderId]: isValidCoordinate(d.latitude, d.longitude) ? { latitude: Number(d.latitude), longitude: Number(d.longitude) } : null })); } catch { setPickupByOrder(prev => ({ ...prev, [orderId]: null })); }
+  };
+
+  const loadPickupLocation = async () => {
+    setPickupLoading(true);
+    try {
+      const r = await axios.get(API + "/delivery/location", { headers: adminHeaders() });
+      const location = r.data?.data || {};
+      if (
+        isValidCoordinate(location.latitude, location.longitude)
+      ) {
+        setPickupLocation({
+          latitude: Number(location.latitude),
+          longitude: Number(location.longitude),
+        });
+      } else {
+        setPickupLocation(null);
+      }
+    } catch (e) {
+      console.error("PICKUP LOCATION ERROR:", e);
+      setPickupLocation(null);
+    } finally {
+      setPickupLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (store.user?.role === "delivery") load();
+    if (store.user?.role !== "delivery") return;
+    load();
+    loadPickupLocation();
+
+    if (!navigator.geolocation) {
+      setLocationError("Live location is not supported on this device/browser.");
+      return;
+    }
+
+    setLocationError("");
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude);
+        const longitude = Number(position.coords.longitude);
+        if (isValidCoordinate(latitude, longitude)) {
+          const now = Date.now();
+          if (now - lastLiveLocationUpdate.current >= 10000) {
+            lastLiveLocationUpdate.current = now;
+            setMyLocation({ latitude, longitude });
+            axios.post(API + "/delivery/location", { latitude, longitude }, { headers: adminHeaders() }).catch(() => {});
+          }
+          setLocationError("");
+        }
+      },
+      (geoError) => {
+        console.error("DELIVERY LIVE LOCATION ERROR:", geoError);
+        setLocationError("Live location permission is unavailable. The store/customer map will still work without your live marker.");
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+
+    const orderTimer = window.setInterval(() => load(), 15000);
+    const pickupTimer = window.setInterval(() => loadPickupLocation(), 15000);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      window.clearInterval(orderTimer);
+      window.clearInterval(pickupTimer);
+    };
   }, [store.user?.role]);
 
   const updateStatus = async (id: string, status: string) => {
@@ -5278,6 +5993,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   const deliveredOrders = orders.filter((o) => o.status === "Delivered");
   const delivered = deliveredOrders.length;
   const searchTerm = search.trim().toLowerCase();
+
   const matchesSearch = (o: any) => {
     if (!searchTerm) return true;
     const orderId = String(o._id || "").toLowerCase();
@@ -5292,8 +6008,10 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
       phone.includes(searchTerm)
     );
   };
+
   const filteredActive = active.filter(matchesSearch);
   const filteredDeliveredOrders = deliveredOrders.filter(matchesSearch);
+
   const markPaymentReceived = async (id: string) => {
     try {
       setPaymentUpdating(id);
@@ -5327,6 +6045,29 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
       : "Delivery time unavailable";
   };
 
+  const getDestination = (order: any): DeliveryCoordinate | null => {
+    const address = order?.address || {};
+    return isValidCoordinate(address.latitude, address.longitude)
+      ? {
+          latitude: Number(address.latitude),
+          longitude: Number(address.longitude),
+        }
+      : null;
+  };
+
+  const openNavigation = (
+    pickup: DeliveryCoordinate,
+    destination: DeliveryCoordinate
+  ) => {
+    const url =
+      "https://www.google.com/maps/dir/?api=1" +
+      `&origin=${pickup.latitude},${pickup.longitude}` +
+      `&destination=${destination.latitude},${destination.longitude}` +
+      "&travelmode=driving";
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b sticky top-0 z-20">
@@ -5337,14 +6078,25 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
             </div>
             <div>
               <h1 className="font-bold text-xl">FreshBasket Delivery</h1>
-              <p className="text-xs text-slate-500">Delivery Partner Dashboard</p>
+              <p className="text-xs text-slate-500">
+                Delivery Partner Dashboard
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={load} className="px-4 py-2 rounded-xl border bg-white font-semibold flex items-center gap-2">
+            <button
+              onClick={() => {
+                load();
+                loadPickupLocation();
+              }}
+              className="px-4 py-2 rounded-xl border bg-white font-semibold flex items-center gap-2"
+            >
               <RefreshCw size={16} /> Refresh
             </button>
-            <button onClick={logout} className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold flex items-center gap-2">
+            <button
+              onClick={logout}
+              className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold flex items-center gap-2"
+            >
               <LogOut size={16} /> Logout
             </button>
           </div>
@@ -5352,6 +6104,11 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
       </header>
 
       <main className="max-w-7xl mx-auto px-5 py-8">
+        {locationError && (
+          <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {locationError}
+          </div>
+        )}
         <div className="grid sm:grid-cols-3 gap-4 mb-6">
           <div className="bg-white border rounded-2xl p-5">
             <p className="text-sm text-slate-500">Active deliveries</p>
@@ -5370,10 +6127,15 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         <div className="bg-white border rounded-3xl overflow-hidden">
           <div className="p-6 border-b">
             <h2 className="text-xl font-bold">Assigned Orders</h2>
-            <p className="text-sm text-slate-500 mt-1">Packed and out-for-delivery orders assigned to you.</p>
+            <p className="text-sm text-slate-500 mt-1">
+              When an order is Packed, follow your live location to the store pickup point. After you collect it and tap Out for Delivery, the route switches to the customer's ordered delivery address.
+            </p>
 
             <div className="relative mt-5 max-w-2xl">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={19} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={19}
+              />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -5394,11 +6156,18 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
           </div>
 
           {loading ? (
-            <div className="p-12 text-center text-slate-500">Loading deliveries...</div>
+            <div className="p-12 text-center text-slate-500">
+              Loading deliveries...
+            </div>
           ) : error ? (
             <div className="p-12 text-center">
               <p className="text-red-600 font-semibold">{error}</p>
-              <button onClick={load} className="mt-4 px-5 py-2 rounded-xl bg-emerald-600 text-white font-semibold">Retry</button>
+              <button
+                onClick={load}
+                className="mt-4 px-5 py-2 rounded-xl bg-emerald-600 text-white font-semibold"
+              >
+                Retry
+              </button>
             </div>
           ) : (
             <>
@@ -5406,74 +6175,209 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
                 <div className="p-8">
                   <EmptyState
                     icon={Truck}
-                    title={search ? "No matching active deliveries" : "No active deliveries"}
-                    text={search ? "Try another Order ID, customer name or mobile number." : "New delivery assignments will appear here."}
+                    title={
+                      search
+                        ? "No matching active deliveries"
+                        : "No active deliveries"
+                    }
+                    text={
+                      search
+                        ? "Try another Order ID, customer name or mobile number."
+                        : "New delivery assignments will appear here."
+                    }
                   />
                 </div>
               ) : (
                 <div className="divide-y">
                   {filteredActive.map((o) => {
+                    const orderPickup = pickupByOrder[String(o._id)] ?? pickupLocation;
                     const customer = o.user || {};
                     const address = o.address || {};
+                    const destination = getDestination(o);
+
                     return (
                       <div key={o._id} className="p-6">
                         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
-                          <div className="space-y-3">
+                          <div className="space-y-3 flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-3">
                               <b>#{String(o._id).slice(-8)}</b>
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass(o.status)}`}>{o.status}</span>
-                              <span className="text-sm text-slate-500">{money(o.total)}</span>
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass(
+                                  o.status
+                                )}`}
+                              >
+                                {o.status}
+                              </span>
+                              <span className="text-sm text-slate-500">
+                                {money(o.total)}
+                              </span>
                             </div>
+
                             <div>
-                              <p className="font-semibold">{customer.name || "Customer"}</p>
-                              <p className="text-sm text-slate-500">{customer.phone || customer.email || "No contact details"}</p>
+                              <p className="font-semibold">
+                                {customer.name || "Customer"}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {customer.phone ||
+                                  customer.email ||
+                                  "No contact details"}
+                              </p>
                             </div>
+
                             <div className="text-sm text-slate-600">
-                              <p className="font-semibold text-slate-800">Delivery address</p>
-                              <p>{address.address || address.line1 || "Address not available"}</p>
-                              <p>{[address.city, address.state, address.pincode].filter(Boolean).join(", ")}</p>
+                              <p className="font-semibold text-slate-800">
+                                Delivery address
+                              </p>
+                              <p>
+                                {address.address ||
+                                  address.line1 ||
+                                  "Address not available"}
+                              </p>
+                              <p>
+                                {[
+                                  address.city,
+                                  address.state,
+                                  address.pincode,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </p>
                             </div>
-                            <p className="text-sm"><span className="font-semibold">Payment:</span> {o.paymentMethod || "COD"}</p>
-                        {o.paymentMethod === "COD" && o.status === "Out for Delivery" && (
-                          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <p className="font-bold text-amber-900">COD Payment</p>
-                                <p className="text-sm text-amber-800 mt-1">Payment status: <b>{o.paymentStatus === "Paid" ? "Paid" : "Pending"}</b></p>
+
+                            {pickupLoading ? (
+                              <div className="mt-5 rounded-2xl border bg-slate-50 p-4 text-sm text-slate-500">
+                                Loading pickup location...
                               </div>
-                              {o.paymentStatus !== "Paid" && (
-                                <button
-                                  onClick={() => {
-                                    const upi = `upi://pay?pa=freshbasket@upi&pn=FreshBasket&am=${Number(o.total || 0).toFixed(2)}&cu=INR`;
-                                    window.open("https://quickchart.io/qr?text=" + encodeURIComponent(upi) + "&size=260", "_blank");
-                                  }}
-                                  className="px-4 py-2 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold"
-                                >
-                                  Show QR
-                                </button>
+                            ) : orderPickup && (o.status === "Packed" || destination) ? (
+                              <DeliveryRouteMap
+                                origin={myLocation || orderPickup}
+                                destination={o.status === "Packed" ? orderPickup : destination!}
+                                originLabel={myLocation ? "Your live location" : "Pickup Store"}
+                                destinationLabel={o.status === "Packed" ? "Pickup Store" : "Customer"}
+                              />
+                            ) : (
+                              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                  <div>
+                                    <p className="font-bold text-amber-900">
+                                      Map location unavailable
+                                    </p>
+                                    <p className="text-xs text-amber-800 mt-1">
+                                      {orderPickup
+                                        ? "This order does not yet have a map destination for the ordered address. The customer does not need to be physically present there; the delivery destination is the address entered for this order."
+                                        : "Pickup store coordinates are not configured on the server."}
+                                    </p>
+                                  </div>
+
+                                  {orderPickup &&
+                                    destination === null &&
+                                    address.address && (
+                                      <span className="text-xs text-amber-800 font-semibold">
+                                        The destination is based on the ordered address and pincode. If it cannot be located automatically, the customer should add a map pin.
+                                      </span>
+                                    )}
+                                </div>
+
+
+                              </div>
+                            )}
+
+                            <p className="text-sm">
+                              <span className="font-semibold">Payment:</span>{" "}
+                              {o.paymentMethod || "COD"}
+                            </p>
+
+                            {["COD", "ONLINE"].includes(o.paymentMethod || "COD") &&
+                              o.status === "Out for Delivery" && (
+                                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                      <p className="font-bold text-amber-900">
+                                        {o.paymentMethod === "ONLINE" ? "Store UPI Payment" : "COD Payment"}
+                                      </p>
+                                      <p className="text-sm text-amber-800 mt-1">
+                                        Payment status:{" "}
+                                        <b>
+                                          {o.paymentStatus === "Paid"
+                                            ? "Paid"
+                                            : "Pending"}
+                                        </b>
+                                      </p>
+                                    </div>
+
+                                    {o.paymentStatus !== "Paid" && (
+                                      <button
+                                        onClick={() => {
+                                          const settings = paymentSettingsByOrder[String(o._id)] || {};
+                                          if (!settings.upiId) { alert("This store has not configured a UPI ID yet."); return; }
+                                          const upi = `upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(settings.merchantName || "FreshBasket")}&am=${Number(o.total || 0).toFixed(2)}&cu=INR`;
+                                          if (settings.qrImage) window.open(settings.qrImage, "_blank");
+                                          else window.open("https://quickchart.io/qr?text=" + encodeURIComponent(upi) + "&size=260", "_blank");
+                                        }}
+                                        className="px-4 py-2 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold"
+                                      >
+                                        Show QR
+                                      </button>
+                                    )}
+
+                                    {o.paymentStatus !== "Paid" && (
+                                      <button
+                                        disabled={
+                                          paymentUpdating === o._id
+                                        }
+                                        onClick={() =>
+                                          markPaymentReceived(o._id)
+                                        }
+                                        className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50"
+                                      >
+                                        {paymentUpdating === o._id
+                                          ? "Saving..."
+                                          : "Payment Received"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               )}
-                              {o.paymentStatus !== "Paid" && (
-                                <button
-                                  disabled={paymentUpdating === o._id}
-                                  onClick={() => markPaymentReceived(o._id)}
-                                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-50"
-                                >
-                                  {paymentUpdating === o._id ? "Saving..." : "Payment Received"}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
                           </div>
 
                           <div className="flex flex-wrap gap-2 lg:justify-end">
+                            {destination && orderPickup && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openNavigation(
+                                    orderPickup,
+                                    destination
+                                  )
+                                }
+                                className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-700 bg-emerald-50 font-semibold inline-flex items-center gap-2"
+                              >
+                                <MapPin size={16} />
+                                Navigate
+                              </button>
+                            )}
+
                             {o.status === "Packed" && (
-                              <button onClick={() => updateStatus(o._id, "Out for Delivery")} className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold">
+                              <button
+                                onClick={() =>
+                                  updateStatus(
+                                    o._id,
+                                    "Out for Delivery"
+                                  )
+                                }
+                                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold"
+                              >
                                 Out for Delivery
                               </button>
                             )}
+
                             {o.status === "Out for Delivery" && (
-                              <button onClick={() => updateStatus(o._id, "Delivered")} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold">
+                              <button
+                                onClick={() =>
+                                  updateStatus(o._id, "Delivered")
+                                }
+                                className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold"
+                              >
                                 Mark Delivered
                               </button>
                             )}
@@ -5489,35 +6393,78 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
                 <div className="border-t">
                   <div className="p-6 border-b bg-slate-50/70">
                     <h3 className="text-xl font-bold">Delivery History</h3>
-                    <p className="text-sm text-slate-500 mt-1">Successfully delivered orders assigned to you.</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Successfully delivered orders assigned to you.
+                    </p>
                   </div>
 
                   <div className="divide-y">
                     {filteredDeliveredOrders.map((o) => {
                       const customer = o.user || {};
                       const address = o.address || {};
+
                       return (
                         <div key={o._id} className="p-6">
                           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
                             <div className="space-y-3">
                               <div className="flex flex-wrap items-center gap-3">
                                 <b>#{String(o._id).slice(-8)}</b>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass(o.status)}`}>Delivered</span>
-                                <span className="text-sm text-slate-500">{money(o.total)}</span>
+                                <span
+                                  className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass(
+                                    o.status
+                                  )}`}
+                                >
+                                  Delivered
+                                </span>
+                                <span className="text-sm text-slate-500">
+                                  {money(o.total)}
+                                </span>
                               </div>
+
                               <div>
-                                <p className="font-semibold">{customer.name || "Customer"}</p>
-                                <p className="text-sm text-slate-500">{customer.phone || customer.email || "No contact details"}</p>
+                                <p className="font-semibold">
+                                  {customer.name || "Customer"}
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                  {customer.phone ||
+                                    customer.email ||
+                                    "No contact details"}
+                                </p>
                               </div>
+
                               <div className="text-sm text-slate-600">
-                                <p className="font-semibold text-slate-800">Delivery address</p>
-                                <p>{address.address || address.line1 || "Address not available"}</p>
-                                <p>{[address.city, address.state, address.pincode].filter(Boolean).join(", ")}</p>
+                                <p className="font-semibold text-slate-800">
+                                  Delivery address
+                                </p>
+                                <p>
+                                  {address.address ||
+                                    address.line1 ||
+                                    "Address not available"}
+                                </p>
+                                <p>
+                                  {[
+                                    address.city,
+                                    address.state,
+                                    address.pincode,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                </p>
                               </div>
+
                               <div className="text-sm text-slate-600">
-                                <span className="font-semibold text-slate-800">Delivered:</span> {deliveredAt(o)}
+                                <span className="font-semibold text-slate-800">
+                                  Delivered:
+                                </span>{" "}
+                                {deliveredAt(o)}
                               </div>
-                              <p className="text-sm"><span className="font-semibold">Payment:</span> {o.paymentMethod || "COD"}</p>
+
+                              <p className="text-sm">
+                                <span className="font-semibold">
+                                  Payment:
+                                </span>{" "}
+                                {o.paymentMethod || "COD"}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -6048,7 +6995,10 @@ function CategoryAdmin() {
     }
   };
 
+  const canEdit = (c: any) => String(c.storeAdmin || "") === String(JSON.parse(localStorage.getItem("fb-user") || "{}")?.id || "");
+
   const toggle = async (c: any) => {
+    if (!canEdit(c)) return alert("You can only edit categories created by your admin account.");
     try {
       const r = await axios.put(API + "/admin/categories/" + c._id, { isActive: !c.isActive }, { headers: adminHeaders() });
       setCategories(categories.map((x) => x._id === c._id ? r.data.data : x));
@@ -6058,6 +7008,7 @@ function CategoryAdmin() {
   };
 
   const remove = async (c: any) => {
+    if (!canEdit(c)) return alert("You can only delete categories created by your admin account.");
     if (!window.confirm(`Delete "${c.name}"?`)) return;
     try {
       await axios.delete(API + "/admin/categories/" + c._id, { headers: adminHeaders() });
@@ -6103,13 +7054,13 @@ function CategoryAdmin() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <b>{c.name}</b>
-                  <p className="text-xs text-slate-400 mt-1">{c.isActive ? "Visible in store" : "Hidden from store"}</p>
+                  <p className="text-xs text-slate-400 mt-1">{c.isActive ? "Visible in store" : "Hidden from store"} · {canEdit(c) ? "Created by you" : "Created by another admin"}</p>
                 </div>
                 <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${c.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{c.isActive ? "Active" : "Inactive"}</span>
                 <div className="flex gap-2">
-                  <button onClick={() => { setEditing(c); setName(c.name || ""); setImage(c.image || ""); }} className="border px-3 py-2 rounded-lg font-semibold">Edit</button>
-                  <button onClick={() => toggle(c)} className="border px-3 py-2 rounded-lg font-semibold">{c.isActive ? "Disable" : "Enable"}</button>
-                  <button onClick={() => remove(c)} className="border border-red-200 text-red-600 px-3 py-2 rounded-lg font-semibold">Delete</button>
+                  <button disabled={!canEdit(c)} onClick={() => { if (canEdit(c)) { setEditing(c); setName(c.name || ""); setImage(c.image || ""); } }} className="border px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Edit</button>
+                  <button disabled={!canEdit(c)} onClick={() => toggle(c)} className="border px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed">{c.isActive ? "Disable" : "Enable"}</button>
+                  <button disabled={!canEdit(c)} onClick={() => remove(c)} className="border border-red-200 text-red-600 px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
                 </div>
               </div>
             ))}
@@ -6491,6 +7442,9 @@ function AdminManagement({ store }: { store: ReturnType<typeof useStore> }) {
 
   return <div className="space-y-5">
     <div><h2 className="text-2xl font-bold">Admin Management</h2><p className="text-sm text-slate-500 mt-1">Only the main admin can create or manage other admin accounts.</p></div>
+    <div className="bg-blue-50 border border-blue-200 rounded-3xl p-5 text-sm text-blue-900">
+      <b>Store isolation is enabled.</b> Each admin gets a separate store workspace. Their products, orders, store location and delivery partners stay inside their own store. The main admin can manage account access, but cannot enter or edit another admin's store workspace. Passwords are never displayed.
+    </div>
     <div className="bg-white border rounded-3xl p-6">
       <h3 className="font-bold text-lg">Create Admin</h3>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
@@ -6506,7 +7460,146 @@ function AdminManagement({ store }: { store: ReturnType<typeof useStore> }) {
       <h3 className="font-bold text-lg">Admin Accounts</h3>
       {loading ? <div className="py-10 text-center text-slate-500">Loading...</div> : <div className="overflow-x-auto mt-4"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Phone</th><th className="p-3">Type</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead><tbody>{admins.map(a => { const main = String(a.email || "").toLowerCase() === "admin@grocery.com"; return <tr key={a._id} className="border-b"><td className="p-3 font-semibold">{a.name}</td><td className="p-3">{a.email}</td><td className="p-3">{a.phone || "—"}</td><td className="p-3">{main ? "Main Admin" : "Admin"}</td><td className="p-3">{a.blocked ? "Blocked" : "Active"}</td><td className="p-3">{String(a._id) === String(store.user?.id) ? <span className="text-slate-400">Current account</span> : <button onClick={() => toggle(a)} className="font-semibold text-emerald-700">{a.blocked ? "Activate" : "Block"}</button>}</td></tr>})}</tbody></table></div>}
     </div>
+  <MainAdminStoreDirectory />
   </div>;
+}
+
+function AdminStoreLocation({ store }: { store: ReturnType<typeof useStore> }) {
+  const [form, setForm] = useState({ name: "FreshBasket Store", address: "", latitude: "", longitude: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    setLoading(true); setError("");
+    try {
+      const r = await axios.get(API + "/admin/store-location", { headers: adminHeaders() });
+      const d = r.data?.data || {};
+      setForm({ name: d.name || "FreshBasket Store", address: d.address || "", latitude: d.latitude != null ? String(d.latitude) : "", longitude: d.longitude != null ? String(d.longitude) : "" });
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Unable to load store location.");
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) return alert("Location is not supported on this device/browser.");
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setForm(f => ({ ...f, latitude: position.coords.latitude.toFixed(7), longitude: position.coords.longitude.toFixed(7) }));
+        setLocating(false);
+      },
+      error => {
+        console.error("ADMIN STORE LOCATION ERROR:", error);
+        alert("Unable to get current location. Please allow location permission.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+
+  const save = async () => {
+    const latitude = Number(form.latitude);
+    const longitude = Number(form.longitude);
+    if (!form.name.trim()) return alert("Please enter store name.");
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return alert("Please enter a valid latitude.");
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return alert("Please enter a valid longitude.");
+    setSaving(true);
+    try {
+      await axios.put(API + "/admin/store-location", { name: form.name.trim(), address: form.address.trim(), latitude, longitude }, { headers: adminHeaders() });
+      alert("Store location saved successfully.");
+      await load();
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Unable to save store location.");
+    } finally { setSaving(false); }
+  };
+
+  if (loading) return <div className="bg-white border rounded-3xl py-16 text-center text-slate-500">Loading store location...</div>;
+  if (error) return <PageError message={error} onRetry={load} />;
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-emerald-600 text-sm font-bold">DELIVERY CONTROL</p>
+        <h2 className="text-2xl font-bold">Store / Pickup Location</h2>
+        <p className="text-sm text-slate-500 mt-1">Set this store's pickup point. Delivery partners assigned to this store will receive it automatically.</p>
+      </div>
+
+      <div className="bg-white border rounded-3xl p-6 max-w-3xl">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 grid place-items-center"><MapPin size={20} /></div>
+          <div><h3 className="font-bold text-lg">FreshBasket pickup point</h3><p className="text-sm text-slate-500">This location appears as the pickup point on the delivery route.</p></div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4 mt-6">
+          <label className="block text-sm font-semibold">Store name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="FreshBasket Store" /></label>
+          <label className="block text-sm font-semibold sm:col-span-2">Store address<textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="mt-2 w-full border rounded-xl p-3 min-h-[90px]" placeholder="Complete pickup/store address" /></label>
+          <label className="block text-sm font-semibold">Latitude<input inputMode="decimal" value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="27.2153" /></label>
+          <label className="block text-sm font-semibold">Longitude<input inputMode="decimal" value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="82.8640" /></label>
+        </div>
+
+        <div className="flex flex-wrap gap-3 mt-5">
+          <button type="button" onClick={useCurrentLocation} disabled={locating} className="border border-emerald-200 text-emerald-700 px-4 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 disabled:opacity-50"><MapPin size={16} />{locating ? "Getting location..." : "Use Current Location"}</button>
+          <button type="button" onClick={save} disabled={saving} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 disabled:opacity-50"><Save size={16} />{saving ? "Saving..." : "Save Store Location"}</button>
+        </div>
+
+        <div className="mt-5 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-sm">
+          <p className="font-bold text-emerald-900">Customer storefront link</p>
+          <p className="text-emerald-800 mt-1">Share this link with your customers so they see only this store's products.</p>
+          <div className="mt-3 flex gap-2">
+            <input readOnly value={`${window.location.origin}/?storeAdminId=${encodeURIComponent(String(store.user?.id || ""))}`} className="flex-1 min-w-0 border rounded-xl p-3 bg-white text-xs" />
+            <button type="button" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/?storeAdminId=${encodeURIComponent(String(store.user?.id || ""))}`)} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm">Copy</button>
+          </div>
+        </div>
+
+        <div className="mt-5 p-4 rounded-2xl bg-blue-50 text-blue-800 text-sm">
+          <b>How it works:</b> Admin saves the store pickup coordinates once. When an order is assigned to a delivery partner, the delivery dashboard automatically uses this pickup point and the customer's saved coordinates to build the route.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPaymentSettings() {
+  const [form, setForm] = useState({ upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: true });
+  const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
+  const load = async () => { setLoading(true); try { const r = await axios.get(API + "/admin/payment-settings", { headers: adminHeaders() }); setForm({ upiId: r.data?.data?.upiId || "", merchantName: r.data?.data?.merchantName || "FreshBasket", qrImage: r.data?.data?.qrImage || "", isEnabled: r.data?.data?.isEnabled !== false }); } catch {} finally { setLoading(false); } };
+  useEffect(() => { load(); }, []);
+  const save = async () => { setSaving(true); try { await axios.put(API + "/admin/payment-settings", form, { headers: adminHeaders() }); alert("Payment settings saved successfully."); } catch (e: any) { alert(e?.response?.data?.message || "Unable to save payment settings."); } finally { setSaving(false); } };
+  if (loading) return <div className="bg-white border rounded-3xl py-16 text-center text-slate-500">Loading payment settings...</div>;
+  return <div className="space-y-5"><div><p className="text-emerald-600 text-sm font-bold">STORE PAYMENTS</p><h2 className="text-2xl font-bold">Payment / UPI Settings</h2><p className="text-sm text-slate-500 mt-1">These payment details belong only to your store. Delivery partners can use them for orders assigned to them.</p></div>
+    <div className="bg-white border rounded-3xl p-6 max-w-3xl"><div className="grid md:grid-cols-2 gap-4"><label className="text-sm font-semibold">UPI ID<input value={form.upiId} onChange={e=>setForm({...form,upiId:e.target.value})} placeholder="yourshop@upi" className="mt-2 w-full border rounded-xl p-3"/></label><label className="text-sm font-semibold">Merchant / Store name<input value={form.merchantName} onChange={e=>setForm({...form,merchantName:e.target.value})} className="mt-2 w-full border rounded-xl p-3"/></label><label className="text-sm font-semibold md:col-span-2">QR image URL (optional)<input value={form.qrImage} onChange={e=>setForm({...form,qrImage:e.target.value})} placeholder="https://.../upi-qr.png" className="mt-2 w-full border rounded-xl p-3"/><input type="file" accept="image/*" onChange={e=>{ const file=e.target.files?.[0]; if(!file) return; if(file.size > 2*1024*1024){ alert("QR image must be 2 MB or smaller."); return; } const reader=new FileReader(); reader.onload=()=>setForm(f=>({...f,qrImage:String(reader.result||"")})); reader.readAsDataURL(file); }} className="mt-2 w-full text-xs"/><span className="block text-xs text-slate-400 mt-1">You can paste an image URL or upload a QR image (max 2 MB).</span></label></div>
+      <label className="flex items-center gap-3 mt-5 text-sm font-semibold"><input type="checkbox" checked={form.isEnabled} onChange={e=>setForm({...form,isEnabled:e.target.checked})}/> Enable online payment for this store</label>
+      {form.qrImage && <img src={form.qrImage} alt="UPI QR preview" className="mt-5 w-48 h-48 object-contain border rounded-2xl bg-white"/>}
+      <button disabled={saving} onClick={save} className="mt-5 bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{saving ? "Saving..." : "Save payment settings"}</button>
+    </div></div>;
+}
+
+function MainAdminStoreDirectory() {
+  const [stores, setStores] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await axios.get(API + "/admin/stores", { headers: adminHeaders() });
+      setStores(Array.isArray(r.data.data) ? r.data.data : []);
+    } catch { setStores([]); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+  return <section className="mt-8 bg-white border rounded-3xl p-5 md:p-6">
+    <div className="flex items-center justify-between gap-3">
+      <div><p className="text-emerald-600 text-xs font-bold">ALL STORES</p><h3 className="text-xl font-bold">Store Network</h3><p className="text-sm text-slate-500 mt-1">Every active admin store is visible here. This is a read-only overview; it does not open another admin workspace.</p></div>
+      <button onClick={load} className="border rounded-xl px-3 py-2 text-sm font-bold">Refresh</button>
+    </div>
+    {loading ? <p className="py-8 text-center text-slate-500">Loading stores...</p> : <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mt-5">{stores.map((st) => <div key={st.id} className="border rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-2"><div><b>{st.name}</b><p className="text-xs text-slate-500 mt-1">{st.address || "Address not configured"}</p></div>{st.isMainStore && <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">MAIN</span>}</div>
+      <div className="grid grid-cols-3 gap-2 mt-4 text-center"><div className="bg-slate-50 rounded-xl p-2"><b>{st.productCount || 0}</b><p className="text-[10px] text-slate-500">Products</p></div><div className="bg-slate-50 rounded-xl p-2"><b>{st.categoryCount || 0}</b><p className="text-[10px] text-slate-500">Categories</p></div><div className="bg-slate-50 rounded-xl p-2"><b>{st.bannerCount || 0}</b><p className="text-[10px] text-slate-500">Offers</p></div></div>
+    </div>)}</div>}
+  </section>;
 }
 
 function AdminSettings() {
@@ -6667,13 +7760,16 @@ function Admin({
   const navs: any[] = [
     ["dashboard", LayoutDashboard, "Dashboard"],
     ["orders", Package, "Orders"],
+    ["order-history", History, "Order History"],
     ["products", Boxes, "Products"],
     ["categories", Tag, "Categories"],
     ["banners", Tag, "Banners / Offers"],
     ["inventory", History, "Inventory"],
     ["customers", Users, "Customers"],
     ["delivery-partners", Truck, "Delivery Partners"],
+    ["store-location", MapPin, "Store Location"],
     ["coupons", Tag, "Coupons"],
+    ["payment-settings", CircleDollarSign, "Payment / UPI"],
     ["rewards", Award, "Loyalty / Rewards"],
     ...(store.user?.isMainAdmin ? [["admin-management", ShieldCheck, "Admin Management"]] : []),
     ["settings", Settings, "Settings / Security"],
@@ -6687,7 +7783,7 @@ function Admin({
 
   const visibleNavs = isMainAdmin
     ? navs
-    : navs.filter((x) => !["coupons", "rewards", "settings", "admin-management"].includes(x[0]));
+    : navs.filter((x) => !["rewards", "settings", "admin-management"].includes(x[0]));
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -6957,6 +8053,7 @@ function Admin({
           )}
 
           {tab === "orders" && <AdminOrders />}
+          {tab === "order-history" && <AdminOrderHistory />}
           {tab === "products" && (
             <ProductAdmin store={store} />
           )}
@@ -6965,8 +8062,10 @@ function Admin({
           {tab === "inventory" && <AdminInventory />}
           {tab === "customers" && <AdminCustomers />}
           {tab === "delivery-partners" && <AdminDeliveryPartners />}
+          {tab === "store-location" && <AdminStoreLocation store={store} />}
           {tab === "admin-management" && isMainAdmin && <AdminManagement store={store} />}
           {tab === "coupons" && <CouponAdmin />}
+          {tab === "payment-settings" && <AdminPaymentSettings />}
           {tab === "rewards" && <AdminRewards />}
           {tab === "settings" && <AdminSettings />}
           {tab === "reports" && <AdminReports />}
@@ -6986,6 +8085,10 @@ export default function App() {
       <Route
         path="/"
         element={<Home store={store} />}
+      />
+      <Route
+        path="/stores"
+        element={<StoreDirectory store={store} />}
       />
       <Route
         path="/shop"
