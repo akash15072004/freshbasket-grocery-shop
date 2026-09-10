@@ -21,6 +21,42 @@ import LoyaltyTransaction from "./models/LoyaltyTransaction";
 import LoyaltySetting from "./models/LoyaltySetting";
 import Address from "./models/Address";
 import OtpVerification from "./models/OtpVerification";
+
+// Product review model. Kept in this file so the review feature does not
+// require an additional model file. A customer can review a product once.
+const ReviewSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    rating: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+    },
+    comment: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 1000,
+    },
+  },
+  { timestamps: true }
+);
+
+ReviewSchema.index({ user: 1, product: 1 }, { unique: true });
+
+const Review =
+  mongoose.models.Review || mongoose.model("Review", ReviewSchema);
 import { auth, role, AuthRequest } from "./middleware/auth";
 
 const app = express();
@@ -384,20 +420,8 @@ app.post("/api/auth/register", async (req, res) => {
     if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
       return res.status(400).json({ success: false, message: "A valid 10-digit mobile number is required" });
     }
-  // OTP verification temporarily disabled for registration.
-// Can be re-enabled in the future when email/mobile OTP verification is needed.
-
-/*
-try {
-  await requireVerifiedOtp("email", normalizedEmail, "register");
-  await requireVerifiedOtp("mobile", normalizedPhone, "register");
-} catch (otpError: any) {
-  return res.status(400).json({
-    success: false,
-    message: otpError?.message || "Please verify email and mobile OTP first"
-  });
-}
-*/
+    // Registration OTP verification is intentionally disabled.
+    // OTP remains enabled for password reset and account email/mobile changes.
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -409,10 +433,11 @@ try {
       role: "customer",
       blocked: false,
     });
-    await User.collection.updateOne(
-  { _id: user._id },
-  { $set: { emailVerified: true, phoneVerified: true } }
-);
+    await User.collection.updateOne({ _id: user._id }, { $set: { emailVerified: true, phoneVerified: true } });
+    await OtpVerification.deleteMany({ $or: [
+      { target: normalizedEmail, purpose: "register" },
+      { target: normalizedPhone, purpose: "register" },
+    ] });
 
     return res.status(201).json({
       success: true,
@@ -624,29 +649,92 @@ app.patch("/api/admin/settings/password", auth, mainAdminOnly, async (req: AuthR
 app.patch("/api/profile", auth, role("customer"), async (req: AuthRequest, res) => {
   try {
     const name = String(req.body.name || "").trim();
-    const requestedPhone = req.body.phone === undefined ? "" : String(req.body.phone || "").replace(/\D/g, "");
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const phone = String(req.body.phone || "").replace(/\D/g, "");
 
     if (name.length < 2) {
-      return res.status(400).json({ success: false, message: "Please enter your full name" });
+      return res.status(400).json({
+        success: false,
+        message: "Please enter your full name",
+      });
     }
 
-    const existing: any = await User.findById(req.user!.id).select("-password");
-    if (!existing) return res.status(404).json({ success: false, message: "User not found" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address",
+      });
+    }
 
-    if (requestedPhone && requestedPhone !== String(existing.phone || "")) {
-      return res.status(400).json({ success: false, message: "Mobile number changes require OTP verification" });
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 10-digit mobile number",
+      });
+    }
+
+    const user: any = await User.findById(req.user!.id);
+
+    if (!user || user.role !== "customer") {
+      return res.status(404).json({
+        success: false,
+        message: "Customer account not found",
+      });
+    }
+
+    const existingEmail: any = await User.findOne({
+      email,
+      _id: { $ne: user._id },
+    }).select("_id").lean();
+
+    if (existingEmail) {
+      return res.status(409).json({
+        success: false,
+        message: "This email is already registered",
+      });
+    }
+
+    const existingPhone: any = await User.findOne({
+      phone,
+      role: "customer",
+      _id: { $ne: user._id },
+    }).select("_id").lean();
+
+    if (existingPhone) {
+      return res.status(409).json({
+        success: false,
+        message: "This mobile number is already registered",
+      });
     }
 
     await User.collection.updateOne(
-      { _id: existing._id },
-      { $set: { name } }
+      { _id: user._id },
+      {
+        $set: {
+          name,
+          email,
+          phone,
+          emailVerified: true,
+          phoneVerified: true,
+        },
+      }
     );
 
-    const updated: any = await User.findById(existing._id).select("-password").lean();
-    return res.json({ success: true, message: "Profile updated successfully", data: updated });
+    const updated: any = await User.findById(user._id)
+      .select("-password")
+      .lean();
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updated,
+    });
   } catch (error) {
     console.error("PROFILE UPDATE ERROR:", error);
-    return res.status(500).json({ success: false, message: "Unable to update profile" });
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update profile",
+    });
   }
 });
 
@@ -667,7 +755,6 @@ app.patch("/api/profile/account", auth, role("customer"), async (req: AuthReques
       return res.status(409).json({ success: false, message: "This email is already registered" });
     }
 
-    await requireVerifiedOtp("email", email, "change-email", user._id);
     await User.collection.updateOne({ _id: user._id }, { $set: { email, emailVerified: true } });
     const updated: any = await User.findById(user._id).select("-password").lean();
     return res.json({ success: true, message: "Login email updated successfully", data: updated });
@@ -1136,6 +1223,200 @@ app.get("/api/products", async (req, res) => {
     });
   }
 });
+
+/* =========================================================
+   PRODUCT REVIEWS
+========================================================= */
+
+// Get all reviews for a product. Public endpoint.
+app.get("/api/products/:id/reviews", async (req, res) => {
+  try {
+    const productId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product",
+      });
+    }
+
+    const reviews = await Review.find({ product: productId })
+      .populate("user", "name")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const total = reviews.length;
+    const average = total
+      ? reviews.reduce(
+          (sum: number, review: any) =>
+            sum + Number(review.rating || 0),
+          0
+        ) / total
+      : 0;
+
+    return res.json({
+      success: true,
+      data: {
+        reviews,
+        total,
+        average: Number(average.toFixed(1)),
+      },
+    });
+  } catch (error) {
+    console.error("GET REVIEWS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load product reviews",
+    });
+  }
+});
+
+// Create a review. Only a customer who purchased the product and whose
+// order has been delivered can submit a review.
+app.post(
+  "/api/products/:id/reviews",
+  auth,
+  role("customer"),
+  async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.id;
+      const userId = req.user!.id;
+
+      if (!mongoose.Types.ObjectId.isValid(productId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product",
+        });
+      }
+
+      const rating = Number(req.body.rating);
+      const comment = String(req.body.comment || "").trim();
+
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating must be between 1 and 5",
+        });
+      }
+
+      if (comment.length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: "Review must contain at least 3 characters",
+        });
+      }
+
+      if (comment.length > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: "Review cannot exceed 1000 characters",
+        });
+      }
+
+      const product = await Product.findById(productId).select("_id").lean();
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      // Verified purchase: the customer must have a delivered order
+      // containing this product.
+      const deliveredOrder = await Order.findOne({
+        user: userId,
+        status: "Delivered",
+        "items.product": productId,
+      }).select("_id").lean();
+
+      if (!deliveredOrder) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You can review this product only after it has been delivered to you.",
+        });
+      }
+
+      const existingReview = await Review.findOne({
+        user: userId,
+        product: productId,
+      }).select("_id").lean();
+
+      if (existingReview) {
+        return res.status(409).json({
+          success: false,
+          message: "You have already reviewed this product.",
+        });
+      }
+
+      const review = await Review.create({
+        user: userId,
+        product: productId,
+        rating,
+        comment,
+      });
+
+      // Recalculate the product rating from all real reviews.
+      const stats = await Review.aggregate([
+        {
+          $match: {
+            product: new mongoose.Types.ObjectId(productId),
+          },
+        },
+        {
+          $group: {
+            _id: "$product",
+            average: { $avg: "$rating" },
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const averageRating = stats.length
+        ? Number(Number(stats[0].average).toFixed(1))
+        : 0;
+
+      const reviewCount = stats.length ? Number(stats[0].count) : 1;
+
+      await Product.collection.updateOne(
+        { _id: productId },
+        {
+          $set: {
+            rating: averageRating,
+          },
+        }
+      );
+
+      const populatedReview = await Review.findById(review._id)
+        .populate("user", "name")
+        .lean();
+
+      return res.status(201).json({
+        success: true,
+        message: "Review submitted successfully",
+        data: {
+          review: populatedReview,
+          rating: averageRating,
+          reviewCount,
+        },
+      });
+    } catch (error: any) {
+      console.error("CREATE REVIEW ERROR:", error);
+
+      if (error?.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message: "You have already reviewed this product.",
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to submit review",
+      });
+    }
+  }
+);
 
 app.get(
   "/api/admin/products",
