@@ -1245,7 +1245,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
         if (password.length < 8) return setError("Password must be at least 8 characters.");
         if (password !== confirmPassword) return setError("Passwords do not match.");
         if (!/^[6-9]\d{9}$/.test(phone.replace(/\D/g, ""))) return setError("Enter a valid 10-digit mobile number.");
-        if (!emailVerified || !mobileVerified) return setError("Please verify both email and mobile OTP before creating the account.");
+       /* if (!emailVerified || !mobileVerified) return setError("Please verify both email and mobile OTP before creating the account.");*/
       }
 
       if (mode === "register") {
@@ -1312,21 +1312,67 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
           </>}
           <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailVerified(false)}} placeholder="Email" className="w-full border rounded-xl p-3 outline-none" />
 
-          {mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-bold"><Mail size={17}/> Email verification</div>
-            {!emailVerified ? <>
-              <div className="flex gap-2"><input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3 bg-white"/><button type="button" onClick={()=>sendEmailOtp("register")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{emailSent?'Resend':'Send OTP'}</button></div>
-              {emailSent && <button type="button" onClick={()=>verifyEmailOtp("register")} disabled={loadingOtp==="verify-email"} className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify email</button>}
-            </> : <p className="text-emerald-700 text-sm font-bold">✓ Email verified</p>}
-          </div>}
+          
+        {/*
+  Registration Email OTP Verification — Temporarily Disabled
 
-          {mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-bold"><Phone size={17}/> Mobile verification</div>
-            {!mobileVerified ? <>
-              <div className="flex gap-2"><input value={mobileOtp} onChange={e=>setMobileOtp(e.target.value)} placeholder="Mobile OTP" className="flex-1 border rounded-xl p-3 bg-white"/><button type="button" onClick={sendMobileOtp} disabled={loadingOtp==="mobile"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">{mobileSent?'Resend':'Send OTP'}</button></div>
-              {mobileSent && <button type="button" onClick={verifyMobileOtp} disabled={loadingOtp==="verify-mobile"} className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold">Verify mobile</button>}
-            </> : <p className="text-emerald-700 text-sm font-bold">✓ Mobile verified</p>}
-          </div>}
+  This block is intentionally kept for future use.
+  Re-enable when email OTP verification is required again.
+
+  {mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
+    <div className="flex items-center gap-2 text-sm font-bold"><Mail size={17}/> Email verification</div>
+    {!emailVerified ? <>
+      <div className="flex gap-2">
+        <input value={emailOtp} onChange={e=>setEmailOtp(e.target.value)} placeholder="Email OTP" className="flex-1 border rounded-xl p-3 bg-white"/>
+        <button type="button" onClick={()=>sendEmailOtp("register")} disabled={loadingOtp==="email"} className="px-3 rounded-xl bg-slate-950 text-white font-bold">
+          {emailSent?'Resend':'Send OTP'}
+        </button>
+      </div>
+
+      {emailSent && <button type="button" onClick={()=>verifyEmailOtp("register")} disabled={loadingOtp==="verify-email"} className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold">
+        Verify email
+      </button>}
+    </> : <p className="text-emerald-700 text-sm font-bold">✓ Email verified</p>}
+  </div>}
+*/}
+
+          {/*
+{mode === "register" && <div className="border rounded-2xl p-4 bg-slate-50 space-y-3">
+  <div className="flex items-center gap-2 text-sm font-bold">
+    <Phone size={17}/> Mobile verification
+  </div>
+  {!mobileVerified ? <>
+    <div className="flex gap-2">
+      <input
+        value={mobileOtp}
+        onChange={e=>setMobileOtp(e.target.value)}
+        placeholder="Mobile OTP"
+        className="flex-1 border rounded-xl p-3 bg-white"
+      />
+      <button
+        type="button"
+        onClick={sendMobileOtp}
+        disabled={loadingOtp==="mobile"}
+        className="px-3 rounded-xl bg-slate-950 text-white font-bold"
+      >
+        {mobileSent?'Resend':'Send OTP'}
+      </button>
+    </div>
+    {mobileSent && (
+      <button
+        type="button"
+        onClick={verifyMobileOtp}
+        disabled={loadingOtp==="verify-mobile"}
+        className="w-full bg-emerald-600 text-white rounded-xl py-2.5 font-bold"
+      >
+        Verify mobile
+      </button>
+    )}
+  </> : <p className="text-emerald-700 text-sm font-bold">
+    ✓ Mobile verified
+  </p>}
+</div>}
+*/}
 
           {mode !== "forgot" && <input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-xl p-3 outline-none" />}
           {mode === "register" && <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full border rounded-xl p-3 outline-none" />}

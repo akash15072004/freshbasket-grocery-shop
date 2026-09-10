@@ -151,7 +151,19 @@ const sendEmailOtp = async (email: string, otp: string, purpose: string) => {
       html: `<div style="font-family:Arial,sans-serif"><h2>FreshBasket</h2><p>Your OTP is:</p><h1 style="letter-spacing:6px">${otp}</h1><p>This OTP expires in 10 minutes. Do not share it with anyone.</p></div>`,
     }),
   });
-  if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+  if (!response.ok) {
+  const errorText = await response.text();
+
+  console.error(
+    "RESEND ERROR:",
+    response.status,
+    errorText
+  );
+
+  throw new Error(
+    `Email provider returned ${response.status}: ${errorText}`
+  );
+}
   return null;
 };
 
@@ -372,12 +384,20 @@ app.post("/api/auth/register", async (req, res) => {
     if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
       return res.status(400).json({ success: false, message: "A valid 10-digit mobile number is required" });
     }
-    try {
-      await requireVerifiedOtp("email", normalizedEmail, "register");
-      await requireVerifiedOtp("mobile", normalizedPhone, "register");
-    } catch (otpError: any) {
-      return res.status(400).json({ success: false, message: otpError?.message || "Please verify email and mobile OTP first" });
-    }
+  // OTP verification temporarily disabled for registration.
+// Can be re-enabled in the future when email/mobile OTP verification is needed.
+
+/*
+try {
+  await requireVerifiedOtp("email", normalizedEmail, "register");
+  await requireVerifiedOtp("mobile", normalizedPhone, "register");
+} catch (otpError: any) {
+  return res.status(400).json({
+    success: false,
+    message: otpError?.message || "Please verify email and mobile OTP first"
+  });
+}
+*/
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
