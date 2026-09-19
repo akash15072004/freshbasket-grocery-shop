@@ -11,8 +11,13 @@ import {
 } from "react-router-dom";
 import axios from "axios";
 import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { Geolocation as CapacitorGeolocation } from "@capacitor/geolocation";
+import { BarcodeScanner as CapacitorBarcodeScanner, BarcodeFormat } from "@capacitor-mlkit/barcode-scanning";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { Printer as CapacitorPrinter } from "@capgo/capacitor-printer";
+import { TextToSpeech } from "@capacitor-community/text-to-speech";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, Marker, useMap, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -85,8 +90,8 @@ import {
   Sparkles,
 } from "lucide-react";
 
-const IS_NATIVE_APP =
-  Boolean((window as any).Capacitor?.isNativePlatform?.());
+const IS_NATIVE_APP = Capacitor.getPlatform() !== "web";
+const IS_ANDROID_APP = Capacitor.getPlatform() === "android";
 
 const API_BASE = IS_NATIVE_APP
   ? "https://freshbasket-grocery-shop.onrender.com"
@@ -958,6 +963,65 @@ const isLikelyIndiaCoordinate = (latitude: any, longitude: any) =>
   Number(latitude) >= 6 && Number(latitude) <= 37.5 &&
   Number(longitude) >= 68 && Number(longitude) <= 97.7;
 
+const fbGetCurrentPosition = async (
+  success: (position: any) => void,
+  error?: (reason: any) => void,
+  options: {
+    enableHighAccuracy?: boolean;
+    timeout?: number;
+    maximumAge?: number;
+  } = {},
+) => {
+  if (!IS_NATIVE_APP) {
+    if (!navigator.geolocation) {
+      error?.({ code: 2, message: "Location is not supported by this browser." });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(success, error as any, options);
+    return;
+  }
+
+  try {
+    let permissions = await CapacitorGeolocation.checkPermissions();
+    if (permissions.location !== "granted") {
+      permissions = await CapacitorGeolocation.requestPermissions();
+    }
+
+    if (permissions.location !== "granted") {
+      throw new Error(
+        "Location permission was denied. Please allow Location permission for FreshBasket in Android Settings and try again."
+      );
+    }
+
+    const position = await CapacitorGeolocation.getCurrentPosition({
+      enableHighAccuracy: options.enableHighAccuracy !== false,
+      timeout: Number(options.timeout || 15000),
+      maximumAge: Number(options.maximumAge || 0),
+    });
+
+    success({
+      coords: {
+        latitude: Number(position.coords.latitude),
+        longitude: Number(position.coords.longitude),
+        accuracy: Number(position.coords.accuracy || 0),
+        altitude: position.coords.altitude ?? null,
+        altitudeAccuracy: position.coords.altitudeAccuracy ?? null,
+        heading: position.coords.heading ?? null,
+        speed: position.coords.speed ?? null,
+      },
+      timestamp: Number(position.timestamp || Date.now()),
+    });
+  } catch (e: any) {
+    error?.({
+      code: e?.code || 2,
+      message: String(
+        e?.message ||
+        "Unable to access your location. Please turn on Location/GPS and allow FreshBasket location permission."
+      ),
+    });
+  }
+};
+
 function ImagePickerButtons({
   onFile,
   disabled = false,
@@ -971,21 +1035,111 @@ function ImagePickerButtons({
 }) {
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
+  const [cameraBusy, setCameraBusy] = useState(false);
   const button = compact ? "px-3 py-2 rounded-lg text-xs" : "px-3 py-2.5 rounded-xl text-sm";
+
+  const captureImage = async () => {
+    if (disabled || cameraBusy) return;
+
+    // Native Android/iOS: NEVER click the HTML file input. That is the reason
+    // Android was opening the upload/file picker instead of the camera.
+    if (IS_NATIVE_APP) {
+      setCameraBusy(true);
+      try {
+        let permissions = await CapacitorCamera.checkPermissions();
+        if (permissions.camera !== "granted") {
+          permissions = await CapacitorCamera.requestPermissions({ permissions: ["camera"] });
+        }
+
+        if (permissions.camera !== "granted") {
+          throw new Error(
+            "Camera permission was denied. Go to Android Settings → Apps → FreshBasket → Permissions → Camera → Allow."
+          );
+        }
+
+        const photo = await CapacitorCamera.getPhoto({
+          source: CameraSource.Camera,
+          resultType: CameraResultType.Uri,
+          quality: 92,
+          allowEditing: false,
+          saveToGallery: false,
+        });
+
+        if (!photo.webPath) throw new Error("Camera did not return an image.");
+
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+        const mime = blob.type || "image/jpeg";
+        const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+
+        onFile(new File(
+          [blob],
+          `freshbasket-camera-${Date.now()}.${extension}`,
+          { type: mime }
+        ));
+      } catch (e: any) {
+        const message = String(e?.message || e || "Unable to open camera.");
+        if (!/cancel/i.test(message)) window.alert(message);
+      } finally {
+        setCameraBusy(false);
+      }
+      return;
+    }
+
+    // Web/PWA: keep the existing browser camera behavior.
+    cameraRef.current?.click();
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
-      <button type="button" disabled={disabled} onClick={() => uploadRef.current?.click()} className={`border font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => uploadRef.current?.click()}
+        className={`border font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}
+      >
         <Upload size={15}/> Upload Image
       </button>
-      <button type="button" disabled={disabled} onClick={() => cameraRef.current?.click()} className={`border border-emerald-200 text-emerald-700 bg-emerald-50 font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}>
-        <Camera size={15}/> Capture Image
+
+      <button
+        type="button"
+        disabled={disabled || cameraBusy}
+        onClick={captureImage}
+        className={`border border-emerald-200 text-emerald-700 bg-emerald-50 font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}
+      >
+        <Camera size={15}/>
+        {cameraBusy ? "Opening camera…" : "Capture Image"}
       </button>
-      <input ref={uploadRef} type="file" accept={accept} className="hidden" disabled={disabled} onChange={e => { const f=e.target.files?.[0]; if(f) onFile(f); e.currentTarget.value=""; }}/>
-      <input ref={cameraRef} type="file" accept={accept} capture="environment" className="hidden" disabled={disabled} onChange={e => { const f=e.target.files?.[0]; if(f) onFile(f); e.currentTarget.value=""; }}/>
+
+      <input
+        ref={uploadRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        disabled={disabled}
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.currentTarget.value = "";
+        }}
+      />
+
+      <input
+        ref={cameraRef}
+        type="file"
+        accept={accept}
+        capture="environment"
+        className="hidden"
+        disabled={disabled}
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.currentTarget.value = "";
+        }}
+      />
     </div>
   );
 }
-
 function useDeliveryRealtime(onEvent: (payload:any) => void, orderId?: string, enabled = true) {
   const callbackRef = useRef(onEvent);
   useEffect(() => { callbackRef.current = onEvent; }, [onEvent]);
@@ -1321,6 +1475,34 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
             "[FreshBasket Push] notification received:",
             notification
           );
+
+          if (typeof window !== "undefined" && IS_NATIVE_APP) {
+            const data = notification?.data || {};
+            const voiceNotification = {
+              ...data,
+              type: data?.type || "",
+              relatedEntity: data?.relatedEntity || "",
+              relatedEntityId: data?.relatedEntityId || "",
+              order: data?.order || data?.orderId || "",
+              message:
+                data?.message ||
+                notification?.body ||
+                notification?.title ||
+                "",
+              read: false,
+            };
+
+            console.log(
+              "[FreshBasket Voice] native push bridge:",
+              JSON.stringify(voiceNotification)
+            );
+
+            window.dispatchEvent(
+              new CustomEvent("freshbasket:native-push-voice", {
+                detail: voiceNotification,
+              })
+            );
+          }
         }
       )
     );
@@ -1660,7 +1842,7 @@ function LocationSelector({
       return;
     }
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
+    fbGetCurrentPosition(
       async (pos) => {
         await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
         setLocating(false);
@@ -1842,15 +2024,60 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
     return "";
   };
 
-  const flushVoiceQueue = () => {
+  const flushVoiceQueue = async () => {
     if (!voiceAlertsEnabled || !voiceUnlocked.current || speakingVoice.current || !pendingVoiceEvents.current.size) return;
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const first = pendingVoiceEvents.current.entries().next().value as [string, any] | undefined;
     if (!first) return;
+
     const [key, n] = first;
     pendingVoiceEvents.current.delete(key);
     const text = voiceText(n);
-    if (!text) { seenVoiceEventKeys.current.add(key); return flushVoiceQueue(); }
+
+    if (!text) {
+      seenVoiceEventKeys.current.add(key);
+      void flushVoiceQueue();
+      return;
+    }
+
+    // Capacitor Android WebView does not reliably expose/use the browser
+    // SpeechSynthesis implementation. Use the native Android TTS engine
+    // inside the native app, while keeping the existing Web Speech path
+    // unchanged for the web app.
+    if (IS_NATIVE_APP) {
+      try {
+        speakingVoice.current = true;
+        console.log("[FreshBasket Voice] native TTS speaking:", text);
+
+        await TextToSpeech.speak({
+          text,
+          lang: "en-IN",
+          rate: 0.95,
+          pitch: 1,
+          volume: 1,
+          queueStrategy: 1,
+        });
+
+        seenVoiceEventKeys.current.add(key);
+        voiceSpokenKeys.current.add(key);
+        persistSpokenKey(key);
+        console.log("[FreshBasket Voice] native TTS started:", key);
+      } catch (error) {
+        console.error("[FreshBasket Voice] native TTS failed:", error);
+        pendingVoiceEvents.current.set(key, n);
+      } finally {
+        speakingVoice.current = false;
+        if (pendingVoiceEvents.current.size) {
+          window.setTimeout(() => void flushVoiceQueue(), 0);
+        }
+      }
+      return;
+    }
+
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      pendingVoiceEvents.current.set(key, n);
+      return;
+    }
+
     try {
       speakingVoice.current = true;
       const utterance = new SpeechSynthesisUtterance(text);
@@ -1860,8 +2087,14 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
         voiceSpokenKeys.current.add(key);
         persistSpokenKey(key);
       };
-      utterance.onend = () => { speakingVoice.current = false; flushVoiceQueue(); };
-      utterance.onerror = () => { speakingVoice.current = false; pendingVoiceEvents.current.set(key, n); };
+      utterance.onend = () => {
+        speakingVoice.current = false;
+        void flushVoiceQueue();
+      };
+      utterance.onerror = () => {
+        speakingVoice.current = false;
+        pendingVoiceEvents.current.set(key, n);
+      };
       window.speechSynthesis.speak(utterance);
     } catch {
       speakingVoice.current = false;
@@ -1876,13 +2109,19 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
     pendingVoiceEvents.current = new Map();
     voiceSpokenKeys.current = loadSpokenKeys();
     voiceInitialized.current = false;
-    voiceUnlocked.current = false;
+    voiceUnlocked.current = IS_NATIVE_APP;
     speakingVoice.current = false;
     if (typeof window === "undefined") return;
     const unlock = () => {
       voiceUnlocked.current = true;
-      window.setTimeout(flushVoiceQueue, 0);
+      window.setTimeout(() => void flushVoiceQueue(), 0);
     };
+
+    // Native Android TTS does not need the browser's user-gesture unlock
+    // requirement. Keep the gesture listeners for web compatibility.
+    if (IS_NATIVE_APP) {
+      window.setTimeout(() => void flushVoiceQueue(), 0);
+    }
     window.addEventListener("pointerdown", unlock, { passive: true });
     window.addEventListener("keydown", unlock);
     window.addEventListener("touchstart", unlock, { passive: true });
@@ -1892,6 +2131,63 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
       window.removeEventListener("touchstart", unlock);
     };
   }, [userId, role]);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !IS_NATIVE_APP ||
+      !userId ||
+      !["admin", "delivery"].includes(role)
+    ) {
+      return;
+    }
+
+    const handleNativePushVoice = (event: Event) => {
+      const n = (event as CustomEvent)?.detail;
+      if (!n) return;
+
+      const type = String(n?.type || "").toLowerCase();
+      const relevant =
+        role === "admin"
+          ? type === "order"
+          : type === "assignment";
+
+      if (!relevant) {
+        console.log(
+          "[FreshBasket Voice] native push ignored for role/type:",
+          role,
+          type
+        );
+        return;
+      }
+
+      const key = eventKey(n);
+      if (
+        seenVoiceEventKeys.current.has(key) ||
+        voiceSpokenKeys.current.has(key) ||
+        pendingVoiceEvents.current.has(key)
+      ) {
+        console.log("[FreshBasket Voice] duplicate push ignored:", key);
+        return;
+      }
+
+      pendingVoiceEvents.current.set(key, n);
+      console.log("[FreshBasket Voice] native push queued:", key);
+      void flushVoiceQueue();
+    };
+
+    window.addEventListener(
+      "freshbasket:native-push-voice",
+      handleNativePushVoice
+    );
+
+    return () => {
+      window.removeEventListener(
+        "freshbasket:native-push-voice",
+        handleNativePushVoice
+      );
+    };
+  }, [userId, role, voiceAlertsEnabled]);
 
   useEffect(() => {
     if (!userId || !["admin", "delivery"].includes(role) || !notifications.length) return;
@@ -1915,7 +2211,7 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
         }
       });
       voiceInitialized.current = true;
-      flushVoiceQueue();
+      void flushVoiceQueue();
       return;
     }
     relevant.forEach((n:any) => {
@@ -1923,7 +2219,7 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
       if (seenVoiceEventKeys.current.has(key) || voiceSpokenKeys.current.has(key) || pendingVoiceEvents.current.has(key)) return;
       pendingVoiceEvents.current.set(key, n);
     });
-    flushVoiceQueue();
+    void flushVoiceQueue();
   }, [notifications, userId, role, voiceAlertsEnabled]);
 
   return { voiceAlertsEnabled, setVoiceAlertsEnabled, flushVoiceQueue };
@@ -1997,7 +2293,7 @@ function Layout({
     return () => window.clearInterval(timer);
   }, [store.user]);
 
-  useEffect(() => { flushVoiceQueue(); }, [voiceAlertsEnabled]);
+  useEffect(() => { void flushVoiceQueue(); }, [voiceAlertsEnabled]);
 
   const markNotificationRead = async (id: string) => {
     try {
@@ -3744,7 +4040,7 @@ function Checkout({
 
     setError("");
 
-    navigator.geolocation.getCurrentPosition(
+    fbGetCurrentPosition(
       (position) => {
         const latitude = Number(position.coords.latitude);
         const longitude = Number(position.coords.longitude);
@@ -4481,7 +4777,7 @@ function ProfilePage({
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    fbGetCurrentPosition(
       (position) => {
         const latitude = Number(position.coords.latitude);
         const longitude = Number(position.coords.longitude);
@@ -5525,7 +5821,7 @@ function DeliveryLocationShare({
       if (enabled && role === "customer") {
         if (!navigator.geolocation) throw new Error("Location is not supported in this browser.");
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+          fbGetCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
         });
         body.latitude = Number(position.coords.latitude);
         body.longitude = Number(position.coords.longitude);
@@ -6819,48 +7115,90 @@ function BarcodeScannerModal({
   onDetected: (value: string) => void;
   onClose: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const controlsRef = useRef<any>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
-  const [status, setStatus] = useState("Starting camera…");
+  const [status, setStatus] = useState(
+    IS_NATIVE_APP ? "Opening native barcode scanner…" : "Starting camera…"
+  );
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+    let listener: any = null;
 
-    const stop = () => {
+    const startNative = async () => {
       try {
-        controlsRef.current?.stop?.();
-      } catch {}
-      controlsRef.current = null;
-      try {
-        (readerRef.current as any)?.reset?.();
-      } catch {}
-      readerRef.current = null;
-      const stream = videoRef.current?.srcObject as MediaStream | null;
-      stream?.getTracks?.().forEach((track) => track.stop());
-      if (videoRef.current) videoRef.current.srcObject = null;
+        setError("");
+        setStatus("Requesting camera access…");
+
+        // Native Android/iOS scanner. This avoids WebView getUserMedia,
+        // which was the direct cause of "Camera permission was denied".
+        const permission = await CapacitorBarcodeScanner.checkPermissions();
+        if (permission.camera !== "granted") {
+          const requested = await CapacitorBarcodeScanner.requestPermissions();
+          if (requested.camera !== "granted") {
+            throw new Error(
+              "Camera permission was denied. Go to Android Settings → Apps → FreshBasket → Permissions → Camera → Allow."
+            );
+          }
+        }
+
+        if (cancelled) return;
+
+        // Use ML Kit's native scanner UI. It owns the camera and returns the
+        // detected barcode directly to the app.
+        const supported = await CapacitorBarcodeScanner.isSupported();
+        if (!supported.supported) {
+          throw new Error("Barcode scanning is not supported on this device.");
+        }
+
+        setStatus("Point the camera at the product barcode");
+
+        const result = await CapacitorBarcodeScanner.scan({
+          formats: [
+            BarcodeFormat.Ean13,
+            BarcodeFormat.Ean8,
+            BarcodeFormat.UpcA,
+            BarcodeFormat.UpcE,
+            BarcodeFormat.Code128,
+            BarcodeFormat.Code39,
+            BarcodeFormat.Itf,
+            BarcodeFormat.QrCode,
+          ],
+          autoZoom: true,
+        });
+
+        if (cancelled) return;
+
+        const value = String(result?.barcodes?.[0]?.rawValue || "").trim();
+        if (!value) {
+          setError("No barcode was detected. Please try again.");
+          setStatus("Scanner closed");
+          return;
+        }
+
+        onDetected(value);
+      } catch (e: any) {
+        if (cancelled) return;
+        const message = String(e?.message || e || "Unable to start barcode scanner.");
+        if (!/cancel/i.test(message)) {
+          setError(message);
+          setStatus("Scanner unavailable");
+        }
+      }
     };
 
-    const start = async () => {
+    const startWeb = async () => {
+      // Preserve the existing browser implementation by mounting the original
+      // ZXing scanner dynamically only on the web.
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
           throw new Error("Camera access is not supported by this browser.");
         }
-        if (!videoRef.current) {
-          throw new Error("Unable to initialize camera preview.");
-        }
-
-        setError("");
         setStatus("Requesting camera access…");
 
         const reader = new BrowserMultiFormatReader();
-        readerRef.current = reader;
+        const video = document.getElementById("fb-barcode-video") as HTMLVideoElement | null;
+        if (!video) throw new Error("Unable to initialize camera preview.");
 
-        // ZXing provides a browser-compatible fallback for browsers that do not
-        // implement the native BarcodeDetector API (including many desktop
-        // Chrome configurations). It decodes common retail formats such as
-        // EAN-13, EAN-8, UPC, Code 128, Code 39 and ITF.
         const controls = await reader.decodeFromConstraints(
           {
             audio: false,
@@ -6870,23 +7208,18 @@ function BarcodeScannerModal({
               height: { ideal: 720 },
             },
           },
-          videoRef.current,
+          video,
           (result) => {
             if (cancelled || !result) return;
             const value = String(result.getText?.() || "").trim();
             if (!value) return;
-            stop();
+            controls.stop();
             onDetected(value);
           },
         );
 
-        if (cancelled) {
-          controls.stop();
-          return;
-        }
-
-        controlsRef.current = controls;
-        setStatus("Point the camera at the product barcode");
+        if (cancelled) controls.stop();
+        else setStatus("Point the camera at the product barcode");
       } catch (e: any) {
         if (!cancelled) {
           setError(
@@ -6899,10 +7232,12 @@ function BarcodeScannerModal({
       }
     };
 
-    start();
+    if (IS_NATIVE_APP) startNative();
+    else startWeb();
+
     return () => {
       cancelled = true;
-      stop();
+      try { listener?.remove?.(); } catch {}
     };
   }, [onDetected]);
 
@@ -6911,29 +7246,51 @@ function BarcodeScannerModal({
       <div className="w-full max-w-lg rounded-3xl bg-white overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
-            <h3 className="font-black text-lg flex items-center gap-2"><ScanLine size={20} /> Scan barcode</h3>
-            <p className="text-xs text-slate-500 mt-1">Use the product packet's printed barcode.</p>
+            <h3 className="font-black text-lg flex items-center gap-2">
+              <ScanLine size={20}/> Scan barcode
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Use the product packet's printed barcode.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100" aria-label="Close scanner"><X size={20} /></button>
+          <button type="button" onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100" aria-label="Close scanner">
+            <X size={20}/>
+          </button>
         </div>
+
         <div className="p-5">
-          <div className="relative overflow-hidden rounded-2xl bg-slate-950 aspect-video flex items-center justify-center">
-            <video ref={videoRef} muted playsInline autoPlay className="w-full h-full object-cover" />
-            <div className="absolute inset-x-10 top-1/2 -translate-y-1/2 border-2 border-white/80 rounded-xl h-24 pointer-events-none" />
-            {!error && <div className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/55 text-white text-sm text-center px-3 py-2">{status}</div>}
-          </div>
+          {!IS_NATIVE_APP && (
+            <div className="relative overflow-hidden rounded-2xl bg-slate-950 aspect-video flex items-center justify-center">
+              <video id="fb-barcode-video" muted playsInline autoPlay className="w-full h-full object-cover"/>
+              <div className="absolute inset-x-10 top-1/2 -translate-y-1/2 border-2 border-white/80 rounded-xl h-24 pointer-events-none"/>
+              {!error && (
+                <div className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/55 text-white text-sm text-center px-3 py-2">
+                  {status}
+                </div>
+              )}
+            </div>
+          )}
+
+          {IS_NATIVE_APP && !error && (
+            <div className="rounded-2xl bg-emerald-50 text-emerald-800 p-4 text-sm font-semibold">
+              {status}
+            </div>
+          )}
+
           {error && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 p-3 text-sm">
               {error}
             </div>
           )}
-          <button type="button" onClick={onClose} className="w-full mt-4 border rounded-xl px-4 py-3 font-bold">Close</button>
+
+          <button type="button" onClick={onClose} className="w-full mt-4 border rounded-xl px-4 py-3 font-bold">
+            Close
+          </button>
         </div>
       </div>
     </div>
   );
 }
-
 function ProductChangeHistoryModal({ product, rows, loading, onClose }: { product:any; rows:any[]; loading:boolean; onClose:()=>void }) {
   const formatValue = (value:any) => {
     if (value === null || value === undefined || value === "") return "—";
@@ -9326,7 +9683,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(
+      fbGetCurrentPosition(
         (position) => {
           const latitude = Number(position.coords.latitude);
           const longitude = Number(position.coords.longitude);
@@ -11432,7 +11789,7 @@ function AdminStoreLocation({ store }: { store: ReturnType<typeof useStore> }) {
   const useCurrentLocation = () => {
     if (!navigator.geolocation) return alert("Location is not supported on this device/browser.");
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
+    fbGetCurrentPosition(
       position => {
         setForm(f => ({ ...f, latitude: position.coords.latitude.toFixed(7), longitude: position.coords.longitude.toFixed(7), accuracy: Number.isFinite(Number(position.coords.accuracy)) ? Math.round(Number(position.coords.accuracy)).toString() : "" }));
         setLocating(false);
@@ -11785,7 +12142,7 @@ function AdminSettings() {
 
   const captureAdminLocation = () => {
     if (!navigator.geolocation) return alert("Location is not supported on this device.");
-    navigator.geolocation.getCurrentPosition(
+    fbGetCurrentPosition(
       p => setProfile(v=>({...v,latitude:p.coords.latitude.toFixed(7),longitude:p.coords.longitude.toFixed(7),locationAccuracy:Number.isFinite(Number(p.coords.accuracy))?Math.round(Number(p.coords.accuracy)).toString():""})),
       () => alert("Unable to access current location. Please enable precise location/GPS permission."),
       {enableHighAccuracy:true,timeout:15000,maximumAge:0}
@@ -12731,7 +13088,7 @@ function PublicApplicationPage({ type }: { type: "STORE" | "DELIVERY" }) {
   const useCurrentLocation = () => {
     if (!navigator.geolocation) return setError("Location is not available in this browser. Enter the location manually.");
     setError("");
-    navigator.geolocation.getCurrentPosition(
+    fbGetCurrentPosition(
       p => { set("latitude", p.coords.latitude.toFixed(7)); set("longitude", p.coords.longitude.toFixed(7)); },
       () => setError("Unable to access current location. You can continue with manual address/location details."),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -13178,7 +13535,7 @@ function Admin({
     return () => window.clearInterval(timer);
   }, [store.user?.role]);
 
-  useEffect(() => { flushVoiceQueue(); }, [voiceAlertsEnabled]);
+  useEffect(() => { void flushVoiceQueue(); }, [voiceAlertsEnabled]);
 
   const markAdminNotificationRead = async (id: string) => {
     try {
