@@ -879,6 +879,12 @@ const evaluateCodRisk = async (customerId: any, storeAdminId: any) => {
   return { state: "COD_ELIGIBLE", label: "COD Eligible", reason: "Your available COD history is within the configured limits.", config: normalized, metrics };
 };
 
+// Compatibility wrapper used by the AI support assistant and other existing callers.
+// Keep evaluateCodRisk as the single source of truth for COD risk evaluation.
+const getCodRiskStatus = async (customerId: any, storeAdminId: any) => {
+  return evaluateCodRisk(customerId, storeAdminId);
+};
+
 const customerCareOrderFilter = async (req: AuthRequest) => {
   // Customer Care is support-wide by design. It may inspect customer/order data,
   // while write operations remain protected by dedicated permissions.
@@ -7993,7 +7999,7 @@ const parseDeliverySlotEndMinutes = (value:any) => {
   const matches=[...text.matchAll(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/ig)];
   if(matches.length<2)return null;
   const toMinutes=(m:any)=>{let h=Number(m[1]),min=Number(m[2]||0),ampm=String(m[3]||"").toUpperCase();if(ampm){if(h===12)h=0;if(ampm==="PM")h+=12;}if(h<0||h>23||min<0||min>59)return null;return h*60+min;};
-  const values=matches.slice(0,2).map(toMinutes).filter((x:any)=>x!=null);
+  const values=matches.slice(0,2).map(toMinutes).filter((x:any): x is number => x != null);
   return values.length===2?Math.max(...values):null;
 };
 const deliveryLocalMinutes = (date:any) => {
@@ -8768,7 +8774,7 @@ app.get("/api/admin/store-demand-heatmap",auth,mainAdminOnly,async(req:AuthReque
       const c=cells.get(key)||{id:key,storeAdminId:owner||null,latitude:Number(cellLat.toFixed(5)),longitude:Number(cellLng.toFixed(5)),orderCount:0,customerIds:new Set<string>()};
       c.orderCount+=1;if(order.customer)c.customerIds.add(String(order.customer));cells.set(key,c);
     }
-    const cellRows=[...cells.values()].map(c=>{const {customerIds,...row}=c;return {...row,uniqueCustomers:customerIds.size,intensity:Math.min(1,c.orderCount/Math.max(1,...cells.values().map((x:any)=>x.orderCount)))};});
+    const cellRows=Array.from(cells.values()).map((c:any)=>{const {customerIds,...row}=c;return {...row,uniqueCustomers:customerIds.size,intensity:Math.min(1,c.orderCount/Math.max(1,...Array.from(cells.values()).map((x:any)=>x.orderCount)))};});
     const storeRows=[...storeStats.values()].sort((a,b)=>b.orders-a.orders);
     return res.json({success:true,data:{from:from.toISOString(),to:to.toISOString(),bucketSizeKm:0.5,orders:orders.length,mappedOrders,unmappedOrders,cells:cellRows,stores:storeRows,center:storeRows.find((s:any)=>isValidGeo(s.latitude,s.longitude))||null}});
   }catch(e:any){return res.status(500).json({success:false,message:e?.message||"Unable to load store demand heatmap"});}
@@ -9729,9 +9735,9 @@ app.get("/api/orders/:id/delivery-location-share", auth, roleAny("customer", "de
     if ((role === "customer" && userId !== String(order.user)) || (role === "delivery" && userId !== String(order.deliveryPartner || ""))) return res.status(403).json({success:false,message:"Forbidden"});
     const now = new Date();
     await DeliveryLocationShare.updateMany({orderId:order._id,enabled:true,expiresAt:{$lte:now}},{$set:{enabled:false}});
-    const own = await DeliveryLocationShare.findOne({orderId:order._id,sharedBy:role,enabled:true,expiresAt:{$gt:now}}).lean();
+    const own:any = await DeliveryLocationShare.findOne({orderId:order._id,sharedBy:role,enabled:true,expiresAt:{$gt:now}}).lean();
     const otherRole = role === "customer" ? "delivery" : "customer";
-    const other = await DeliveryLocationShare.findOne({orderId:order._id,sharedBy:otherRole,enabled:true,expiresAt:{$gt:now}}).lean();
+    const other:any = await DeliveryLocationShare.findOne({orderId:order._id,sharedBy:otherRole,enabled:true,expiresAt:{$gt:now}}).lean();
     return res.json({success:true,data:{own:own?{enabled:true,sharedBy:own.sharedBy,expiresAt:own.expiresAt,remainingSeconds:Math.max(0,Math.round((new Date(own.expiresAt).getTime()-Date.now())/1000))}:null,other:other?{enabled:true,sharedBy:other.sharedBy,latitude:other.latitude,longitude:other.longitude,accuracy:other.accuracy,expiresAt:other.expiresAt,remainingSeconds:Math.max(0,Math.round((new Date(other.expiresAt).getTime()-Date.now())/1000))}:null}});
   } catch(e) { return res.status(500).json({success:false,message:"Unable to load location sharing status."}); }
 });
@@ -10936,12 +10942,14 @@ app.get("/api/admin/safe-view-as/session", async (req:any,res) => {
       if (!data) return res.status(404).json({success:false,message:"Customer preview unavailable"});
       return res.json({success:true,data:{mode:"customer",readOnly:true,sessionId:String(decoded.sessionId),expiresAt:new Date(Number(decoded.exp)*1000).toISOString(),...data}});
     }
-    const storeFilter:any = {$or:[{storeAdmin:target._id},{storeAdmin:String(target._id)}]};
-    const [products,location] = await Promise.all([
+    const safeViewTarget:any = target;
+    const storeFilter:any = {$or:[{storeAdmin:safeViewTarget._id},{storeAdmin:String(safeViewTarget._id)}]};
+    const [products,rawLocation] = await Promise.all([
       Product.find({...storeFilter,active:{$ne:false}}).select("name brand unit price mrp stock image category variants active").sort({createdAt:-1}).limit(100).lean(),
-      StoreLocation.findOne({storeAdmin:target._id}).select("name image address category description latitude longitude phone email openingTime closingTime").lean()
+      StoreLocation.findOne({storeAdmin:safeViewTarget._id}).select("name image address category description latitude longitude phone email openingTime closingTime").lean()
     ]);
-    return res.json({success:true,data:{mode:"store",readOnly:true,sessionId:String(decoded.sessionId),expiresAt:new Date(Number(decoded.exp)*1000).toISOString(),store:{_id:target._id,name:location?.name||target.name,email:location?.email||target.email,phone:location?.phone||target.phone,storeCategory:location?.category||target.storeCategory||"Grocery",image:location?.image||target.storeImage||"",address:location?.address||""},products}});
+    const location:any = rawLocation;
+    return res.json({success:true,data:{mode:"store",readOnly:true,sessionId:String(decoded.sessionId),expiresAt:new Date(Number(decoded.exp)*1000).toISOString(),store:{_id:safeViewTarget._id,name:location?.name||safeViewTarget.name,email:location?.email||safeViewTarget.email,phone:location?.phone||safeViewTarget.phone,storeCategory:location?.category||safeViewTarget.storeCategory||"Grocery",image:location?.image||safeViewTarget.storeImage||"",address:location?.address||""},products}});
   } catch(e:any) { return res.status(500).json({success:false,message:"Unable to load safe view session"}); }
 });
 
