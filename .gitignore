@@ -2,3 +2,4 @@ node_modules
 dist
 .env
 *.log
+client/android_incomplete_backup/
