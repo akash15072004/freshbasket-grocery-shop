@@ -253,6 +253,16 @@ const adminHeaders = () => {
     : {};
 };
 
+// POINT 43 — additive offline-safe Delivery Partner queue.
+type DeliveryOfflineAction={id:string;key:string;method:"post"|"patch"|"put";url:string;data?:any;createdAt:number;attempts:number};
+const DELIVERY_OFFLINE_QUEUE_KEY="freshbasket_delivery_offline_queue_v1";
+const DELIVERY_OFFLINE_ORDERS_KEY="freshbasket_delivery_offline_orders_v1";
+const deliveryOfflineRead=():DeliveryOfflineAction[]=>{try{const x=JSON.parse(localStorage.getItem(DELIVERY_OFFLINE_QUEUE_KEY)||"[]");return Array.isArray(x)?x:[]}catch{return[]}};
+const deliveryOfflineWrite=(q:DeliveryOfflineAction[])=>{try{localStorage.setItem(DELIVERY_OFFLINE_QUEUE_KEY,JSON.stringify(q))}catch{}};
+const deliveryOfflineIsNetworkError=(e:any)=>!e?.response&&(!navigator.onLine||/network|timeout|failed|offline/i.test(String(e?.message||"")));
+const deliveryOfflineEnqueue=(a:Omit<DeliveryOfflineAction,"id"|"createdAt"|"attempts">)=>{const q=deliveryOfflineRead();if(!q.some(x=>x.key===a.key)){q.push({...a,id:`${Date.now()}_${Math.random().toString(36).slice(2,9)}`,createdAt:Date.now(),attempts:0});deliveryOfflineWrite(q)}window.dispatchEvent(new Event("fb-delivery-offline-queue-changed"))};
+const deliveryOfflineRemove=(id:string)=>deliveryOfflineWrite(deliveryOfflineRead().filter(x=>x.id!==id));
+
 function money(value: number) {
   return `₹${Number(value || 0).toLocaleString("en-IN")}`;
 }
@@ -9650,6 +9660,10 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDetails, setRejectDetails] = useState("");
   const [deliveryProfile, setDeliveryProfile] = useState<any>(null);
+  const [isDeliveryOnline,setIsDeliveryOnline]=useState<boolean>(()=>typeof navigator==="undefined"?true:navigator.onLine);
+  const [deliverySyncing,setDeliverySyncing]=useState(false);
+  const [deliveryPendingSync,setDeliveryPendingSync]=useState(0);
+  const [deliverySyncError,setDeliverySyncError]=useState("");
   const [deliveryNotifications, setDeliveryNotifications] = useState<any[]>([]);
   const [deliveryUnreadNotifications, setDeliveryUnreadNotifications] = useState(0);
   const [showDeliveryNotifications, setShowDeliveryNotifications] = useState(false);
@@ -9658,6 +9672,10 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   const { voiceAlertsEnabled: deliveryVoiceAlertsEnabled, setVoiceAlertsEnabled: setDeliveryVoiceAlertsEnabled, flushVoiceQueue: flushDeliveryVoiceQueue } = useRoleNotificationVoiceAlerts(store, deliveryNotifications);
   const lastLiveLocationUpdate = useRef(0);
   const activeDeliveryRef = useRef(false);
+
+  const refreshDeliveryOfflineQueue=()=>setDeliveryPendingSync(deliveryOfflineRead().length);
+  const queueDeliveryAction=(method:"post"|"patch"|"put",url:string,data:any,key:string)=>{deliveryOfflineEnqueue({method,url,data,key});refreshDeliveryOfflineQueue()};
+  const flushDeliveryOfflineQueue=async()=>{if(store.user?.role!=="delivery"||!navigator.onLine||deliverySyncing)return;const q=deliveryOfflineRead();if(!q.length){refreshDeliveryOfflineQueue();return}setDeliverySyncing(true);setDeliverySyncError("");try{for(const a of [...q]){try{await axios.request({method:a.method,url:a.url,data:a.data,headers:adminHeaders(),timeout:20000});deliveryOfflineRemove(a.id)}catch(e:any){const cur=deliveryOfflineRead();deliveryOfflineWrite(cur.map(x=>x.id===a.id?{...x,attempts:Number(x.attempts||0)+1}:x));if(deliveryOfflineIsNetworkError(e)||!navigator.onLine)break}}refreshDeliveryOfflineQueue();if(!deliveryOfflineRead().length){await Promise.all([load(),loadAssignments(),loadReplacements(),loadDeliveryProfile()])}else setDeliverySyncError("Some offline updates are still pending. They will retry automatically.")}finally{setDeliverySyncing(false);refreshDeliveryOfflineQueue()}};
 
   const loadReplacements = async () => { try { const r=await axios.get(API+"/delivery/replacement-requests",{headers:adminHeaders()}); setReplacementRequests(r.data.data||[]); } catch(e){ console.error(e); } };
   const loadAssignments = async () => { try { const r=await axios.get(API+"/delivery/assignments",{headers:adminHeaders()}); setAssignments(r.data.data||[]); } catch(e){ console.error(e); } };
@@ -9695,17 +9713,19 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         headers: adminHeaders(),
       });
       const data = r.data.data;
-      setOrders(
-        Array.isArray(data)
-          ? data
-          : Array.isArray(data?.orders)
-          ? data.orders
-          : []
-      );
-      const list = Array.isArray(data) ? data : Array.isArray(data?.orders) ? data.orders : [];
+      const freshOrders = Array.isArray(data) ? data : Array.isArray(data?.orders) ? data.orders : [];
+      setOrders(freshOrders);
+      try { localStorage.setItem(DELIVERY_OFFLINE_ORDERS_KEY, JSON.stringify(freshOrders)); } catch {}
+      const list = freshOrders;
       list.forEach((o: any) => { loadPickupForOrder(String(o._id)); loadPaymentSettingsForOrder(String(o._id)); });
     } catch (e: any) {
-      setError(e?.response?.data?.message || "Unable to load deliveries.");
+      if (deliveryOfflineIsNetworkError(e)) {
+        try {
+          const cached = JSON.parse(localStorage.getItem(DELIVERY_OFFLINE_ORDERS_KEY) || "[]");
+          if (Array.isArray(cached) && cached.length) { setOrders(cached); setError(""); }
+          else setError("You are offline. No previously synced delivery orders are available on this device yet.");
+        } catch { setError("You are offline. Delivery orders will appear when internet returns."); }
+      } else { setError(e?.response?.data?.message || "Unable to load deliveries."); }
     } finally {
       setLoading(false);
     }
@@ -9749,6 +9769,11 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
 
   useEffect(() => {
     if (store.user?.role !== "delivery") return;
+    refreshDeliveryOfflineQueue();
+    const onOnline=()=>{setIsDeliveryOnline(true);setDeliverySyncError("");window.setTimeout(()=>void flushDeliveryOfflineQueue(),300)};
+    const onOffline=()=>setIsDeliveryOnline(false);
+    const onQueueChanged=()=>refreshDeliveryOfflineQueue();
+    window.addEventListener("online",onOnline);window.addEventListener("offline",onOffline);window.addEventListener("fb-delivery-offline-queue-changed",onQueueChanged);
     load();
     loadReplacements();
     loadAssignments();
@@ -9794,13 +9819,16 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
     const pickupTimer = window.setInterval(() => loadPickupLocation(), 15000);
     const replacementTimer = window.setInterval(() => loadReplacements(), 15000);
     const assignmentTimer = window.setInterval(() => loadAssignments(), 10000);
+    const offlineSyncTimer=window.setInterval(()=>{if(navigator.onLine)void flushDeliveryOfflineQueue()},30000);
 
     return () => {
+      window.removeEventListener("online",onOnline);window.removeEventListener("offline",onOffline);window.removeEventListener("fb-delivery-offline-queue-changed",onQueueChanged);
       navigator.geolocation.clearWatch(watchId);
       window.clearInterval(orderTimer);
       window.clearInterval(pickupTimer);
       window.clearInterval(replacementTimer);
       window.clearInterval(assignmentTimer);
+      window.clearInterval(offlineSyncTimer);
       window.clearInterval(deliveryNotificationTimer);
       window.clearInterval(routePlanTimer);
       axios.patch(API + "/delivery/status", { status: "OFFLINE" }, { headers: adminHeaders() }).catch(() => {});
@@ -9911,7 +9939,9 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
           await load();
           alert("Delivery proof uploaded successfully.");
         } catch (e: any) {
-          alert(e?.response?.data?.message || e?.message || "Unable to upload delivery proof");
+          const image=String(reader.result||"");
+          if(deliveryOfflineIsNetworkError(e)){queueDeliveryAction("post",API+"/delivery/orders/"+id+"/proof",{image},`proof:${id}:${image.slice(0,80)}`);alert("No internet connection. Delivery proof is saved and will sync automatically when internet returns.")}
+          else alert(e?.response?.data?.message||e?.message||"Unable to upload delivery proof");
         } finally {
           setProofUploading(null);
         }
@@ -9968,8 +9998,9 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
     }catch{setProofUploading(null);}
   };
   const updateReplacementStatus = async (id:string,status:string,proofImage?:string) => {
-    try{const payload:any={status}; if(status==="COMPLETED" && proofImage) payload.proofImage=proofImage; const response=await axios.patch(API+"/delivery/replacement-requests/"+id,payload,{headers:adminHeaders()}); if(!response?.data?.success) throw new Error(response?.data?.message||"Replacement delivery update failed"); await loadReplacements();}
-    catch(e:any){alert(e?.response?.data?.message||e?.message||"Unable to update replacement delivery");}
+    const payload:any={status}; if(status==="COMPLETED" && proofImage) payload.proofImage=proofImage;
+    try{const response=await axios.patch(API+"/delivery/replacement-requests/"+id,payload,{headers:adminHeaders()}); if(!response?.data?.success) throw new Error(response?.data?.message||"Replacement delivery update failed"); await loadReplacements();}
+    catch(e:any){if(deliveryOfflineIsNetworkError(e)){queueDeliveryAction("patch",API+"/delivery/replacement-requests/"+id,payload,`replacement:${id}:${status}:${proofImage||""}`);setReplacementRequests((current:any[])=>current.map((item:any)=>String(item._id)===String(id)?{...item,status}:item));alert("Offline. Replacement update is saved as Pending Sync and will sync automatically.")}else alert(e?.response?.data?.message||e?.message||"Unable to update replacement delivery");}
   };
 
   const handleOutForDelivery = async (id: string) => {
@@ -9990,8 +10021,9 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         { headers: adminHeaders() }
       );
       await load();
-    } catch (e: any) {
-      alert(e?.response?.data?.message || "Unable to update order status.");
+    } catch(e:any) {
+      if(deliveryOfflineIsNetworkError(e)){queueDeliveryAction("patch",API+`/orders/${id}/status`,{status},`status:${id}:${status}`);setOrders((current:any[])=>current.map((o:any)=>String(o._id)===String(id)?{...o,status}:o));alert("Offline. Status saved as Pending Sync and will be sent automatically when internet returns.")}
+      else alert(e?.response?.data?.message||"Unable to update order status.");
     }
   };
 
@@ -10043,6 +10075,8 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   if (store.user?.role !== "delivery") {
     return <NavigateToLogin />;
   }
+
+  const offlineQueueCount=deliveryPendingSync;
 
   // Active delivery count represents orders that this authenticated partner has
   // accepted and that are not terminal. Navigation is intentionally narrower
@@ -10153,6 +10187,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
 
   return (
     <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-delivery-shell">
+      {(!isDeliveryOnline||offlineQueueCount>0||deliverySyncing)&&<div className={`sticky top-0 z-[80] border-b px-4 py-2.5 text-sm font-bold ${!isDeliveryOnline?"bg-red-50 text-red-700 border-red-200":deliverySyncing?"bg-amber-50 text-amber-700 border-amber-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}><div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2"><span>{!isDeliveryOnline?"⚠️ You are offline. Delivery actions will be saved locally and synced automatically when internet returns.":deliverySyncing?"Syncing pending delivery updates...":`✓ Internet restored · ${offlineQueueCount} update${offlineQueueCount===1?"":"s"} pending sync`}</span>{isDeliveryOnline&&offlineQueueCount>0&&<button onClick={()=>void flushDeliveryOfflineQueue()} disabled={deliverySyncing} className="underline font-black">Sync now</button>}</div>{deliverySyncError&&<div className="max-w-6xl mx-auto text-xs mt-1 font-semibold">{deliverySyncError}</div>}</div>}
       <header className="bg-white border-b sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
