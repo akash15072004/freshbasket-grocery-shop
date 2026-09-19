@@ -12,6 +12,7 @@ import {
 import axios from "axios";
 import { App as CapacitorApp } from "@capacitor/app";
 import { PushNotifications } from "@capacitor/push-notifications";
+import { Printer as CapacitorPrinter } from "@capgo/capacitor-printer";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, Marker, useMap, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -87,7 +88,12 @@ import {
 const IS_NATIVE_APP =
   Boolean((window as any).Capacitor?.isNativePlatform?.());
 
-const API_BASE = import.meta.env.VITE_API_URL || (IS_NATIVE_APP ? "https://freshbasket-grocery-shop.onrender.com" : window.location.hostname === "localhost" ? "http://localhost:5000" : "https://freshbasket-grocery-shop.onrender.com");
+const API_BASE = IS_NATIVE_APP
+  ? "https://freshbasket-grocery-shop.onrender.com"
+  : import.meta.env.VITE_API_URL ||
+    (window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "https://freshbasket-grocery-shop.onrender.com");
 
 const API = `${API_BASE}/api`;
 
@@ -1234,51 +1240,138 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
       }
     };
 
-    const setup = async () => {
-      try {
-        const permission = await PushNotifications.checkPermissions();
-        let receive = permission.receive;
-        if (receive !== "granted") {
-          const requested = await PushNotifications.requestPermissions();
-          receive = requested.receive;
-        }
-        if (receive !== "granted") return;
+   const setup = async () => {
+  try {
+    console.log("[FreshBasket Push] setup started");
 
-        handles.push(await PushNotifications.addListener("registration", async (token) => {
-          const value = String(token?.value || "").trim();
-          if (!value || !active) return;
-          localStorage.setItem("fb-fcm-token", value);
-          try {
-            await axios.post(API + "/push/register", {
+    const permission = await PushNotifications.checkPermissions();
+    console.log("[FreshBasket Push] permission:", permission);
+
+    let receive = permission.receive;
+
+    if (receive !== "granted") {
+      const requested = await PushNotifications.requestPermissions();
+      receive = requested.receive;
+      console.log("[FreshBasket Push] requested permission:", requested);
+    }
+
+    if (receive !== "granted") {
+      console.warn("[FreshBasket Push] notification permission not granted");
+      return;
+    }
+
+    handles.push(
+      await PushNotifications.addListener("registration", async (token) => {
+       console.log("[FreshBasket Push] FCM TOKEN:", token?.value);
+
+        const value = String(token?.value || "").trim();
+
+        if (!value) {
+          console.warn("[FreshBasket Push] registration event returned empty token");
+          return;
+        }
+
+        if (!active) {
+          console.warn("[FreshBasket Push] registration received after cleanup");
+          return;
+        }
+
+        localStorage.setItem("fb-fcm-token", value);
+        console.log("[FreshBasket Push] FCM token saved");
+
+        try {
+          const response = await axios.post(
+            API + "/push/register",
+            {
               token: value,
               platform: "android",
               appId: "com.freshbasket.grocery",
-            }, { headers: adminHeaders() });
-          } catch {}
-        }));
+            },
+            { headers: adminHeaders() }
+          );
 
-        handles.push(await PushNotifications.addListener("registrationError", (error) => {
-          console.warn("FreshBasket push registration error", error);
-        }));
+          console.log(
+            "[FreshBasket Push] token registered with server:",
+            response?.status
+          );
+        } catch (error: any) {
+          console.error(
+            "[FreshBasket Push] server token registration failed:",
+            error?.response?.status,
+            error?.response?.data || error?.message || error
+          );
+        }
+      })
+    );
 
-        handles.push(await PushNotifications.addListener("pushNotificationReceived", () => {
-          // Existing in-app notification polling remains authoritative.
-        }));
+    handles.push(
+      await PushNotifications.addListener("registrationError", (error) => {
+        console.error(
+          "[FreshBasket Push] REGISTRATION ERROR:",
+          error
+        );
+      })
+    );
 
-        handles.push(await PushNotifications.addListener("pushNotificationActionPerformed", (event: any) => {
+    handles.push(
+      await PushNotifications.addListener(
+        "pushNotificationReceived",
+        (notification) => {
+          console.log(
+            "[FreshBasket Push] notification received:",
+            notification
+          );
+        }
+      )
+    );
+
+    handles.push(
+      await PushNotifications.addListener(
+        "pushNotificationActionPerformed",
+        (event: any) => {
+          console.log(
+            "[FreshBasket Push] notification action:",
+            event
+          );
+
           const data = event?.notification?.data || {};
-          openDeepLink(data?.deepLink || data?.url || data?.route || "");
-        }));
 
-        handles.push(await CapacitorApp.addListener("appUrlOpen", (event) => {
-          openDeepLink(event?.url || "");
-        }));
+          openDeepLink(
+            data?.deepLink ||
+            data?.url ||
+            data?.route ||
+            ""
+          );
+        }
+      )
+    );
 
-        await PushNotifications.register();
-      } catch (error) {
-        console.warn("FreshBasket native push setup skipped", error);
-      }
-    };
+    handles.push(
+      await CapacitorApp.addListener("appUrlOpen", (event) => {
+        console.log(
+          "[FreshBasket Push] app URL opened:",
+          event?.url
+        );
+
+        openDeepLink(event?.url || "");
+      })
+    );
+
+    console.log("[FreshBasket Push] calling PushNotifications.register()");
+
+    await PushNotifications.register();
+
+    console.log("[FreshBasket Push] register() completed");
+  } catch (error: any) {
+    console.error(
+      "[FreshBasket Push] setup failed:",
+      error?.message || error,
+      error
+    );
+  }
+};
+
+void setup();
 
     void setup();
     return () => {
@@ -6259,19 +6352,23 @@ function Invoice({
           body * { visibility: hidden !important; }
           .invoice-print, .invoice-print * { visibility: visible !important; }
           .invoice-print {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 138.89% !important;
-            max-width: none !important;
-            margin: 0 !important;
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            max-width: 210mm !important;
+            box-sizing: border-box !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
             box-shadow: none !important;
             border: 0 !important;
             border-radius: 0 !important;
-            zoom: 0.72 !important;
+            zoom: 1 !important;
+            transform: none !important;
             height: auto !important;
             min-height: 0 !important;
-            page-break-after: avoid !important;
+            overflow: visible !important;
+            page-break-after: auto !important;
           }
           .no-print { display: none !important; }
           .invoice-premium {
@@ -6279,9 +6376,38 @@ function Invoice({
             print-color-adjust: exact !important;
             font-size: 11px !important;
             line-height: 1.28 !important;
+            width: 100% !important;
+            max-width: 210mm !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
+          }
+
+          .invoice-premium *,
+          .invoice-premium *::before,
+          .invoice-premium *::after {
+            box-sizing: border-box !important;
+            max-width: 100% !important;
+          }
+
+          .invoice-premium table {
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: fixed !important;
+            word-break: break-word !important;
+          }
+
+          .invoice-premium img {
+            max-width: 100% !important;
+            height: auto !important;
+          }
+
+          .invoice-premium .flex,
+          .invoice-premium .grid {
+            max-width: 100% !important;
           }
           .invoice-premium .invoice-section,
-          .invoice-premium .invoice-note {
+          .invoice-premium .invoice-note,
+          .invoice-premium .invoice-total-box {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
@@ -6293,7 +6419,17 @@ function Invoice({
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          .invoice-premium .invoice-total-box {
+
+          /* Keep the complete invoice intact while allowing long invoices
+             to continue naturally onto the next A4 page. */
+          .invoice-premium .invoice-items table {
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+          }
+          .invoice-premium thead {
+            display: table-header-group !important;
+          }
+          .invoice-premium tr {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
@@ -6359,6 +6495,10 @@ function Invoice({
         }
         @media (max-width: 640px) {
           .invoice-premium .invoice-mobile-pad { padding-left: 1.25rem !important; padding-right: 1.25rem !important; }
+          .invoice-premium { width: 100%; max-width: 100%; overflow: hidden; }
+          .invoice-premium .overflow-x-auto { max-width: 100%; }
+          .invoice-premium table { min-width: 0 !important; }
+          .invoice-premium th, .invoice-premium td { word-break: break-word; overflow-wrap: anywhere; }
         }
       `}</style>
 
@@ -6372,7 +6512,17 @@ function Invoice({
           </Link>
 
           <button
-            onClick={() => window.print()}
+            onClick={async () => {
+              try {
+                if (IS_NATIVE_APP) {
+                  await CapacitorPrinter.printWebView({ name: `FreshBasket Invoice ${invoiceNumber}` });
+                  return;
+                }
+              } catch (error) {
+                console.warn("FreshBasket native invoice print failed, falling back to browser print", error);
+              }
+              window.print();
+            }}
             className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 hover:bg-emerald-700"
           >
             <Printer size={17} />

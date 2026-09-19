@@ -14,6 +14,7 @@
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2",
     "@capacitor/push-notifications": "^8.1.2",
+    "@capgo/capacitor-printer": "^8.1.4",
     "@vitejs/plugin-react": "^4.3.4",
     "@zxing/browser": "^0.2.1",
     "axios": "^1.7.9",
