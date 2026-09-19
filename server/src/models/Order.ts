@@ -20,6 +20,11 @@ const schema = new Schema(
       ref: "User",
       default: null,
     },
+    storeAdmin: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     items: [itemSchema],
     subtotal: Number,
     discount: Number,
@@ -50,11 +55,30 @@ const schema = new Schema(
         timestamp: { type: Date, required: true },
       },
     ],
+
+    // Delivery operations / payout fields are defined permanently in the
+    // Order model so Mongoose always persists them after a server restart.
+    deliveryAssignedAt: { type: Date, default: null },
+    deliveryStartedAt: { type: Date, default: null },
+    deliveryPayout: { type: Number, default: 0, min: 0 },
+    deliveryPayoutStatus: {
+      type: String,
+      enum: ["PENDING", "ELIGIBLE", "FINALIZED", "PROCESSING", "PAID", "ON_HOLD", "CANCELLED"],
+      default: "PENDING",
+    },
+    performanceIncentive: { type: Number, default: 0, min: 0 },
+    deliveryProof: {
+      image: { type: String, default: "" },
+      uploadedAt: { type: Date, default: null },
+      completedAt: { type: Date, default: null },
+    },
+    deliveredAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 schema.index({ deliveryPartner: 1, status: 1, createdAt: -1 });
 schema.index({ user: 1, createdAt: -1 });
+schema.index({ storeAdmin: 1, status: 1, createdAt: -1 });
 
-export default mongoose.model("Order", schema);
+export default mongoose.models.Order || mongoose.model("Order", schema);

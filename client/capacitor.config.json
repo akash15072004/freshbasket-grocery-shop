@@ -1,0 +1,6 @@
+{
+  "appId": "com.freshbasket.grocery",
+  "appName": "FreshBasket",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

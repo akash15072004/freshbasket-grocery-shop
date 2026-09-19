@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1015862509866",
+    "project_id": "freshbasket-24d28",
+    "storage_bucket": "freshbasket-24d28.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1015862509866:android:612033affdf0d307171e53",
+        "android_client_info": {
+          "package_name": "com.freshbasket.grocery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAo7OfimJD_o1ASZylj40n5zlW5M8Mndso"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
