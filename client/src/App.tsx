@@ -90,7 +90,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-const IS_NATIVE_APP = Capacitor.getPlatform() !== "web";
+const IS_NATIVE_APP = Capacitor.isNativePlatform();
 const IS_ANDROID_APP = Capacitor.getPlatform() === "android";
 
 const API_BASE = IS_NATIVE_APP
@@ -1034,15 +1034,132 @@ function ImagePickerButtons({
   compact?: boolean;
 }) {
   const uploadRef = useRef<HTMLInputElement | null>(null);
-  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [cameraBusy, setCameraBusy] = useState(false);
+  const [webCameraOpen, setWebCameraOpen] = useState(false);
+  const [webCameraError, setWebCameraError] = useState("");
   const button = compact ? "px-3 py-2 rounded-lg text-xs" : "px-3 py-2.5 rounded-xl text-sm";
+
+  const stopWebCamera = () => {
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+    setWebCameraOpen(false);
+    setWebCameraError("");
+  };
+
+  useEffect(() => {
+    return () => {
+      const stream = streamRef.current;
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!webCameraOpen || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    videoRef.current.play().catch(() => undefined);
+  }, [webCameraOpen]);
+
+  const openWebCamera = async () => {
+    if (disabled || cameraBusy) return;
+
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setWebCameraError(
+        "Camera is unavailable here. Open FreshBasket using HTTPS (or localhost) and allow camera permission in your browser."
+      );
+      setWebCameraOpen(true);
+      return;
+    }
+
+    setCameraBusy(true);
+    setWebCameraError("");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      streamRef.current = stream;
+      setWebCameraOpen(true);
+    } catch (e: any) {
+      const name = String(e?.name || "");
+      let message = "Unable to open camera. Please allow camera permission and try again.";
+
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        message = "Camera permission is blocked. Allow Camera permission for this FreshBasket site in browser settings, then try again.";
+      } else if (name === "NotFoundError") {
+        message = "No camera was found on this device.";
+      } else if (name === "NotReadableError") {
+        message = "The camera is already being used by another app or browser tab. Close it and try again.";
+      } else if (name === "OverconstrainedError") {
+        message = "The selected camera mode is unavailable. Please try again.";
+      } else if (e?.message) {
+        message = String(e.message);
+      }
+
+      setWebCameraError(message);
+      setWebCameraOpen(true);
+    } finally {
+      setCameraBusy(false);
+    }
+  };
+
+  const captureWebPhoto = () => {
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return;
+
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      setWebCameraError("Camera preview is not ready yet. Please wait a moment and try again.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      setWebCameraError("Unable to capture the camera image.");
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(blob => {
+      if (!blob) {
+        setWebCameraError("Unable to create the captured image.");
+        return;
+      }
+
+      const extension = blob.type.includes("png") ? "png" : "jpg";
+      const file = new File(
+        [blob],
+        `freshbasket-camera-${Date.now()}.${extension}`,
+        { type: blob.type || "image/jpeg" },
+      );
+
+      stopWebCamera();
+      onFile(file);
+    }, "image/jpeg", 0.92);
+  };
 
   const captureImage = async () => {
     if (disabled || cameraBusy) return;
 
-    // Native Android/iOS: NEVER click the HTML file input. That is the reason
-    // Android was opening the upload/file picker instead of the camera.
+    // Native Android/iOS: use the real Capacitor camera plugin.
     if (IS_NATIVE_APP) {
       setCameraBusy(true);
       try {
@@ -1059,24 +1176,28 @@ function ImagePickerButtons({
 
         const photo = await CapacitorCamera.getPhoto({
           source: CameraSource.Camera,
-          resultType: CameraResultType.Uri,
+          resultType: CameraResultType.Base64,
           quality: 92,
           allowEditing: false,
           saveToGallery: false,
         });
 
-        if (!photo.webPath) throw new Error("Camera did not return an image.");
+        if (!photo.base64String) {
+          throw new Error("Camera did not return an image.");
+        }
 
-        const response = await fetch(photo.webPath);
-        const blob = await response.blob();
-        const mime = blob.type || "image/jpeg";
-        const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+        const mime = photo.format === "png" ? "image/png" : "image/jpeg";
+        const binary = atob(photo.base64String);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-        onFile(new File(
-          [blob],
-          `freshbasket-camera-${Date.now()}.${extension}`,
-          { type: mime }
-        ));
+        onFile(
+          new File(
+            [bytes],
+            `freshbasket-camera-${Date.now()}.${photo.format === "png" ? "png" : "jpg"}`,
+            { type: mime },
+          )
+        );
       } catch (e: any) {
         const message = String(e?.message || e || "Unable to open camera.");
         if (!/cancel/i.test(message)) window.alert(message);
@@ -1086,58 +1207,102 @@ function ImagePickerButtons({
       return;
     }
 
-    // Web/PWA: keep the existing browser camera behavior.
-    cameraRef.current?.click();
+    // Web/PWA: use the browser camera stream instead of <input type="file" capture>.
+    await openWebCamera();
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => uploadRef.current?.click()}
-        className={`border font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}
-      >
-        <Upload size={15}/> Upload Image
-      </button>
+    <>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => uploadRef.current?.click()}
+          className={`border font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}
+        >
+          <Upload size={15}/> Upload Image
+        </button>
 
-      <button
-        type="button"
-        disabled={disabled || cameraBusy}
-        onClick={captureImage}
-        className={`border border-emerald-200 text-emerald-700 bg-emerald-50 font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}
-      >
-        <Camera size={15}/>
-        {cameraBusy ? "Opening camera…" : "Capture Image"}
-      </button>
+        <button
+          type="button"
+          disabled={disabled || cameraBusy}
+          onClick={captureImage}
+          className={`border border-emerald-200 text-emerald-700 bg-emerald-50 font-bold inline-flex items-center gap-2 ${button} disabled:opacity-50`}
+        >
+          <Camera size={15}/>
+          {cameraBusy ? "Opening camera…" : "Capture Image"}
+        </button>
 
-      <input
-        ref={uploadRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        disabled={disabled}
-        onChange={e => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-          e.currentTarget.value = "";
-        }}
-      />
+        <input
+          ref={uploadRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          disabled={disabled}
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+            e.currentTarget.value = "";
+          }}
+        />
+      </div>
 
-      <input
-        ref={cameraRef}
-        type="file"
-        accept={accept}
-        capture="environment"
-        className="hidden"
-        disabled={disabled}
-        onChange={e => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-          e.currentTarget.value = "";
-        }}
-      />
-    </div>
+      {webCameraOpen && !IS_NATIVE_APP && (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <div>
+                <h3 className="font-bold text-lg">Capture Image</h3>
+                <p className="text-xs text-slate-500">Live camera preview</p>
+              </div>
+              <button
+                type="button"
+                onClick={stopWebCamera}
+                className="px-3 py-2 rounded-lg border font-bold text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="bg-black aspect-video flex items-center justify-center relative">
+              {streamRef.current && !webCameraError ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="p-6 text-center text-white">
+                  <Camera size={42} className="mx-auto mb-3 opacity-80" />
+                  <p className="text-sm">{webCameraError || "Unable to start camera."}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                onClick={stopWebCamera}
+                className="px-4 py-2.5 rounded-xl border font-bold"
+              >
+                Cancel
+              </button>
+              {!webCameraError && streamRef.current && (
+                <button
+                  type="button"
+                  onClick={captureWebPhoto}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold inline-flex items-center gap-2"
+                >
+                  <Camera size={17}/> Take Photo
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 function useDeliveryRealtime(onEvent: (payload:any) => void, orderId?: string, enabled = true) {
