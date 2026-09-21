@@ -204,31 +204,27 @@ const demoProducts: Product[] = Array.from({ length: 20 }, (_, i) => ({
 // tab's active session so two authenticated accounts can safely use the same
 // origin at the same time. No JWT format or backend authentication is changed.
 const AUTH_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const AUTH_SESSION_ACTIVITY_KEY = "fb-auth-last-activity-at";
+const AUTH_SESSION_STARTED_KEY = "fb-auth-session-started-at";
 
-// This timestamp is only a local guard/cache. The backend remains authoritative
-// through the authenticated /auth/me request and session heartbeat. It represents
-// the last authenticated activity, not the original login time.
-const getAuthSessionActivityAt = () => {
+const getAuthSessionStartedAt = () => {
   try {
-    return Number(sessionStorage.getItem(AUTH_SESSION_ACTIVITY_KEY) || localStorage.getItem(AUTH_SESSION_ACTIVITY_KEY) || "0");
+    return Number(sessionStorage.getItem(AUTH_SESSION_STARTED_KEY) || localStorage.getItem(AUTH_SESSION_STARTED_KEY) || "0");
   } catch {
-    return Number(localStorage.getItem(AUTH_SESSION_ACTIVITY_KEY) || "0");
+    return Number(localStorage.getItem(AUTH_SESSION_STARTED_KEY) || "0");
   }
 };
 
-const markAuthSessionActivity = (at = Date.now()) => {
-  const value = String(Number(at) || Date.now());
-  try { sessionStorage.setItem(AUTH_SESSION_ACTIVITY_KEY, value); } catch {}
-  try { localStorage.setItem(AUTH_SESSION_ACTIVITY_KEY, value); } catch {}
-};
-
 const ensureAuthSessionWindow = () => {
-  const existing = getAuthSessionActivityAt();
-  if (!existing || !Number.isFinite(existing) || existing <= 0) return true;
-  if (Date.now() - existing >= AUTH_SESSION_MAX_AGE_MS) {
-    try { sessionStorage.removeItem("fb-user"); sessionStorage.removeItem("fb-token"); sessionStorage.removeItem("fb-login-history-id"); sessionStorage.removeItem(AUTH_SESSION_ACTIVITY_KEY); } catch {}
-    try { localStorage.removeItem("fb-user"); localStorage.removeItem("fb-token"); localStorage.removeItem("fb-login-history-id"); localStorage.removeItem(AUTH_SESSION_ACTIVITY_KEY); } catch {}
+  const existing = getAuthSessionStartedAt();
+  const now = Date.now();
+  if (!existing || !Number.isFinite(existing) || existing <= 0) {
+    try { sessionStorage.setItem(AUTH_SESSION_STARTED_KEY, String(now)); } catch {}
+    try { localStorage.setItem(AUTH_SESSION_STARTED_KEY, String(now)); } catch {}
+    return true;
+  }
+  if (now - existing >= AUTH_SESSION_MAX_AGE_MS) {
+    try { sessionStorage.removeItem("fb-user"); sessionStorage.removeItem("fb-token"); sessionStorage.removeItem("fb-login-history-id"); sessionStorage.removeItem(AUTH_SESSION_STARTED_KEY); } catch {}
+    try { localStorage.removeItem("fb-user"); localStorage.removeItem("fb-token"); localStorage.removeItem("fb-login-history-id"); localStorage.removeItem(AUTH_SESSION_STARTED_KEY); } catch {}
     return false;
   }
   return true;
@@ -261,7 +257,9 @@ const persistAuthSession = (user:any, token:string) => {
   // Preserve existing persistent login behavior for the rest of the app.
   localStorage.setItem("fb-user", JSON.stringify(user));
   localStorage.setItem("fb-token", String(token || ""));
-  markAuthSessionActivity();
+  const now = String(Date.now());
+  try { sessionStorage.setItem(AUTH_SESSION_STARTED_KEY, now); } catch {}
+  try { localStorage.setItem(AUTH_SESSION_STARTED_KEY, now); } catch {}
 };
 
 const clearAuthSession = (sessionToken?:string) => {
@@ -269,7 +267,7 @@ const clearAuthSession = (sessionToken?:string) => {
     sessionStorage.removeItem("fb-user");
     sessionStorage.removeItem("fb-token");
     sessionStorage.removeItem("fb-login-history-id");
-    sessionStorage.removeItem(AUTH_SESSION_ACTIVITY_KEY);
+    sessionStorage.removeItem(AUTH_SESSION_STARTED_KEY);
   } catch {}
   // Do not log out another account that is active in a different browser tab.
   // Clear the legacy persistent session only when it belongs to this tab.
@@ -278,7 +276,7 @@ const clearAuthSession = (sessionToken?:string) => {
     localStorage.removeItem("fb-user");
     localStorage.removeItem("fb-token");
     localStorage.removeItem("fb-login-history-id");
-    localStorage.removeItem(AUTH_SESSION_ACTIVITY_KEY);
+    localStorage.removeItem(AUTH_SESSION_STARTED_KEY);
   }
 };
 
@@ -2001,15 +1999,9 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
           : raw.startsWith("freshbasket://")
             ? (() => { const u = new URL(raw); return u.pathname || "/notifications"; })()
             : raw;
-        if (target.startsWith("/")) {
-          const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-          if (current !== target) nav(target);
-        }
+        if (target.startsWith("/")) nav(target);
       } catch {
-        if (raw.startsWith("/")) {
-          const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-          if (current !== raw) nav(raw);
-        }
+        if (raw.startsWith("/")) nav(raw);
       }
     };
 
@@ -2033,21 +2025,8 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
       return;
     }
 
-    // Android 8+ notification channels. Creating an existing channel is safe
-    // and does not duplicate the notification listener/event itself.
-    if (typeof (PushNotifications as any).createChannel === "function") {
-      const channels = [
-        ["orders", "Orders"], ["delivery", "Delivery"], ["payments", "Payments"],
-        ["refunds", "Refunds"], ["support", "Support"], ["chat", "Chat"],
-        ["finance", "Finance"], ["security", "Security"], ["system", "System"],
-      ];
-      for (const [id, name] of channels) {
-        try { await (PushNotifications as any).createChannel({ id, name, description: `${name} notifications`, importance: 5, visibility: 1, sound: "default", vibration: true }); } catch {}
-      }
-    }
-
     handles.push(
-      await PushNotifications.addListener("registration", async (token: any) => {
+      await PushNotifications.addListener("registration", async (token) => {
        console.log("[FreshBasket Push] FCM TOKEN:", token?.value);
 
         const value = String(token?.value || "").trim();
@@ -2091,7 +2070,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
     );
 
     handles.push(
-      await PushNotifications.addListener("registrationError", (error: any) => {
+      await PushNotifications.addListener("registrationError", (error) => {
         console.error(
           "[FreshBasket Push] REGISTRATION ERROR:",
           error
@@ -2102,7 +2081,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
     handles.push(
       await PushNotifications.addListener(
         "pushNotificationReceived",
-        (notification: any) => {
+        (notification) => {
           console.log(
             "[FreshBasket Push] notification received:",
             notification
@@ -2161,7 +2140,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
     );
 
     handles.push(
-      await CapacitorApp.addListener("appUrlOpen", (event: any) => {
+      await CapacitorApp.addListener("appUrlOpen", (event) => {
         console.log(
           "[FreshBasket Push] app URL opened:",
           event?.url
@@ -2215,50 +2194,17 @@ function useStore() {
   );
   const [favoriteStores, setFavoriteStores] = useState<string[]>([]);
 
-  // Validate the persisted JWT with the backend and keep the authenticated
-  // session activity timestamp alive. The backend remains authoritative; the
-  // frontend never extends an expired backend token by itself.
+  // Keep every authenticated role signed in across app/browser back navigation.
+  // The session expires only after seven days without a manual logout.
   useEffect(() => {
     if (!user) return;
-    let active = true;
-    const validateAndHeartbeat = async () => {
-      const token = getAuthToken();
-      if (!token) {
-        if (!active) return;
-        clearAuthSession();
-        setUser(null);
-        if (window.location.pathname !== "/login") window.location.replace("/login?session=expired");
-        return;
-      }
-      try {
-        const currentSessionId = (() => {
-          try { return sessionStorage.getItem("fb-login-history-id") || localStorage.getItem("fb-login-history-id") || ""; }
-          catch { return localStorage.getItem("fb-login-history-id") || ""; }
-        })();
-        const response = await axios.get(API + "/auth/me", { headers: { Authorization: `Bearer ${token}` } });
-        if (!active) return;
-        const authoritativeUser = response.data?.data;
-        if (!authoritativeUser?.id && !authoritativeUser?._id) throw new Error("Invalid authenticated user");
-        const normalizedUser = { ...user, ...authoritativeUser, id: authoritativeUser.id || authoritativeUser._id };
-        setUser(normalizedUser);
-        try { localStorage.setItem("fb-user", JSON.stringify(normalizedUser)); sessionStorage.setItem("fb-user", JSON.stringify(normalizedUser)); } catch {}
-        markAuthSessionActivity();
-        if (currentSessionId) {
-          await axios.post(API + "/session-management/heartbeat", { loginHistoryId: currentSessionId }, { headers: { Authorization: `Bearer ${token}`, "X-Login-History-Id": currentSessionId } });
-        }
-      } catch (error: any) {
-        if (!active) return;
-        const status = Number(error?.response?.status || 0);
-        if (status === 401 || status === 403 || status === 404) {
-          clearAuthSession(token);
-          setUser(null);
-          if (window.location.pathname !== "/login") window.location.replace("/login?session=expired");
-        }
-      }
-    };
-    void validateAndHeartbeat();
-    const timer = window.setInterval(validateAndHeartbeat, 5 * 60 * 1000);
-    return () => { active = false; window.clearInterval(timer); };
+    const remaining = Math.max(1000, AUTH_SESSION_MAX_AGE_MS - (Date.now() - getAuthSessionStartedAt()));
+    const timer = window.setTimeout(() => {
+      clearAuthSession(getAuthToken());
+      setUser(null);
+      window.location.replace("/login?session=expired");
+    }, remaining);
+    return () => window.clearTimeout(timer);
   }, [user?.id]);
 
   // Point 23: keep the existing local wishlist, while also syncing saved
@@ -2397,7 +2343,6 @@ function useStore() {
     let loginHistoryId = "";
     try { loginHistoryId = sessionStorage.getItem("fb-login-history-id") || localStorage.getItem("fb-login-history-id") || ""; } catch { loginHistoryId = localStorage.getItem("fb-login-history-id") || ""; }
     if (token && loginHistoryId) axios.post(API + "/auth/logout", { loginHistoryId }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-    try { localStorage.removeItem("fb-fcm-token"); } catch {}
     setUser(null);
     clearAuthSession(token);
   };
@@ -2624,14 +2569,14 @@ function LocationSelector({
 function WebsiteBackButton({ fallback, label = "Back" }: { fallback?: string; label?: string }) {
   const nav = useNavigate();
   const location = useLocation();
+  const canGoBack = Number((window.history.state as any)?.idx ?? 0) > 0;
   const goBack = () => {
     const detail = { handled: false };
     window.dispatchEvent(new CustomEvent("fb-global-back", { detail }));
     if (detail.handled) return;
-    const historyIndex = Number((window.history.state as any)?.idx);
-    if (Number.isFinite(historyIndex) && historyIndex > 0) { nav(-1); return; }
-    if (fallback && location.pathname !== fallback) { nav(fallback, { replace: true }); return; }
-    nav("/", { replace: true });
+    if (canGoBack) nav(-1);
+    else if (fallback && location.pathname !== fallback) nav(fallback, { replace: true });
+    else nav("/", { replace: true });
   };
   return <button type="button" onClick={goBack} className="inline-flex items-center gap-2 text-sm font-black text-emerald-700 hover:text-emerald-800 hover:-translate-x-0.5 transition-transform" aria-label={label}><ArrowRight size={16} className="rotate-180"/>{label}</button>;
 }
@@ -10266,25 +10211,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   const [deliveryNotifications, setDeliveryNotifications] = useState<any[]>([]);
   const [deliveryUnreadNotifications, setDeliveryUnreadNotifications] = useState(0);
   const [showDeliveryNotifications, setShowDeliveryNotifications] = useState(false);
-  const deliveryLocation = useLocation();
-  const deliveryNav = useNavigate();
-  const requestedDeliveryPanel = (new URLSearchParams(deliveryLocation.search).get("panel") || "dashboard") as "dashboard"|"assignments"|"orders"|"route"|"replacements"|"profile";
-  const [deliveryPanel, setDeliveryPanel] = useState<"dashboard"|"assignments"|"orders"|"route"|"replacements"|"profile">(requestedDeliveryPanel);
-  const goDeliveryPanel = (next: "dashboard"|"assignments"|"orders"|"route"|"replacements"|"profile") => {
-    if (next === deliveryPanel && (new URLSearchParams(deliveryLocation.search).get("panel") || "dashboard") === next) return;
-    setDeliveryPanel(next);
-    deliveryNav(next === "dashboard" ? "/delivery" : "/delivery?panel=" + encodeURIComponent(next));
-  };
-  useEffect(() => { if (requestedDeliveryPanel !== deliveryPanel) setDeliveryPanel(requestedDeliveryPanel); }, [requestedDeliveryPanel]);
-  useEffect(() => {
-    const onGlobalBack = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { handled?: boolean } | undefined;
-      if (showDeliveryNotifications) { setShowDeliveryNotifications(false); if (detail) detail.handled = true; return; }
-      if (notAvailableOrder || rejectingAssignment) { setNotAvailableOrder(null); setRejectingAssignment(null); if (detail) detail.handled = true; return; }
-    };
-    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
-    return () => window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
-  }, [showDeliveryNotifications, notAvailableOrder, rejectingAssignment]);
+  const [deliveryPanel, setDeliveryPanel] = useState<"dashboard"|"assignments"|"orders"|"route"|"replacements"|"profile">("dashboard");
   const [routePlan, setRoutePlan] = useState<any | null>(null);
   const [routePlanLoading, setRoutePlanLoading] = useState(false);
   const { voiceAlertsEnabled: deliveryVoiceAlertsEnabled, setVoiceAlertsEnabled: setDeliveryVoiceAlertsEnabled, flushVoiceQueue: flushDeliveryVoiceQueue } = useRoleNotificationVoiceAlerts(store, deliveryNotifications);
@@ -10851,7 +10778,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-5 py-8" data-delivery-panel={deliveryPanel}>
+      <main className="max-w-7xl mx-auto px-5 py-8" data-delivery-panel={deliveryPanel}>         {deliveryPanel === "dashboard" && <MyIdentityCard store={store} />}
         <section className="fb-delivery-menu mb-6">
           <div className="bg-slate-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl overflow-hidden relative">
             <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-emerald-400/20 blur-2xl pointer-events-none" />
@@ -10870,7 +10797,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
                     ["route","Route & Batches",MapPin,`${routableActive.length} routable`],
                     ["replacements","Replacements",RefreshCw,`${replacementRequests.length} assigned`],
                     ["profile","Profile & Status",User,deliveryProfile?.onlineStatus==="ONLINE"?"Online":"Offline"],
-                  ].map(([id,label,Icon,meta]:any)=><button key={id} type="button" onClick={()=>goDeliveryPanel(id)} className={`min-w-0 rounded-2xl border px-3 py-3 text-left transition-all ${deliveryPanel===id?"bg-emerald-500 text-white border-emerald-300 shadow-lg":"bg-white/10 text-slate-100 border-white/15 hover:bg-white/15"}`}>
+                  ].map(([id,label,Icon,meta]:any)=><button key={id} type="button" onClick={()=>setDeliveryPanel(id)} className={`min-w-0 rounded-2xl border px-3 py-3 text-left transition-all ${deliveryPanel===id?"bg-emerald-500 text-white border-emerald-300 shadow-lg":"bg-white/10 text-slate-100 border-white/15 hover:bg-white/15"}`}>
                     <Icon size={19} className="mb-2"/>
                     <span className="block text-xs sm:text-sm font-black leading-tight">{label}</span>
                     <span className={`block mt-1 text-[10px] ${deliveryPanel===id?"text-emerald-50":"text-slate-400"}`}>{meta}</span>
@@ -12395,6 +12322,30 @@ function EmployeeVerificationPage() {
   </div></div></div></div>;
 }
 
+function MyIdentityCard({ store }: { store: ReturnType<typeof useStore> }) {
+  const [card, setCard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    if (!store.user?.id || store.user?.role === "customer") { setCard(null); setLoading(false); return () => { cancelled = true; }; }
+    setLoading(true);
+    axios.get(API + "/my/identity-card", { headers: adminHeaders() })
+      .then((r) => { if (!cancelled) setCard(r.data?.data || null); })
+      .catch(() => { if (!cancelled) setCard(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [store.user?.id, store.user?.role]);
+  if (loading || !card) return null;
+  const status = String(card.currentStatus || card.status || "ACTIVE").toUpperCase();
+  return <section className="bg-white border rounded-3xl p-5 sm:p-6 shadow-sm">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div><p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">My FreshBasket ID</p><h2 className="text-xl sm:text-2xl font-black mt-1">Your Employee Identity Card</h2><p className="text-xs sm:text-sm text-slate-500 mt-1">This card is linked to your FreshBasket account.</p></div>
+      <div className={`self-start sm:self-auto inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}><span>●</span>{status}</div>
+    </div>
+    <div className="overflow-x-auto pb-1"><ProfessionalIdCard card={card} printId={`fb-my-id-card-${String(card._id || "card")}`} /></div>
+  </section>;
+}
+
 function MainAdminIdCardGenerator() {
   const [cards, setCards] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
@@ -12427,7 +12378,14 @@ function MainAdminIdCardGenerator() {
   const chooseSource = (id: string) => {
     setForm((f: any) => {
       const expectedRole = linkedAccountRoles[String(f.holderType)];
-      const list = expectedRole ? (f.holderType === "delivery" ? partners : accounts.filter((x:any) => String(x.role) === expectedRole)) : [];
+      const list = expectedRole ? (f.holderType === "delivery"
+        ? partners
+        : accounts.filter((x:any) => {
+            if (String(x.role) !== expectedRole) return false;
+            if (f.holderType === "main-admin") return Boolean(x.isMainAdmin);
+            if (f.holderType === "sub-admin") return !Boolean(x.isMainAdmin);
+            return true;
+          })) : [];
       const person = list.find((x: any) => String(x._id) === String(id));
       if (!person) return { ...f, sourceId: id };
       const meta:any = {
@@ -12499,6 +12457,16 @@ function MainAdminIdCardGenerator() {
     } catch (e:any) { alert(e?.response?.data?.message || "Unable to revoke identity card."); }
   };
 
+  const deleteCard = async (card: any) => {
+    if (!confirm(`Delete identity card ${card.cardNumber}? This cannot be undone.`)) return;
+    try {
+      await axios.delete(API + "/admin/identity-cards/" + card._id, { headers: adminHeaders() });
+      setCards(list => list.filter(x => String(x._id) !== String(card._id)));
+      if (selectedCard && String(selectedCard._id) === String(card._id)) setSelectedCard(null);
+      alert("Identity card deleted.");
+    } catch (e:any) { alert(e?.response?.data?.message || "Unable to delete identity card."); }
+  };
+
   const printCard = (card: any) => {
     setSelectedCard(card);
     setTimeout(() => {
@@ -12525,7 +12493,7 @@ function MainAdminIdCardGenerator() {
       <h3 className="font-bold text-lg">Create new identity card</h3>
       <div className="grid md:grid-cols-3 gap-4 mt-5">
         <label className="text-sm font-semibold">Card for<select value={form.holderType} onChange={e => changeType(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="" disabled>Select employee type</option><option value="main-admin">Main Admin</option><option value="sub-admin">Sub Admin</option><option value="delivery">Delivery Partner</option><option value="store-admin">Store Admin</option><option value="customer-care">Customer Care</option><option value="finance-manager">Finance Manager</option><option value="finance-executive">Finance Executive</option><option value="operations-executive">Operations Executive</option><option value="ecommerce-marketplace-executive">E-commerce / Marketplace Executive</option><option value="inventory-warehouse-executive">Inventory / Warehouse Executive</option><option value="sales-business-development-executive">Sales / Business Development Executive</option><option value="marketing-executive">Marketing Executive</option><option value="technology-it-employee">Technology / IT Employee</option><option value="hr-administration">Human Resources / Administration</option><option value="employee">Company Employee / Other Employee</option></select></label>
-        {linkedAccountTypes.has(String(form.holderType)) && <label className="text-sm font-semibold">Select existing account<select value={form.sourceId} onChange={e => chooseSource(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="">Select...</option>{(form.holderType === "delivery" ? partners : accounts.filter((x:any) => String(x.role) === linkedAccountRoles[String(form.holderType)])).map((x:any)=><option key={x._id} value={x._id}>{x.name} · {x.employeeId || x.email}</option>)}</select></label>}
+        {linkedAccountTypes.has(String(form.holderType)) && <label className="text-sm font-semibold">Select existing account<select value={form.sourceId} onChange={e => chooseSource(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="">Select...</option>{(form.holderType === "delivery" ? partners : accounts.filter((x:any) => { if (String(x.role) !== linkedAccountRoles[String(form.holderType)]) return false; if (form.holderType === "main-admin") return Boolean(x.isMainAdmin); if (form.holderType === "sub-admin") return !Boolean(x.isMainAdmin); return true; })).map((x:any)=><option key={x._id} value={x._id}>{x.name} · {x.employeeId || x.email}</option>)}</select></label>}
         <label className="text-sm font-semibold">Full name<input value={form.name} onChange={e => setForm({...form,name:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
         <label className="text-sm font-semibold">Designation<input value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
         <label className="text-sm font-semibold">Employee / Staff ID<input value={form.employeeId} onChange={e => setForm({...form,employeeId:e.target.value})} placeholder="Optional" className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
@@ -12542,7 +12510,7 @@ function MainAdminIdCardGenerator() {
     {selectedCard && <div className="bg-slate-100 border rounded-3xl p-5"><div className="flex items-center justify-between mb-4"><div><h3 className="font-bold">Card Preview</h3><p className="text-xs text-slate-500">Print this card on an ID-card/PVC printer or save it through your browser's print dialog.</p></div><div className="flex gap-2"><button onClick={() => printCard(selectedCard)} className="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold"><Printer size={17}/> Print Card</button><button onClick={() => setSelectedCard(null)} className="border rounded-xl px-3 py-2.5"><X size={18}/></button></div></div><div className="overflow-auto"><ProfessionalIdCard card={selectedCard}/></div></div>}
     <div className="bg-white border rounded-3xl overflow-hidden"><div className="px-5 py-4 border-b flex items-center justify-between"><div><b>Generated identity cards</b><p className="text-xs text-slate-500 mt-1">Main-admin controlled issuance register</p></div><button onClick={load} className="text-sm text-emerald-700 font-bold">Refresh</button></div>{loading ? <div className="p-10 text-center text-slate-500">Loading identity cards...</div> : cards.length ? <div className="divide-y">{cards.map(c => <div key={c._id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><b>{c.name}</b><p className="text-sm text-slate-500">{c.designation} · {c.cardNumber}</p><p className="text-xs text-slate-400 mt-1">{IDENTITY_CARD_TYPE_LABELS[String(c.holderType || "")] || "COMPANY EMPLOYEE"}{c.employeeId ? ` · Employee ID: ${c.employeeId}` : ""}</p><p className="text-xs text-slate-400">Valid until {c.expiryDate ? new Date(c.expiryDate).toLocaleDateString("en-IN") : "—"} · {c.currentStatus === "ACTIVE" ? "Active" : c.currentStatus === "EXPIRED" ? "Expired" : c.currentStatus === "INACTIVE" ? "Inactive" : "Revoked"}</p></div><div className="flex flex-wrap gap-2">
   <button onClick={() => printCard(c)} className="inline-flex items-center gap-2 border rounded-xl px-4 py-2 font-bold text-sm"><Printer size={16}/> {c.status === "active" ? "Print / Reprint" : "View Card"}</button>
-  {String(c.status || "active").toLowerCase() === "active" && <button onClick={() => revokeCard(c)} className="inline-flex items-center gap-2 border border-red-200 text-red-700 rounded-xl px-4 py-2 font-bold text-sm">Revoke</button>}
+  {String(c.status || "active").toLowerCase() === "active" && <button onClick={() => revokeCard(c)} className="inline-flex items-center gap-2 border border-red-200 text-red-700 rounded-xl px-4 py-2 font-bold text-sm">Revoke</button>} <button onClick={() => deleteCard(c)} className="inline-flex items-center gap-2 border border-red-300 text-red-800 rounded-xl px-4 py-2 font-bold text-sm">Delete</button>
 </div></div>)}</div> : <div className="p-10 text-center text-slate-500">No identity cards generated yet.</div>}</div>
     {selectedCard && <div className="fixed left-[-10000px] top-0"><ProfessionalIdCard card={selectedCard}/></div>}
   </div>;
@@ -13410,20 +13378,6 @@ function CustomerCareDashboard({ store }: { store: ReturnType<typeof useStore> }
   const [refundRejectOpen, setRefundRejectOpen] = useState(false);
   const [refundRejectReason, setRefundRejectReason] = useState("");
 
-  useEffect(() => {
-    const onGlobalBack = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { handled?: boolean } | undefined;
-      if (refundRejectOpen) { setRefundRejectOpen(false); if (detail) detail.handled = true; return; }
-      if (selectedRefundRequest) { setSelectedRefundRequest(null); if (detail) detail.handled = true; return; }
-      if (selectedTicket) { setSelectedTicket(null); if (detail) detail.handled = true; return; }
-      if (selectedOrder) { setSelectedOrder(null); if (detail) detail.handled = true; return; }
-      if (selectedCustomer) { setSelectedCustomer(null); if (detail) detail.handled = true; return; }
-      if (createOpen) { setCreateOpen(false); if (detail) detail.handled = true; return; }
-    };
-    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
-    return () => window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
-  }, [refundRejectOpen, selectedRefundRequest, selectedTicket, selectedOrder, selectedCustomer, createOpen]);
-
   const headers = adminHeaders();
   const can = (permission: string) => Array.isArray(store.user?.permissions) ? (store.user.permissions.length === 0 || store.user.permissions.includes(permission)) : true;
 
@@ -13478,7 +13432,7 @@ function CustomerCareDashboard({ store }: { store: ReturnType<typeof useStore> }
   if (store.user?.role !== "customer_care") return <NavigateToLogin />;
   return <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-care-shell">
     <header className="bg-white border-b sticky top-0 z-30"><div className="max-w-7xl mx-auto px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Headphones size={22}/></div><div><h1 className="font-bold text-xl">FreshBasket Customer Care</h1><p className="text-xs text-slate-500">{store.user.name} · {store.user.employeeId || "CUSTOMER_CARE"}</p></div></div><div className="flex gap-2"><button onClick={()=>nav("/customer-360")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><UserRoundSearch size={16}/>Customer 360</button><button onClick={()=>nav("/support-view-as")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><Eye size={16}/>View As</button><Link to="/login-history" className="border rounded-xl px-4 py-2.5 font-semibold">Login History</Link><button onClick={store.logout} className="bg-slate-950 text-white px-4 py-2.5 rounded-xl font-semibold inline-flex items-center gap-2"><LogOut size={16}/>Logout</button></div></div></header>
-    <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">
+    <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">       <MyIdentityCard store={store} />
       <div><p className="text-emerald-600 text-sm font-bold">SUPPORT OPERATIONS</p><h2 className="text-3xl font-bold">Customer Care Dashboard</h2><p className="text-sm text-slate-500 mt-1">Search customers and orders, manage tickets and create support requests without changing the existing customer/order flows.</p></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{cards.map(([label,value,Icon]:any)=>{const clickable=label==="Replacement Requests"||label==="Refund Requests";return <button key={label} type="button" onClick={()=>label==="Replacement Requests"?nav("/customer-care/replacement-requests"):label==="Refund Requests"?document.getElementById("customer-care-refunds")?.scrollIntoView({behavior:"smooth",block:"center"}):undefined} className={`text-left bg-white border rounded-3xl p-5 ${clickable?"hover:border-emerald-300 hover:shadow-sm cursor-pointer":""}`}><div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl grid place-items-center"><Icon size={19}/></div><p className="text-sm text-slate-500 mt-4">{label}</p><b className="text-2xl">{value||0}</b>{label==="Replacement Requests"&&<span className="block text-xs text-emerald-700 font-semibold mt-2">Open replacement queue →</span>}{label==="Refund Requests"&&<span className="block text-xs text-emerald-700 font-semibold mt-2">Open verification queue →</span>}</button>})}</div>
 
@@ -13590,14 +13544,6 @@ function CustomerCareReplacementRequests({ store }: { store: ReturnType<typeof u
   const reject=async()=>{if(!selected?.request?._id)return;const reason=window.prompt("Mandatory rejection reason");if(!reason||reason.trim().length<3)return;setActionLoading(true);try{await axios.patch(API+"/customer-care/replacement-requests/"+selected.request._id+"/action",{action:"REJECT",reason},{headers});await openDetail(String(selected.request._id));await load(meta.page||1);alert("Replacement request rejected.");}catch(e:any){alert(e?.response?.data?.message||"Unable to reject replacement request.");}finally{setActionLoading(false);}};
   const escalate=async()=>{if(!selected?.request?._id)return;const reason=window.prompt("Escalation reason");if(!reason||reason.trim().length<3)return;setActionLoading(true);try{await axios.patch(API+"/customer-care/replacement-requests/"+selected.request._id+"/action",{action:"ESCALATE",reason},{headers});await openDetail(String(selected.request._id));await load(meta.page||1);alert("Replacement request escalated.");}catch(e:any){alert(e?.response?.data?.message||"Unable to escalate replacement request.");}finally{setActionLoading(false);}};
   const clearDetail=()=>{setSelected(null);if(new URLSearchParams(location.search).get("request"))nav("/customer-care/replacement-requests");};
-  useEffect(() => {
-    const onGlobalBack = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { handled?: boolean } | undefined;
-      if (selected || detailLoading) { clearDetail(); if (detail) detail.handled = true; }
-    };
-    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
-    return () => window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
-  }, [selected, detailLoading, location.search]);
   const customer=selected?.customer||selected?.request?.customer;
   const order=selected?.order||selected?.request?.order||{};
   const item=selected?.orderItem;
@@ -13687,26 +13633,7 @@ function FinanceReconciliation(){
 }
 
 function FinanceDashboard({store}:{store:ReturnType<typeof useStore>}){
-  const nav = useNavigate();
-  const location = useLocation();
-  const requestedSection = new URLSearchParams(location.search).get("section") || "dashboard";
-  const [section,setSection]=useState(requestedSection); const [dashboard,setDashboard]=useState<any>({}); const [refunds,setRefunds]=useState<any[]>([]); const [payouts,setPayouts]=useState<any[]>([]); const [incentives,setIncentives]=useState<any[]>([]); const [storePayouts,setStorePayouts]=useState<any[]>([]); const [storePayoutBatches,setStorePayoutBatches]=useState<any[]>([]); const [transactions,setTransactions]=useState<any[]>([]); const [team,setTeam]=useState<any[]>([]); const [loading,setLoading]=useState(true); const [selectedRefund,setSelectedRefund]=useState<any>(null); const [password,setPassword]=useState({currentPassword:"",newPassword:"",confirm:""}); const [financeSidebarOpen,setFinanceSidebarOpen]=useState(false); const [refundFilter,setRefundFilter]=useState("ALL"); const [payoutFilter,setPayoutFilter]=useState("ALL"); const [incentiveFilter,setIncentiveFilter]=useState("ALL");
-  useEffect(() => { if (requestedSection !== section) setSection(requestedSection); }, [requestedSection]);
-  const goSection = (next: string, replace = false) => {
-    const normalized = String(next || "dashboard");
-    const currentRequestedSection = new URLSearchParams(location.search).get("section") || "dashboard";
-    if (normalized === section && currentRequestedSection === normalized) return;
-    setSection(normalized);
-    nav(normalized === "dashboard" ? "/finance" : "/finance?section=" + encodeURIComponent(normalized), { replace });
-  };
-  useEffect(() => {
-    const onGlobalBack = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { handled?: boolean } | undefined;
-      if (selectedRefund) { setSelectedRefund(null); if (detail) detail.handled = true; }
-    };
-    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
-    return () => window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
-  }, [selectedRefund]);
+  const [section,setSection]=useState("dashboard"); const [dashboard,setDashboard]=useState<any>({}); const [refunds,setRefunds]=useState<any[]>([]); const [payouts,setPayouts]=useState<any[]>([]); const [incentives,setIncentives]=useState<any[]>([]); const [storePayouts,setStorePayouts]=useState<any[]>([]); const [storePayoutBatches,setStorePayoutBatches]=useState<any[]>([]); const [transactions,setTransactions]=useState<any[]>([]); const [team,setTeam]=useState<any[]>([]); const [loading,setLoading]=useState(true); const [selectedRefund,setSelectedRefund]=useState<any>(null); const [password,setPassword]=useState({currentPassword:"",newPassword:"",confirm:""}); const [financeSidebarOpen,setFinanceSidebarOpen]=useState(false); const [refundFilter,setRefundFilter]=useState("ALL"); const [payoutFilter,setPayoutFilter]=useState("ALL"); const [incentiveFilter,setIncentiveFilter]=useState("ALL");
   const can=(p:string)=>store.user?.role==="finance_manager" || (Array.isArray(store.user?.permissions)&&store.user.permissions.includes(p));
   const load=async()=>{if(!["finance_manager","finance_executive"].includes(store.user?.role||""))return;setLoading(true);try{const c=(p:string)=>store.user?.role==="finance_manager"||Array.isArray(store.user?.permissions)&&store.user.permissions.includes(p);const [d,r,p,i,sp,t,tm]=await Promise.all([axios.get(API+"/finance/dashboard",{headers:adminHeaders()}),c("FINANCE_VIEW_REFUNDS")?axios.get(API+"/finance/refunds",{headers:adminHeaders()}):Promise.resolve({data:{data:[]}}),c("FINANCE_VIEW_PAYOUTS")?axios.get(API+"/finance/payouts",{headers:adminHeaders()}):Promise.resolve({data:{data:[]}}),c("FINANCE_VIEW_INCENTIVES")?axios.get(API+"/finance/incentives",{headers:adminHeaders()}):Promise.resolve({data:{data:[]}}),c("FINANCE_VIEW_PAYOUTS")?Promise.all([axios.get(API+"/finance/store-payouts",{headers:adminHeaders()}),axios.get(API+"/finance/store-payout-batches",{headers:adminHeaders()})]):Promise.resolve([{data:{data:{rows:[]}}},{data:{data:[]}}]),c("FINANCE_VIEW_REPORTS")?axios.get(API+"/finance/transactions",{headers:adminHeaders()}):Promise.resolve({data:{data:[]}}),axios.get(API+"/finance/team",{headers:adminHeaders()})]);setDashboard(d.data.data||{});setRefunds(r.data.data||[]);setPayouts(p.data.data||[]);setIncentives(i.data.data||[]);setStorePayouts(sp[0]?.data?.data?.rows||[]);setStorePayoutBatches(sp[1]?.data?.data||[]);setTransactions(t.data.data||[]);setTeam(tm.data.data||[]);}catch(e:any){alert(e?.response?.data?.message||"Unable to load Finance");}finally{setLoading(false)}};
   useEffect(()=>{load()},[store.user?.role]);
@@ -13749,17 +13676,17 @@ function FinanceDashboard({store}:{store:ReturnType<typeof useStore>}){
   };
   const card=(label:string,value:any,click?:()=>void)=><button onClick={click} className="bg-white border rounded-2xl p-4 text-left hover:border-emerald-300"><p className="text-xs text-slate-500">{label}</p><b className="text-2xl">{value}</b></button>;
   return <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-finance-shell"><div className="flex min-h-screen">
-    <DepartmentSidebar title="FreshBasket" subtitle={String(store.user?.role||"Finance").replace("_"," ")} departments={financeDepartments} activeId={section} onSelect={(id)=>{ goSection(id); }} logout={()=>{store.logout();window.location.href="/login"}} mobileOpen={financeSidebarOpen} setMobileOpen={setFinanceSidebarOpen}/>
+    <DepartmentSidebar title="FreshBasket" subtitle={String(store.user?.role||"Finance").replace("_"," ")} departments={financeDepartments} activeId={section} onSelect={(id)=>{ setSection(id); }} logout={()=>{store.logout();window.location.href="/login"}} mobileOpen={financeSidebarOpen} setMobileOpen={setFinanceSidebarOpen}/>
     <main className="md:ml-64 flex-1 min-w-0"><header className="sticky top-0 z-20 bg-white border-b px-4 md:px-8 py-4 flex justify-between items-center"><div className="flex items-center gap-3"><button type="button" className="md:hidden border rounded-xl p-2" aria-label="Open navigation" onClick={()=>setFinanceSidebarOpen(true)}><Menu size={19}/></button><div><p className="text-xs text-emerald-600 font-bold">{String(store.user?.role||"").replace("_"," ").toUpperCase()}</p><h1 className="text-2xl font-bold">Finance {section[0].toUpperCase()+section.slice(1)}</h1></div></div><button onClick={load} className="border rounded-xl px-4 py-2 font-bold"><RefreshCw size={16} className="inline mr-1"/>Refresh</button></header><div className="p-4 md:p-8">
     {dashboard.forcePasswordChange&&<div className="mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900"><b>Password change required.</b> Please update your password from Profile before continuing.</div>}
-    {section==="dashboard"&&<div className="space-y-6"><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Refunds",statusRefund("REQUESTED"),()=>{setRefundFilter("REQUESTED");goSection("refunds")})}{card("Under Review",statusRefund("FINANCE_REVIEW"),()=>{setRefundFilter("FINANCE_REVIEW");goSection("refunds")})}{card("Approved Refunds",statusRefund("APPROVED"),()=>{setRefundFilter("APPROVED");goSection("refunds")})}{card("Completed Refunds",statusRefund("COMPLETED"),()=>{setRefundFilter("COMPLETED");goSection("refunds")})}{card("Failed Refunds",dashboardCount("refunds","FAILED"),()=>{setRefundFilter("FAILED");goSection("refunds")})}</div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Store Payouts",storePayouts.filter((x:any)=>Number(x.pendingPayout||0)>0).length,()=>goSection("store-payouts"))}{card("Pending Payouts",statusPayout("PENDING"),()=>{setPayoutFilter("PENDING");goSection("payouts")})}{card("Eligible Payouts",statusPayout("ELIGIBLE"),()=>{setPayoutFilter("ELIGIBLE");goSection("payouts")})}{card("Finalized Payouts",statusPayout("FINALIZED"),()=>{setPayoutFilter("FINALIZED");goSection("payouts")})}{card("Paid Payouts",statusPayout("PAID"),()=>{setPayoutFilter("PAID");goSection("payouts")})}{card("Failed Payouts",statusPayout("FAILED"),()=>{setPayoutFilter("FAILED");goSection("payouts")})}</div><div className="grid grid-cols-3 gap-3">{card("Pending Incentives",statusInc("PENDING"),()=>{setIncentiveFilter("PENDING");goSection("incentives")})}{card("Approved Incentives",statusInc("APPROVED"),()=>{setIncentiveFilter("APPROVED");goSection("incentives")})}{card("Paid Incentives",statusInc("PAID"),()=>{setIncentiveFilter("PAID");goSection("incentives")})}</div><div className="grid md:grid-cols-5 gap-3">{card("Today's Refunds",money(dashboard.summary?.todayRefunds||0))}{card("Today's Payouts",money(dashboard.summary?.todayPayouts||0))}{card("Monthly Refunds",money(dashboard.summary?.monthlyRefunds||0))}{card("Monthly Delivery Payout",money(dashboard.summary?.monthlyDeliveryPayout||0))}{card("Monthly Incentives",money(dashboard.summary?.monthlyIncentives||0))}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">Recent Activities</h2></div>{(dashboard.recentActivities||[]).map((x:any)=><button type="button" key={x._id} onClick={()=>goSection("transactions")} className="w-full p-4 border-b flex justify-between text-sm text-left hover:bg-slate-50"><span><b>{x.transactionId}</b><span className="text-slate-500 ml-2">{x.type}</span></span><span>{money(x.amount)} · {x.status}</span></button>)}{!(dashboard.recentActivities||[]).length&&<div className="p-5 text-sm text-slate-500">No recent finance activity.</div>}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">My Work Queue</h2><p className="text-xs text-slate-500 mt-1">Live records that require the current Finance role's attention.</p></div><div className="divide-y">{[...refunds.filter((x:any)=>["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE","FINANCE_REVIEW","APPROVAL_PENDING","APPROVED","PROCESSING"].includes(x.status)).slice(0,4).map((x:any)=>({key:"r"+x._id,label:"REFUND",id:x.requestId||x._id,amount:x.approvedAmount??x.amount,status:x.status,go:"refunds"})),...payouts.filter((x:any)=>["ELIGIBLE","FINALIZED","PROCESSING","ON_HOLD"].includes(x.deliveryPayoutStatus)).slice(0,3).map((x:any)=>({key:"p"+x._id,label:"DELIVERY PAYOUT",id:x._id,amount:Number(x.deliveryPayout||0)+Number(x.performanceIncentive||0),status:x.deliveryPayoutStatus,go:"payouts"})),...incentives.filter((x:any)=>["PENDING","APPROVED","ON_HOLD"].includes(x.status)).slice(0,3).map((x:any)=>({key:"i"+x._id,label:"INCENTIVE",id:x.incentiveId||x._id,amount:x.approvedAmount||x.eligibleAmount,status:x.status,go:"incentives"}))].slice(0,8).map((x:any)=><button key={x.key} onClick={()=>goSection(x.go)} className="w-full p-4 text-left flex items-center justify-between gap-4 hover:bg-slate-50"><span><b>{x.label}</b><span className="ml-2 text-slate-500">{x.id}</span><p className="text-xs text-amber-700 mt-1">Action Required · {x.status}</p></span><b>{money(x.amount||0)}</b></button>)}{!refunds.length&&!payouts.length&&!incentives.length&&<div className="p-5 text-sm text-slate-500">No finance work is currently assigned.</div>}</div></div></div>}
+    {section==="dashboard"&&<div className="space-y-6"><MyIdentityCard store={store} /><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Refunds",statusRefund("REQUESTED"),()=>{setRefundFilter("REQUESTED");setSection("refunds")})}{card("Under Review",statusRefund("FINANCE_REVIEW"),()=>{setRefundFilter("FINANCE_REVIEW");setSection("refunds")})}{card("Approved Refunds",statusRefund("APPROVED"),()=>{setRefundFilter("APPROVED");setSection("refunds")})}{card("Completed Refunds",statusRefund("COMPLETED"),()=>{setRefundFilter("COMPLETED");setSection("refunds")})}{card("Failed Refunds",dashboardCount("refunds","FAILED"),()=>{setRefundFilter("FAILED");setSection("refunds")})}</div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Store Payouts",storePayouts.filter((x:any)=>Number(x.pendingPayout||0)>0).length,()=>setSection("store-payouts"))}{card("Pending Payouts",statusPayout("PENDING"),()=>{setPayoutFilter("PENDING");setSection("payouts")})}{card("Eligible Payouts",statusPayout("ELIGIBLE"),()=>{setPayoutFilter("ELIGIBLE");setSection("payouts")})}{card("Finalized Payouts",statusPayout("FINALIZED"),()=>{setPayoutFilter("FINALIZED");setSection("payouts")})}{card("Paid Payouts",statusPayout("PAID"),()=>{setPayoutFilter("PAID");setSection("payouts")})}{card("Failed Payouts",statusPayout("FAILED"),()=>{setPayoutFilter("FAILED");setSection("payouts")})}</div><div className="grid grid-cols-3 gap-3">{card("Pending Incentives",statusInc("PENDING"),()=>{setIncentiveFilter("PENDING");setSection("incentives")})}{card("Approved Incentives",statusInc("APPROVED"),()=>{setIncentiveFilter("APPROVED");setSection("incentives")})}{card("Paid Incentives",statusInc("PAID"),()=>{setIncentiveFilter("PAID");setSection("incentives")})}</div><div className="grid md:grid-cols-5 gap-3">{card("Today's Refunds",money(dashboard.summary?.todayRefunds||0))}{card("Today's Payouts",money(dashboard.summary?.todayPayouts||0))}{card("Monthly Refunds",money(dashboard.summary?.monthlyRefunds||0))}{card("Monthly Delivery Payout",money(dashboard.summary?.monthlyDeliveryPayout||0))}{card("Monthly Incentives",money(dashboard.summary?.monthlyIncentives||0))}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">Recent Activities</h2></div>{(dashboard.recentActivities||[]).map((x:any)=><button type="button" key={x._id} onClick={()=>setSection("transactions")} className="w-full p-4 border-b flex justify-between text-sm text-left hover:bg-slate-50"><span><b>{x.transactionId}</b><span className="text-slate-500 ml-2">{x.type}</span></span><span>{money(x.amount)} · {x.status}</span></button>)}{!(dashboard.recentActivities||[]).length&&<div className="p-5 text-sm text-slate-500">No recent finance activity.</div>}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">My Work Queue</h2><p className="text-xs text-slate-500 mt-1">Live records that require the current Finance role's attention.</p></div><div className="divide-y">{[...refunds.filter((x:any)=>["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE","FINANCE_REVIEW","APPROVAL_PENDING","APPROVED","PROCESSING"].includes(x.status)).slice(0,4).map((x:any)=>({key:"r"+x._id,label:"REFUND",id:x.requestId||x._id,amount:x.approvedAmount??x.amount,status:x.status,go:"refunds"})),...payouts.filter((x:any)=>["ELIGIBLE","FINALIZED","PROCESSING","ON_HOLD"].includes(x.deliveryPayoutStatus)).slice(0,3).map((x:any)=>({key:"p"+x._id,label:"DELIVERY PAYOUT",id:x._id,amount:Number(x.deliveryPayout||0)+Number(x.performanceIncentive||0),status:x.deliveryPayoutStatus,go:"payouts"})),...incentives.filter((x:any)=>["PENDING","APPROVED","ON_HOLD"].includes(x.status)).slice(0,3).map((x:any)=>({key:"i"+x._id,label:"INCENTIVE",id:x.incentiveId||x._id,amount:x.approvedAmount||x.eligibleAmount,status:x.status,go:"incentives"}))].slice(0,8).map((x:any)=><button key={x.key} onClick={()=>setSection(x.go)} className="w-full p-4 text-left flex items-center justify-between gap-4 hover:bg-slate-50"><span><b>{x.label}</b><span className="ml-2 text-slate-500">{x.id}</span><p className="text-xs text-amber-700 mt-1">Action Required · {x.status}</p></span><b>{money(x.amount||0)}</b></button>)}{!refunds.length&&!payouts.length&&!incentives.length&&<div className="p-5 text-sm text-slate-500">No finance work is currently assigned.</div>}</div></div></div>}
     {section==="refunds"&&<div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex flex-wrap gap-3 justify-between"><div><h2 className="font-bold text-lg">Refund Management</h2><p className="text-xs text-slate-500">Customer Care verification → Finance review → approval → processing.</p></div><select value={refundFilter} onChange={e=>setRefundFilter(e.target.value)} className="border rounded-xl px-3 py-2 text-sm font-semibold"><option value="ALL">All</option><option value="REQUESTED">Pending</option><option value="UNDER_REVIEW">Under Review</option><option value="FINANCE_REVIEW">Finance Review</option><option value="APPROVED">Approved</option><option value="PROCESSING">Processing</option><option value="COMPLETED">Completed</option><option value="FAILED">Failed</option><option value="REJECTED">Rejected</option></select></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr>{["Request ID","Customer","Order","Product / Item","Amount","Method","Status","Action"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody>{visibleRefunds.map((r:any)=><tr key={r._id} className="border-t"><td className="p-3 font-semibold">{r.requestId||("#"+String(r._id).slice(-8))}</td><td className="p-3">{r.customer?.name||"—"}<div className="text-xs text-slate-500">{r.customer?.customerId||r.customer?.email||""}</div></td><td className="p-3">#{String(r.order?._id||r.order||"").slice(-8)}</td><td className="p-3">{r.orderItemId||r.productId||"—"}</td><td className="p-3 font-bold">{money(r.approvedAmount??r.amount)}</td><td className="p-3">{r.refundMethod||"ORIGINAL"}{r.bankAccountMasked&&<div className="text-xs text-slate-500">{r.bankAccountMasked}</div>}{r.upiMasked&&<div className="text-xs text-slate-500">{r.upiMasked}</div>}</td><td className="p-3">{r.status}</td><td className="p-3 flex gap-2">{["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE"].includes(r.status)&&can("FINANCE_REVIEW_REFUNDS")&&<button onClick={()=>updateRefund(r._id,"FINANCE_REVIEW")} className="border rounded-lg px-2 py-1">Review</button>}{["FINANCE_REVIEW","APPROVAL_PENDING"].includes(r.status)&&can("FINANCE_APPROVE_REFUNDS")&&r.status!=="APPROVAL_PENDING"&&<button onClick={()=>{const v=window.prompt("Approved amount",String(r.amount||0));if(v!==null)updateRefund(r._id,"APPROVED",{approvedAmount:Number(v)})}} className="bg-emerald-600 text-white rounded-lg px-2 py-1">Approve</button>}{!["COMPLETED","REJECTED","FAILED"].includes(r.status)&&can("FINANCE_APPROVE_REFUNDS")&&<button onClick={()=>{const reason=window.prompt("Mandatory rejection reason");if(reason)updateRefund(r._id,"REJECTED",{reason})}} className="border border-red-200 text-red-700 rounded-lg px-2 py-1">Reject</button>}{r.status==="APPROVED"&&can("FINANCE_PROCESS_REFUNDS")&&<button onClick={()=>updateRefund(r._id,"PROCESSING")} className="bg-blue-600 text-white rounded-lg px-2 py-1">Process</button>}{r.status==="PROCESSING"&&can("FINANCE_PROCESS_REFUNDS")&&<button onClick={()=>{const ref=window.prompt("Transaction reference (if manual)")||"";axios.patch(API+"/finance/refunds/"+r._id+"/process",{status:"COMPLETED",transactionReference:ref},{headers:adminHeaders()}).then(load).catch((e:any)=>alert(e?.response?.data?.message||"Unable to complete refund"))}} className="bg-emerald-600 text-white rounded-lg px-2 py-1">Complete</button>}<button onClick={async()=>{try{const x=await axios.get(API+"/finance/refunds/"+r._id,{headers:adminHeaders()});const detail=x.data.data||{};const merged={...r,...detail};const evidence=normalizeRefundEvidence(detail);const listEvidence=normalizeRefundEvidence(r);setSelectedRefund({...merged,evidence:evidence.length?evidence:listEvidence})}catch(e:any){alert(e?.response?.data?.message||"Unable to load refund")}}} className="border rounded-lg px-2 py-1"><Eye size={14}/></button></td></tr>)}</tbody></table></div></div>}
     {section==="payouts"&&<div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex flex-wrap gap-3 justify-between"><div><h2 className="font-bold text-lg">Delivery Partner Payouts</h2><p className="text-xs text-slate-500">Base payout is taken from the Store/Admin assignment; Finance cannot silently change it.</p></div><select value={payoutFilter} onChange={e=>setPayoutFilter(e.target.value)} className="border rounded-xl px-3 py-2 text-sm font-semibold"><option value="ALL">All</option><option value="PENDING">Pending</option><option value="ELIGIBLE">Eligible</option><option value="FINALIZED">Finalized</option><option value="PROCESSING">Processing</option><option value="PAID">Paid</option><option value="FAILED">Failed</option><option value="ON_HOLD">On Hold</option></select></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr>{["Order","Partner","Delivery Date","Base Payout","Incentive","Total","Status","Action"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody>{visiblePayouts.map((p:any)=><tr key={p._id} className="border-t"><td className="p-3">#{String(p._id).slice(-8)}</td><td className="p-3">{p.deliveryPartner?.name||"—"}<div className="text-xs text-slate-500">{p.deliveryPartner?.employeeId||""}</div></td><td className="p-3">{p.deliveredAt?new Date(p.deliveredAt).toLocaleString("en-IN"):"—"}</td><td className="p-3">{money(p.deliveryPayout||0)}</td><td className="p-3">{money(p.performanceIncentive||0)}</td><td className="p-3 font-bold">{money(Number(p.deliveryPayout||0)+Number(p.performanceIncentive||0))}</td><td className="p-3">{p.deliveryPayoutStatus}</td><td className="p-3">{can("FINANCE_PROCESS_PAYOUTS")&&<select value={p.deliveryPayoutStatus} onChange={e=>updatePayout(p._id,e.target.value)} className="border rounded-lg p-2"><option>ELIGIBLE</option><option>FINALIZED</option><option>PROCESSING</option><option>PAID</option><option>ON_HOLD</option></select>}</td></tr>)}</tbody></table></div></div>}
     {section==="store-payouts"&&<div className="space-y-5"><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold text-lg">Store Payout Verification</h2><p className="text-xs text-slate-500 mt-1">Store payouts use the existing finance transaction ledger. Finance Executive prepares the batch; Finance Manager approves and settles it.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr>{["Store","Gross Sales","Refunds","Commission","Adjustments","Net Earnings","Pending","Paid","Action"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody>{storePayouts.map((x:any)=><tr key={x.storeId} className="border-t"><td className="p-3 font-semibold">{x.name}<div className="text-xs text-slate-500">{x.employeeId||""}</div></td><td className="p-3">{money(x.grossSales||0)}</td><td className="p-3">{money(x.refunds||0)}</td><td className="p-3">{money(x.commission||0)}</td><td className="p-3">{money(x.adjustments||0)}</td><td className="p-3 font-bold">{money(x.storeEarnings||0)}</td><td className="p-3">{money(x.pendingPayout||0)}</td><td className="p-3">{money(x.paidPayout||0)}</td><td className="p-3">{can("FINANCE_PROCESS_PAYOUTS")&&Number(x.pendingPayout||0)>0&&<button onClick={()=>createStorePayout(x)} className="bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-bold">Create Batch</button>}</td></tr>)}</tbody></table>{!storePayouts.length&&<div className="p-10 text-center text-slate-500">No Store payout data for the current period.</div>}</div></div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h3 className="font-bold text-lg">Store Payout Approval Queue</h3></div><div className="divide-y">{storePayoutBatches.map((b:any)=><div key={b._id} className="p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"><div><b>{b.batchId}</b><p className="text-sm mt-1">{b.storeAdmin?.name||"Store"} · {money(b.netPayable||b.total||0)}</p><p className="text-xs text-slate-500 mt-1">{b.payoutPeriodStart?new Date(b.payoutPeriodStart).toLocaleDateString("en-IN"):"—"} → {b.payoutPeriodEnd?new Date(b.payoutPeriodEnd).toLocaleDateString("en-IN"):"—"} · {b.status}</p></div><div className="flex flex-wrap gap-2">{can("FINANCE_PROCESS_PAYOUTS")&&b.status==="CREATED"&&<button onClick={()=>updateStorePayout(b._id,"UNDER_REVIEW")} className="border rounded-lg px-3 py-1.5 font-bold">Review</button>}{store.user?.role==="finance_manager"&&b.status==="UNDER_REVIEW"&&<button onClick={()=>updateStorePayout(b._id,"APPROVED")} className="bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-bold">Approve</button>}{store.user?.role==="finance_manager"&&b.status==="APPROVED"&&<button onClick={()=>updateStorePayout(b._id,"PROCESSING")} className="border rounded-lg px-3 py-1.5 font-bold">Process</button>}{store.user?.role==="finance_manager"&&b.status==="PROCESSING"&&<button onClick={()=>updateStorePayout(b._id,"PAID")} className="bg-blue-600 text-white rounded-lg px-3 py-1.5 font-bold">Mark Paid</button>}</div></div>)}{!storePayoutBatches.length&&<div className="p-10 text-center text-slate-500">No Store payout batches created yet.</div>}</div></div></div>}
     {section==="incentives"&&<div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex flex-wrap gap-3 justify-between"><h2 className="font-bold text-lg">Incentives</h2><select value={incentiveFilter} onChange={e=>setIncentiveFilter(e.target.value)} className="border rounded-xl px-3 py-2 text-sm font-semibold"><option value="ALL">All</option><option value="PENDING">Pending</option><option value="ELIGIBLE">Eligible</option><option value="APPROVED">Approved</option><option value="PAID">Paid</option><option value="REJECTED">Rejected</option></select></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="p-3 text-left">Partner</th><th className="p-3">Deliveries</th><th className="p-3">Rating</th><th className="p-3">Eligible</th><th className="p-3">Approved</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead><tbody>{visibleIncentives.map((i:any)=><tr key={i._id} className="border-t"><td className="p-3">{i.deliveryPartner?.name||"—"}</td><td className="p-3 text-center">{i.completedDeliveries}</td><td className="p-3 text-center">{Number(i.averageRating||0).toFixed(1)}</td><td className="p-3">{money(i.eligibleAmount)}</td><td className="p-3">{money(i.approvedAmount)}</td><td className="p-3">{i.status}</td><td className="p-3">{can("FINANCE_MANAGE_INCENTIVES")&&i.status==="PENDING"&&<button onClick={()=>updateIncentive(i._id,"APPROVED")} className="bg-emerald-600 text-white rounded-lg px-3 py-1">Approve</button>}{can("FINANCE_MANAGE_INCENTIVES")&&i.status==="APPROVED"&&<button onClick={()=>updateIncentive(i._id,"PAID")} className="bg-blue-600 text-white rounded-lg px-3 py-1">Mark Paid</button>}</td></tr>)}</tbody></table></div></div>}
     {section==="transactions"&&<div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h2 className="font-bold text-lg">Financial Transaction Ledger</h2><p className="text-xs text-slate-500">Completed transactions are immutable; corrections use adjustment/reversal transactions.</p></div><button onClick={exportReport} className="border rounded-xl px-3 py-2 font-bold">Export CSV</button></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="p-3">Transaction ID</th><th className="p-3">Type</th><th className="p-3">Reference</th><th className="p-3">Amount</th><th className="p-3">Direction</th><th className="p-3">Status</th><th className="p-3">Date</th></tr></thead><tbody>{transactions.map((x:any)=><tr key={x._id} className="border-t"><td className="p-3">{x.transactionId}</td><td className="p-3">{x.type}</td><td className="p-3">{x.referenceId}</td><td className="p-3 font-bold">{money(x.amount)}</td><td className="p-3">{x.direction}</td><td className="p-3">{x.status}</td><td className="p-3">{x.createdAt?new Date(x.createdAt).toLocaleString("en-IN"):"—"}</td></tr>)}</tbody></table></div></div>}
-    {section==="reconciliation"&&<FinanceReconciliation/>}{section==="reports"&&<div className="bg-white border rounded-3xl p-6"><h2 className="font-bold text-lg">Finance Reports</h2><p className="text-sm text-slate-500 mt-1">Daily, weekly, monthly and custom-range reporting is available through the Finance API.</p><div className="grid md:grid-cols-2 gap-3 mt-5"><button onClick={exportReport} className="border rounded-xl p-4 text-left font-bold">Export Financial Transaction Report (CSV)</button><button onClick={()=>goSection("transactions")} className="border rounded-xl p-4 text-left font-bold">Open Transaction Ledger</button><button onClick={()=>goSection("refunds")} className="border rounded-xl p-4 text-left font-bold">Refund Report</button><button onClick={()=>goSection("payouts")} className="border rounded-xl p-4 text-left font-bold">Delivery Payout Report</button></div></div>}
-    {section==="notifications"&&<FinanceNotifications store={store} onOpen={(n:any)=>{ const text=`${n?.title||""} ${n?.message||""} ${n?.type||""} ${n?.relatedEntity||""}`.toLowerCase(); if(text.includes("refund")) goSection("refunds"); else if(text.includes("payout")||text.includes("delivery payout")) goSection("payouts"); else if(text.includes("incentive")) goSection("incentives"); else if(text.includes("transaction")) goSection("transactions"); else goSection("dashboard"); }}/>}
+    {section==="reconciliation"&&<FinanceReconciliation/>}{section==="reports"&&<div className="bg-white border rounded-3xl p-6"><h2 className="font-bold text-lg">Finance Reports</h2><p className="text-sm text-slate-500 mt-1">Daily, weekly, monthly and custom-range reporting is available through the Finance API.</p><div className="grid md:grid-cols-2 gap-3 mt-5"><button onClick={exportReport} className="border rounded-xl p-4 text-left font-bold">Export Financial Transaction Report (CSV)</button><button onClick={()=>setSection("transactions")} className="border rounded-xl p-4 text-left font-bold">Open Transaction Ledger</button><button onClick={()=>setSection("refunds")} className="border rounded-xl p-4 text-left font-bold">Refund Report</button><button onClick={()=>setSection("payouts")} className="border rounded-xl p-4 text-left font-bold">Delivery Payout Report</button></div></div>}
+    {section==="notifications"&&<FinanceNotifications store={store} onOpen={(n:any)=>{ const text=`${n?.title||""} ${n?.message||""} ${n?.type||""} ${n?.relatedEntity||""}`.toLowerCase(); if(text.includes("refund")) setSection("refunds"); else if(text.includes("payout")||text.includes("delivery payout")) setSection("payouts"); else if(text.includes("incentive")) setSection("incentives"); else if(text.includes("transaction")) setSection("transactions"); else setSection("dashboard"); }}/>}
     {section==="customer-360"&&<Customer360 store={store}/>} 
     {section==="profile"&&<div className="max-w-2xl bg-white border rounded-3xl p-6"><h2 className="font-bold text-lg">Finance Profile</h2><div className="flex flex-wrap items-center gap-4 mt-4"><div className="w-16 h-16 rounded-2xl overflow-hidden border bg-slate-50 grid place-items-center">{store.user?.profilePhoto?<img src={store.user.profilePhoto} alt="Finance profile" className="w-full h-full object-cover"/>:<User size={24} className="text-slate-300"/>}</div><ImagePickerButtons compact onFile={saveFinancePhoto}/></div><div className="grid md:grid-cols-2 gap-3 mt-4 text-sm"><div><span className="text-slate-500">Name</span><p className="font-bold">{store.user?.name}</p></div><div><span className="text-slate-500">Employee ID</span><p className="font-bold">{store.user?.employeeId||"—"}</p></div><div><span className="text-slate-500">Login ID</span><p className="font-bold">{store.user?.username||store.user?.email}</p></div><div><span className="text-slate-500">Role</span><p className="font-bold">{store.user?.role}</p></div></div><Link to="/login-history" className="inline-flex mt-5 border rounded-xl px-4 py-2.5 font-bold">Login History</Link><div className="border-t mt-6 pt-6"><h3 className="font-bold">Change Password</h3><div className="space-y-3 mt-4"><input type="password" placeholder="Current password" value={password.currentPassword} onChange={e=>setPassword({...password,currentPassword:e.target.value})} className="w-full border rounded-xl p-3"/><input type="password" placeholder="New password" value={password.newPassword} onChange={e=>setPassword({...password,newPassword:e.target.value})} className="w-full border rounded-xl p-3"/><input type="password" placeholder="Confirm new password" value={password.confirm} onChange={e=>setPassword({...password,confirm:e.target.value})} className="w-full border rounded-xl p-3"/><button onClick={changePassword} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">Change Password</button></div></div></div>}
     {selectedRefund&&<div className="fixed inset-0 bg-black/40 z-50 p-4 grid place-items-center" onClick={()=>setSelectedRefund(null)}><div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6" onClick={e=>e.stopPropagation()}><div className="flex justify-between"><h2 className="font-bold text-xl">Refund Details</h2><button onClick={()=>setSelectedRefund(null)}><X/></button></div><div className="grid md:grid-cols-2 gap-3 mt-5 text-sm">{[["Customer",selectedRefund.customer?.name],["Order",selectedRefund.order?._id],["Product/Item",selectedRefund.orderItemId||"—"],["Eligible / Requested",money(selectedRefund.amount)], ["Approved",money(selectedRefund.approvedAmount??selectedRefund.amount)], ["Method",selectedRefund.refundMethod||"ORIGINAL"],["Status",selectedRefund.status],["Requested",selectedRefund.createdAt?new Date(selectedRefund.createdAt).toLocaleString("en-IN"):"—"],["Transaction Ref",selectedRefund.transactionReference||"—"]].map(([l,v])=><div key={String(l)} className="border rounded-xl p-3"><span className="text-xs text-slate-500">{l}</span><p className="font-bold break-words">{v}</p></div>)}</div>{selectedRefund.bankAccountMasked&&<div className="mt-4 bg-slate-50 rounded-xl p-4 text-sm"><b>Bank</b><p>{selectedRefund.bankName||"—"} · {selectedRefund.bankAccountMasked} · {selectedRefund.ifsc||"—"}</p><p className="text-xs text-slate-500">Full account number is not displayed.</p></div>}{selectedRefund.upiMasked&&<div className="mt-4 bg-slate-50 rounded-xl p-4 text-sm"><b>UPI</b><p>{selectedRefund.upiMasked}</p></div>}<div className="mt-4"><b>Reason</b><p className="text-sm text-slate-600 mt-1">{selectedRefund.reason}</p></div>{selectedRefund.rejectionReason&&<div className="mt-4 bg-red-50 text-red-800 rounded-xl p-4"><b>Rejection reason</b><p className="text-sm mt-1">{selectedRefund.rejectionReason}</p></div>}{normalizeRefundEvidence(selectedRefund).length>0&&<div className="mt-4 border rounded-2xl p-4"><div className="flex items-center justify-between gap-3"><div><b>Customer Evidence / Proof</b><p className="text-xs text-slate-500 mt-1">Proof uploaded by the customer for this refund request.</p></div><span className="text-xs font-bold text-emerald-700">{normalizeRefundEvidence(selectedRefund).length} image(s)</span></div><div className="flex flex-wrap gap-3 mt-3">{normalizeRefundEvidence(selectedRefund).map((img:string,i:number)=><a key={i} href={img} target="_blank" rel="noreferrer" className="block"><img src={img} alt={`Customer refund proof ${i+1}`} className="w-32 h-32 rounded-xl border object-cover hover:opacity-90" /></a>)}</div></div>}{normalizeRefundEvidence(selectedRefund).length===0&&<div className="mt-4 border border-amber-200 bg-amber-50 text-amber-800 rounded-xl p-4 text-sm"><b>Customer Evidence / Proof</b><p className="mt-1">No evidence image was returned with this refund record.</p></div>}</div></div>}
@@ -13796,15 +13723,6 @@ function DepartmentSidebar({
     const active = departments.find(d => d.items.some(i => i.id === activeId));
     if (active) setOpen(prev => ({ ...prev, [active.id]: true }));
   }, [activeId]);
-
-  useEffect(() => {
-    const onGlobalBack = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { handled?: boolean } | undefined;
-      if (mobileOpen) { setMobileOpen(false); if (detail) detail.handled = true; }
-    };
-    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
-    return () => window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
-  }, [mobileOpen, setMobileOpen]);
 
   const content = (
     <div className="h-full flex flex-col">
@@ -14439,16 +14357,6 @@ function Admin({
 
   useEffect(() => { void flushVoiceQueue(); }, [voiceAlertsEnabled]);
 
-  useEffect(() => {
-    const onGlobalBack = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { handled?: boolean } | undefined;
-      if (showAdminNotifications) { setShowAdminNotifications(false); if (detail) detail.handled = true; }
-      else if (adminSidebarOpen) { setAdminSidebarOpen(false); if (detail) detail.handled = true; }
-    };
-    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
-    return () => window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
-  }, [showAdminNotifications, adminSidebarOpen]);
-
   const markAdminNotificationRead = async (id: string) => {
     try {
       await axios.patch(API + "/notifications/" + id + "/read", {}, { headers: adminHeaders() });
@@ -14661,6 +14569,7 @@ function Admin({
 
           {tab === "dashboard" && (
             <>
+              <MyIdentityCard store={store} />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                   [
@@ -14915,7 +14824,6 @@ function getFreshBasketRoleRoot(role: string) {
   if (role === "delivery") return "/delivery";
   if (role === "customer_care") return "/customer-care";
   if (role === "finance_manager" || role === "finance_executive") return "/finance";
-  if (role === "customer") return "/stores";
   return "/";
 }
 
@@ -14924,7 +14832,7 @@ function getFreshBasketBackFallback(pathname: string, role: string) {
   if (/^\/orders\/[^/]+/.test(pathname)) return "/orders";
   if (/^\/invoice\/[^/]+/.test(pathname)) return "/orders";
   if (pathname === "/checkout") return "/cart";
-  if (pathname === "/cart") return role === "customer" ? "/stores" : getFreshBasketRoleRoot(role);
+  if (pathname === "/cart") return role === "customer" ? "/" : getFreshBasketRoleRoot(role);
   if (pathname === "/delivery/earnings") return "/delivery";
   if (pathname === "/customer-360") {
     if (role === "customer_care") return "/customer-care";
@@ -14946,33 +14854,22 @@ function getFreshBasketBackFallback(pathname: string, role: string) {
 function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
   const nav = useNavigate();
   const location = useLocation();
-  const locationRef = useRef(location);
-  const roleRef = useRef(String(store.user?.role || ""));
-
-  useEffect(() => { locationRef.current = location; roleRef.current = String(store.user?.role || ""); }, [location, store.user?.role]);
 
   useEffect(() => {
     if (!IS_NATIVE_APP) return;
+
     let active = true;
     let listener: { remove: () => Promise<void> } | null = null;
 
     const handleBack = () => {
       if (!active) return;
 
-      // Every open application layer gets first priority. Components such as
-      // drawers, notification popovers and detail modals can consume this event.
+      // Give the currently open application layer (notification popover,
+      // drawer, modal, sheet, etc.) first chance to consume Back.
       const detail = { handled: false };
       window.dispatchEvent(new CustomEvent("fb-global-back", { detail }));
       if (detail.handled) return;
 
-      const activeElement = document.activeElement as HTMLElement | null;
-      const isTextInput = Boolean(activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable));
-      if (isTextInput) {
-        activeElement?.blur();
-        return;
-      }
-
-      const current = locationRef.current;
       const historyState = (window.history.state || {}) as any;
       const historyIndex = Number(historyState?.idx);
       if (Number.isFinite(historyIndex) && historyIndex > 0) {
@@ -14980,39 +14877,34 @@ function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
         return;
       }
 
-      const role = roleRef.current;
-      const fallback = getFreshBasketBackFallback(current.pathname, role);
+      // React Router normally supplies `idx`. If an embedded Android/WebView
+      // state does not expose it, an Admin sidebar page still has a concrete
+      // route (`/admin?tab=...` or an application route). In that no-index
+      // case, return to the Admin root instead of doing nothing. This is only
+      // a fallback; real router history always takes priority above.
+      if (location.pathname === "/admin" && new URLSearchParams(location.search).has("tab")) {
+        nav("/admin", { replace: true });
+        return;
+      }
+
+      const role = String(store.user?.role || "");
+      const fallback = getFreshBasketBackFallback(location.pathname, role);
       const root = getFreshBasketRoleRoot(role);
-      const currentParams = new URLSearchParams(current.search);
 
-      // State-driven role dashboards now expose their section as a real router
-      // query entry. If a WebView does not expose React Router's idx, remove
-      // only that section before considering the role root.
-      if (current.pathname === "/admin" && currentParams.has("tab")) { nav("/admin", { replace: true }); return; }
-      if (current.pathname === "/delivery" && currentParams.has("panel")) { nav("/delivery", { replace: true }); return; }
-      if (current.pathname === "/finance" && currentParams.has("section")) { nav("/finance", { replace: true }); return; }
-
-      // If React Router has no exposed index, only use a concrete fallback when
-      // it actually changes the route. Never turn Back into a Dashboard loop.
-      if (current.pathname !== fallback) {
+      if (location.pathname !== fallback) {
         nav(fallback, { replace: true });
         return;
       }
 
-      // Authenticated root: Back is an app-exit action, never a logout action.
-      if (store.user && current.pathname === root) {
-        void CapacitorApp.exitApp();
+      // At the role root there is no valid previous application screen.
+      // Preserve the existing Android exit behavior instead of inventing
+      // another navigation destination.
+      if (location.pathname === root) {
         return;
-      }
-
-      // Public/login root with no application history: let Android handle the
-      // activity normally rather than manufacturing a protected destination.
-      if (!store.user && (String(current.pathname) === "/" || String(current.pathname) === "/login")) {
-        void CapacitorApp.exitApp();
       }
     };
 
-    void CapacitorApp.addListener("backButton", handleBack).then((handle: any) => {
+    void CapacitorApp.addListener("backButton", handleBack).then((handle) => {
       if (!active) void handle.remove();
       else listener = handle;
     });
@@ -15021,7 +14913,7 @@ function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
       active = false;
       if (listener) void listener.remove();
     };
-  }, [nav, store.user]);
+  }, [location.pathname, nav, store.user?.role]);
 
   return null;
 }
