@@ -12474,7 +12474,11 @@ function MainAdminIdCardGenerator() {
     } catch (e:any) { alert(e?.response?.data?.message || "Unable to delete identity card."); }
   };
 
+<<<<<<< HEAD
     const printCard = (card: any) => {
+=======
+  const printCard = (card: any) => {
+>>>>>>> 3a9217c4172ba79419cb0a2d2c3b81fd47ef0c0e
     setSelectedCard(card);
 
     setTimeout(async () => {
