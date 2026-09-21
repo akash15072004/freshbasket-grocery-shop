@@ -2,6 +2,9 @@ import { Request, Response, NextFunction, RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
 
+const AUTH_INACTIVITY_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+const AUTH_ACTIVITY_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+
 export interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -13,7 +16,9 @@ export interface AuthRequest extends Request {
  * Authentication middleware
  * - Verifies JWT
  * - Loads the latest user role from MongoDB
- * - Prevents stale/wrong role information inside old JWTs
+ * - Blocks disabled accounts
+ * - Enforces backend-authoritative 7-day inactivity
+ * - Updates authenticated activity timestamp at a bounded interval
  */
 export const auth: RequestHandler = async (
   req: Request,
@@ -55,9 +60,15 @@ export const auth: RequestHandler = async (
       });
     }
 
-    // Get the latest role from MongoDB.
+    /**
+     * MongoDB remains authoritative for:
+     * - account existence
+     * - current role
+     * - blocked status
+     * - last authenticated activity
+     */
     const user = await User.findById(decoded.id).select(
-      "_id role blocked"
+      "_id role blocked lastActivityAt"
     );
 
     if (!user) {
@@ -72,6 +83,47 @@ export const auth: RequestHandler = async (
         success: false,
         message: "Your account has been blocked",
       });
+    }
+
+    const now = Date.now();
+
+    const lastActivity = user.lastActivityAt
+      ? new Date(user.lastActivityAt).getTime()
+      : 0;
+
+    /**
+     * Enforce seven days of authenticated inactivity on the backend.
+     *
+     * Legacy users that do not have lastActivityAt yet are initialized
+     * on this authenticated request instead of being incorrectly expired.
+     */
+    if (
+      lastActivity > 0 &&
+      now - lastActivity >= AUTH_INACTIVITY_MAX_MS
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired after 7 days of inactivity",
+        code: "SESSION_INACTIVITY_EXPIRED",
+      });
+    }
+
+    /**
+     * Do not write to MongoDB on every authenticated API request.
+     * Refresh the activity timestamp at most once every five minutes.
+     */
+    if (
+      !lastActivity ||
+      now - lastActivity >= AUTH_ACTIVITY_WRITE_INTERVAL_MS
+    ) {
+      await User.collection.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            lastActivityAt: new Date(now),
+          },
+        }
+      );
     }
 
     authReq.user = {

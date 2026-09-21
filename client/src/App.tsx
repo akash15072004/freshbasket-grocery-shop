@@ -203,7 +203,35 @@ const demoProducts: Product[] = Array.from({ length: 20 }, (_, i) => ({
 // Keep the existing JWT/localStorage auth contract, while isolating each browser
 // tab's active session so two authenticated accounts can safely use the same
 // origin at the same time. No JWT format or backend authentication is changed.
+const AUTH_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const AUTH_SESSION_STARTED_KEY = "fb-auth-session-started-at";
+
+const getAuthSessionStartedAt = () => {
+  try {
+    return Number(sessionStorage.getItem(AUTH_SESSION_STARTED_KEY) || localStorage.getItem(AUTH_SESSION_STARTED_KEY) || "0");
+  } catch {
+    return Number(localStorage.getItem(AUTH_SESSION_STARTED_KEY) || "0");
+  }
+};
+
+const ensureAuthSessionWindow = () => {
+  const existing = getAuthSessionStartedAt();
+  const now = Date.now();
+  if (!existing || !Number.isFinite(existing) || existing <= 0) {
+    try { sessionStorage.setItem(AUTH_SESSION_STARTED_KEY, String(now)); } catch {}
+    try { localStorage.setItem(AUTH_SESSION_STARTED_KEY, String(now)); } catch {}
+    return true;
+  }
+  if (now - existing >= AUTH_SESSION_MAX_AGE_MS) {
+    try { sessionStorage.removeItem("fb-user"); sessionStorage.removeItem("fb-token"); sessionStorage.removeItem("fb-login-history-id"); sessionStorage.removeItem(AUTH_SESSION_STARTED_KEY); } catch {}
+    try { localStorage.removeItem("fb-user"); localStorage.removeItem("fb-token"); localStorage.removeItem("fb-login-history-id"); localStorage.removeItem(AUTH_SESSION_STARTED_KEY); } catch {}
+    return false;
+  }
+  return true;
+};
+
 const getAuthToken = () => {
+  if (!ensureAuthSessionWindow()) return "";
   try {
     return sessionStorage.getItem("fb-token") || localStorage.getItem("fb-token") || "";
   } catch {
@@ -212,6 +240,7 @@ const getAuthToken = () => {
 };
 
 const getAuthUser = () => {
+  if (!ensureAuthSessionWindow()) return null;
   try {
     const raw = sessionStorage.getItem("fb-user") || localStorage.getItem("fb-user");
     return raw ? JSON.parse(raw) : null;
@@ -228,6 +257,9 @@ const persistAuthSession = (user:any, token:string) => {
   // Preserve existing persistent login behavior for the rest of the app.
   localStorage.setItem("fb-user", JSON.stringify(user));
   localStorage.setItem("fb-token", String(token || ""));
+  const now = String(Date.now());
+  try { sessionStorage.setItem(AUTH_SESSION_STARTED_KEY, now); } catch {}
+  try { localStorage.setItem(AUTH_SESSION_STARTED_KEY, now); } catch {}
 };
 
 const clearAuthSession = (sessionToken?:string) => {
@@ -235,6 +267,7 @@ const clearAuthSession = (sessionToken?:string) => {
     sessionStorage.removeItem("fb-user");
     sessionStorage.removeItem("fb-token");
     sessionStorage.removeItem("fb-login-history-id");
+    sessionStorage.removeItem(AUTH_SESSION_STARTED_KEY);
   } catch {}
   // Do not log out another account that is active in a different browser tab.
   // Clear the legacy persistent session only when it belongs to this tab.
@@ -243,6 +276,7 @@ const clearAuthSession = (sessionToken?:string) => {
     localStorage.removeItem("fb-user");
     localStorage.removeItem("fb-token");
     localStorage.removeItem("fb-login-history-id");
+    localStorage.removeItem(AUTH_SESSION_STARTED_KEY);
   }
 };
 
@@ -428,8 +462,379 @@ function LiveClock({ className = "" }: { className?: string }) {
   return <div className={className} aria-label="Current local time"><div className="font-semibold">{now.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}</div><div className="text-lg md:text-xl font-bold tracking-wide">{now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}</div></div>;
 }
 
+const DELIVERY_ANDROID_CSS = "      /* Delivery Android dashboard: compact header + one workspace panel at a time. */\n      .fb-delivery-menu { min-width: 0; }\n      .fb-delivery-menu-link { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.08); color:#e2e8f0; border-radius:.8rem; padding:.6rem .8rem; font-size:.78rem; font-weight:800; text-decoration:none; }\n      .fb-delivery-menu-link:hover { background:rgba(255,255,255,.14); }\n      .fb-delivery-shell [data-delivery-panel=\"dashboard\"] .fb-delivery-panel-assignments,\n      .fb-delivery-shell [data-delivery-panel=\"dashboard\"] .fb-delivery-panel-orders,\n      .fb-delivery-shell [data-delivery-panel=\"dashboard\"] .fb-delivery-panel-route,\n      .fb-delivery-shell [data-delivery-panel=\"dashboard\"] .fb-delivery-panel-replacements { display:none !important; }\n      .fb-delivery-shell [data-delivery-panel=\"assignments\"] .fb-delivery-panel-dashboard,\n      .fb-delivery-shell [data-delivery-panel=\"assignments\"] .fb-delivery-panel-profile,\n      .fb-delivery-shell [data-delivery-panel=\"assignments\"] .fb-delivery-panel-orders,\n      .fb-delivery-shell [data-delivery-panel=\"assignments\"] .fb-delivery-panel-route,\n      .fb-delivery-shell [data-delivery-panel=\"assignments\"] .fb-delivery-panel-replacements { display:none !important; }\n      .fb-delivery-shell [data-delivery-panel=\"orders\"] .fb-delivery-panel-dashboard,\n      .fb-delivery-shell [data-delivery-panel=\"orders\"] .fb-delivery-panel-profile,\n      .fb-delivery-shell [data-delivery-panel=\"orders\"] .fb-delivery-panel-assignments,\n      .fb-delivery-shell [data-delivery-panel=\"orders\"] .fb-delivery-panel-route,\n      .fb-delivery-shell [data-delivery-panel=\"orders\"] .fb-delivery-panel-replacements { display:none !important; }\n      .fb-delivery-shell [data-delivery-panel=\"route\"] .fb-delivery-panel-dashboard,\n      .fb-delivery-shell [data-delivery-panel=\"route\"] .fb-delivery-panel-profile,\n      .fb-delivery-shell [data-delivery-panel=\"route\"] .fb-delivery-panel-assignments,\n      .fb-delivery-shell [data-delivery-panel=\"route\"] .fb-delivery-panel-orders,\n      .fb-delivery-shell [data-delivery-panel=\"route\"] .fb-delivery-panel-replacements { display:none !important; }\n      .fb-delivery-shell [data-delivery-panel=\"replacements\"] .fb-delivery-panel-dashboard,\n      .fb-delivery-shell [data-delivery-panel=\"replacements\"] .fb-delivery-panel-profile,\n      .fb-delivery-shell [data-delivery-panel=\"replacements\"] .fb-delivery-panel-assignments,\n      .fb-delivery-shell [data-delivery-panel=\"replacements\"] .fb-delivery-panel-orders,\n      .fb-delivery-shell [data-delivery-panel=\"replacements\"] .fb-delivery-panel-route { display:none !important; }\n      .fb-delivery-shell [data-delivery-panel=\"profile\"] .fb-delivery-panel-dashboard,\n      .fb-delivery-shell [data-delivery-panel=\"profile\"] .fb-delivery-panel-assignments,\n      .fb-delivery-shell [data-delivery-panel=\"profile\"] .fb-delivery-panel-orders,\n      .fb-delivery-shell [data-delivery-panel=\"profile\"] .fb-delivery-panel-route,\n      .fb-delivery-shell [data-delivery-panel=\"profile\"] .fb-delivery-panel-replacements { display:none !important; }\n      .fb-delivery-shell header > div { min-width:0; }\n      .fb-delivery-shell header > div > div:first-child { min-width:0; }\n      .fb-delivery-shell header h1, .fb-delivery-shell header p { overflow-wrap:anywhere; }\n      @media (max-width:700px) {\n        .fb-delivery-shell header > div { align-items:stretch !important; flex-direction:column !important; gap:.75rem !important; }\n        .fb-delivery-shell header > div > div:last-child { width:100%; min-width:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; }\n        .fb-delivery-shell header > div > div:last-child > * { min-width:0; width:100%; justify-content:center; }\n        .fb-delivery-shell header > div > div:last-child .relative { width:100%; }\n        .fb-delivery-shell header > div > div:last-child .relative > button { width:100%; }\n        .fb-delivery-shell header > div > div:last-child .relative > div { max-width:calc(100vw - 1.5rem); right:0; }\n        .fb-delivery-shell main { padding-left:.75rem !important; padding-right:.75rem !important; padding-top:1rem !important; }\n        .fb-delivery-menu > div { border-radius:1.25rem; padding:1rem !important; }\n        .fb-delivery-menu h2 { font-size:1.35rem; line-height:1.2; }\n        .fb-delivery-menu .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }\n        .fb-delivery-menu-link { flex:1 1 auto; }\n        .fb-delivery-shell .grid { min-width:0; }\n        .fb-delivery-shell input, .fb-delivery-shell select, .fb-delivery-shell textarea, .fb-delivery-shell button, .fb-delivery-shell a { max-width:100%; }\n      }\n      @media (max-width:380px) {\n        .fb-delivery-shell header > div > div:last-child { grid-template-columns:1fr; }\n        .fb-delivery-menu .grid { grid-template-columns:1fr 1fr; gap:.4rem; }\n        .fb-delivery-menu button { padding:.55rem; }\n        .fb-delivery-menu-link { width:100%; }\n      }\n      /* Android portrait fallback: some WebViews report a wider CSS viewport than the physical screen.\n         Use orientation as an additional breakpoint so the delivery header never squeezes its title. */\n      @media screen and (orientation: portrait) and (max-width:900px) {\n        .fb-delivery-shell header > div {\n          width:100%;\n          max-width:none;\n          flex-direction:column !important;\n          align-items:stretch !important;\n          gap:.75rem !important;\n        }\n        .fb-delivery-shell header > div > div:first-child {\n          width:100%;\n          min-width:0;\n          flex:0 0 auto;\n        }\n        .fb-delivery-shell header > div > div:first-child > div:last-child {\n          min-width:0;\n        }\n        .fb-delivery-shell header h1 {\n          white-space:normal !important;\n          overflow-wrap:anywhere !important;\n          word-break:normal !important;\n        }\n        .fb-delivery-shell header > div > div:last-child {\n          width:100%;\n          min-width:0;\n          display:grid !important;\n          grid-template-columns:repeat(2,minmax(0,1fr)) !important;\n          gap:.5rem !important;\n        }\n        .fb-delivery-shell header > div > div:last-child > * {\n          width:100% !important;\n          min-width:0 !important;\n          max-width:none !important;\n          justify-content:center;\n        }\n        .fb-delivery-shell main {\n          width:100%;\n          max-width:none;\n          box-sizing:border-box;\n        }\n        .fb-delivery-menu > div {\n          width:100%;\n          box-sizing:border-box;\n        }\n        .fb-delivery-menu .grid {\n          width:100%;\n          grid-template-columns:repeat(2,minmax(0,1fr)) !important;\n        }\n      }\n      /* Delivery notifications: keep the popup attached to the viewport on Android.\n         This prevents the notification panel from inheriting the 2-column header\n         grid width and appearing as a clipped/left-shifted overlay. */\n      @media screen and (max-width:700px) {\n        .fb-delivery-shell header .relative > div.absolute {\n          position:fixed !important;\n          top:calc(env(safe-area-inset-top, 0px) + 72px) !important;\n          left:.75rem !important;\n          right:.75rem !important;\n          width:auto !important;\n          max-width:none !important;\n          max-height:calc(100dvh - 88px) !important;\n          border-radius:1rem !important;\n          z-index:9999 !important;\n        }\n        .fb-delivery-shell header .relative > div.absolute .max-h-80 {\n          max-height:calc(100dvh - 210px) !important;\n        }\n      }\n      @media screen and (orientation:landscape) and (max-height:500px) {\n        .fb-delivery-shell header .relative > div.absolute {\n          top:calc(env(safe-area-inset-top, 0px) + 56px) !important;\n          max-height:calc(100dvh - 68px) !important;\n        }\n        .fb-delivery-shell header .relative > div.absolute .max-h-80 {\n          max-height:calc(100dvh - 180px) !important;\n        }\n      }\n";
+
+
+const CUSTOMER_ANDROID_CSS = `
+  /* FreshBasket customer Android/mobile responsive layer. Existing customer functionality is unchanged. */
+  .fb-customer-shell,
+  .fb-customer-shell #main-content,
+  .fb-customer-shell main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .fb-customer-shell {
+    overflow-x: clip;
+  }
+  .fb-customer-shell *,
+  .fb-customer-shell *::before,
+  .fb-customer-shell *::after {
+    box-sizing: border-box;
+  }
+  .fb-customer-shell img,
+  .fb-customer-shell video,
+  .fb-customer-shell svg {
+    max-width: 100%;
+  }
+  .fb-customer-shell .grid > *,
+  .fb-customer-shell .flex > * {
+    min-width: 0;
+  }
+  .fb-customer-shell p,
+  .fb-customer-shell h1,
+  .fb-customer-shell h2,
+  .fb-customer-shell h3,
+  .fb-customer-shell h4,
+  .fb-customer-shell span,
+  .fb-customer-shell b,
+  .fb-customer-shell label {
+    overflow-wrap: anywhere;
+  }
+  .fb-customer-shell .overflow-x-auto {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fb-customer-shell table {
+    max-width: 100%;
+  }
+
+  /* Customer header: keep every control inside the physical Android viewport. */
+  .fb-customer-shell > header,
+  .fb-customer-shell > header > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .fb-customer-shell > header > div {
+    gap: .5rem !important;
+  }
+  .fb-customer-shell > header > div > a:first-child {
+    flex: 0 0 auto;
+    min-width: 0 !important;
+  }
+  .fb-customer-shell > header > div > a:first-child > span.font-bold {
+    white-space: nowrap;
+  }
+  .fb-customer-shell button[aria-label="Change delivery location"] {
+    min-width: 0 !important;
+    flex: 0 1 auto;
+  }
+
+  /* Notification popup must be viewport anchored, not anchored to the tiny bell column. */
+  .fb-customer-shell > header .relative > div.absolute {
+    z-index: 9999 !important;
+  }
+  .fb-customer-shell > header .relative > div.absolute .max-h-80 {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  @media screen and (max-width: 640px) {
+    .fb-customer-shell > header > div {
+      height: auto !important;
+      min-height: 4rem;
+      padding-left: .5rem !important;
+      padding-right: .5rem !important;
+      gap: .35rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child {
+      gap: .35rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child > span:first-child {
+      width: 2.25rem !important;
+      height: 2.25rem !important;
+      border-radius: .75rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child > span.font-bold {
+      font-size: 1rem !important;
+    }
+    .fb-customer-shell button[aria-label="Change delivery location"] {
+      padding-left: .25rem !important;
+      padding-right: .25rem !important;
+    }
+    .fb-customer-shell button[aria-label="Change delivery location"] > span:nth-child(2) {
+      display: none !important;
+    }
+    .fb-customer-shell > header .relative > div.absolute {
+      position: fixed !important;
+      top: calc(env(safe-area-inset-top, 0px) + 64px) !important;
+      left: .5rem !important;
+      right: .5rem !important;
+      width: auto !important;
+      max-width: none !important;
+      max-height: calc(100dvh - 76px) !important;
+      border-radius: 1rem !important;
+      overflow: hidden !important;
+    }
+    .fb-customer-shell > header .relative > div.absolute .max-h-80 {
+      max-height: calc(100dvh - 235px) !important;
+    }
+    .fb-customer-shell main {
+      padding-left: .75rem !important;
+      padding-right: .75rem !important;
+      max-width: 100% !important;
+      overflow-x: clip;
+    }
+    .fb-customer-shell main > * {
+      max-width: 100%;
+      min-width: 0;
+    }
+    .fb-customer-shell .grid {
+      min-width: 0;
+    }
+    .fb-customer-shell .grid > * {
+      min-width: 0;
+      max-width: 100%;
+    }
+    .fb-customer-shell input,
+    .fb-customer-shell select,
+    .fb-customer-shell textarea,
+    .fb-customer-shell button,
+    .fb-customer-shell a {
+      max-width: 100%;
+    }
+    .fb-customer-shell [class*="max-w-"] {
+      min-width: 0;
+    }
+  }
+
+  @media screen and (max-width: 380px) {
+    .fb-customer-shell > header > div {
+      gap: .2rem !important;
+      padding-left: .35rem !important;
+      padding-right: .35rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child > span.font-bold {
+      font-size: .92rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child > span:first-child {
+      width: 2.1rem !important;
+      height: 2.1rem !important;
+    }
+    .fb-customer-shell > header .relative > div.absolute {
+      left: .35rem !important;
+      right: .35rem !important;
+    }
+  }
+
+  @media screen and (orientation: portrait) and (max-width: 900px) {
+    .fb-customer-shell {
+      width: 100vw;
+      max-width: 100vw;
+    }
+    .fb-customer-shell > header > div {
+      width: 100vw;
+      max-width: 100vw;
+      overflow: visible;
+    }
+  }
+
+  @media screen and (orientation: landscape) and (max-height: 520px) {
+    .fb-customer-shell > header .relative > div.absolute {
+      top: calc(env(safe-area-inset-top, 0px) + 56px) !important;
+      max-height: calc(100dvh - 64px) !important;
+    }
+    .fb-customer-shell > header .relative > div.absolute .max-h-80 {
+      max-height: calc(100dvh - 210px) !important;
+    }
+  }
+
+  /* Customer header: keep the global product search visible in both orientations.
+     On narrow portrait phones it becomes a second full-width row instead of
+     competing with the logo, location, notifications, profile and cart controls. */
+  .fb-customer-shell .fb-customer-global-search {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: block !important;
+  }
+  .fb-customer-shell .fb-customer-global-search input {
+    min-width: 0;
+  }
+  @media screen and (max-width: 900px) {
+    /* Keep the existing Stores entry available on Android; it must not be
+       hidden by the legacy mobile selector below. */
+    .fb-customer-shell > header > div > a.fb-stores-header-link[href="/stores"] {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+  }
+  @media screen and (max-width: 640px) {
+    /* Preserve the complete customer header on portrait phones: logo,
+       location, Stores, Wishlist, Notifications, Account and Cart stay in
+       the first row; only the existing global search moves to row two. */
+    .fb-customer-shell > header > div {
+      flex-wrap: wrap !important;
+      align-items: center !important;
+      column-gap: 0 !important;
+      row-gap: .35rem !important;
+      overflow: visible !important;
+      height: auto !important;
+      min-height: 4rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child {
+      flex: 1 1 auto !important;
+      min-width: 82px !important;
+      max-width: 112px !important;
+      gap: .2rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child > span:first-child {
+      width: 2rem !important;
+      height: 2rem !important;
+      flex: 0 0 2rem !important;
+    }
+    .fb-customer-shell > header > div > a:first-child > span.font-bold {
+      font-size: .88rem !important;
+      white-space: nowrap !important;
+    }
+    .fb-customer-shell button[aria-label="Change delivery location"] {
+      flex: 0 0 32px !important;
+      width: 32px !important;
+      height: 32px !important;
+      padding: 0 !important;
+      justify-content: center !important;
+    }
+    .fb-customer-shell button[aria-label="Change delivery location"] > span:first-child {
+      width: 30px !important;
+      height: 30px !important;
+    }
+    .fb-customer-shell > header > div > a.fb-stores-header-link[href="/stores"],
+    .fb-customer-shell > header > div > a[href="/wishlist"],
+    .fb-customer-shell > header > div > a[aria-label="Cart"],
+    .fb-customer-shell > header > div > a:last-child {
+      flex: 0 0 32px !important;
+      width: 32px !important;
+      height: 32px !important;
+      padding: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    .fb-customer-shell > header > div > a.fb-stores-header-link[href="/stores"] {
+      background: rgba(16,185,129,.08);
+      color: #047857 !important;
+    }
+    .fb-customer-shell > header > div > a[href="/wishlist"] {
+      display: flex !important;
+    }
+    .fb-customer-shell > header > div > .relative > button[aria-label="Notifications"] {
+      width: 32px !important;
+      height: 32px !important;
+      padding: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    .fb-customer-shell > header > div > a.fb-stores-header-link[href="/stores"] {
+      display: flex !important;
+      flex: 0 0 28px !important;
+      width: 28px !important;
+      height: 30px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      align-items: center !important;
+      justify-content: center !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    .fb-customer-shell > header > div > a.fb-stores-header-link[href="/stores"] svg {
+      width: 17px !important;
+      height: 17px !important;
+    }
+    .fb-customer-shell > header > div > a[href="/wishlist"],
+    .fb-customer-shell > header > div > a[aria-label="Cart"] {
+      flex-basis: 28px !important;
+      width: 28px !important;
+      height: 30px !important;
+    }
+    .fb-customer-shell > header > div > .relative > button[aria-label="Notifications"] {
+      width: 28px !important;
+      height: 30px !important;
+    }
+    .fb-customer-shell .fb-customer-global-search {
+      order: 20;
+      flex: 1 0 100% !important;
+      width: 100% !important;
+      min-width: 100% !important;
+      margin-top: .05rem;
+    }
+    .fb-customer-shell .fb-customer-global-search input {
+      height: 2.9rem;
+      padding-top: .65rem !important;
+      padding-bottom: .65rem !important;
+      border-radius: 1rem !important;
+    }
+  }
+  @media screen and (min-width: 641px) and (max-width: 900px) {
+    .fb-customer-shell > header > div {
+      gap: .45rem !important;
+    }
+    .fb-customer-shell .fb-customer-global-search {
+      min-width: 180px;
+    }
+  }
+
+  /* Customer light/dark surfaces: fix translucent white utility classes that
+     otherwise stay bright in dark mode and make light text unreadable. */
+  html.fb-dark-mode .fb-customer-shell [class*="bg-white/70"],
+  html.fb-dark-mode .fb-customer-shell [class*="bg-white/80"] {
+    background: rgba(15,23,42,.90) !important;
+    color: #e5e7eb !important;
+    border-color: #334155 !important;
+  }
+  html.fb-dark-mode .fb-customer-shell [class*="bg-white/95"] {
+    background: rgba(15,23,42,.96) !important;
+    color: #e5e7eb !important;
+    border-color: #334155 !important;
+  }
+  html.fb-dark-mode .fb-customer-shell .gradient {
+    background:
+      radial-gradient(circle at 8% 10%, rgba(16,185,129,.13), transparent 25%),
+      radial-gradient(circle at 92% 12%, rgba(59,130,246,.11), transparent 25%),
+      linear-gradient(135deg, #071715 0%, #0b1220 55%, #120e1d 100%) !important;
+  }
+  html.fb-dark-mode .fb-customer-shell .gradient .text-slate-600,
+  html.fb-dark-mode .fb-customer-shell .gradient .text-slate-500 {
+    color: #b7c3d4 !important;
+  }
+  html.fb-dark-mode .fb-customer-shell .gradient .bg-emerald-100 {
+    background: rgba(6,78,59,.45) !important;
+    color: #a7f3d0 !important;
+  }
+  html.fb-dark-mode .fb-customer-shell .gradient .bg-white {
+    background: rgba(15,23,42,.90) !important;
+  }
+
+  /* Store-directory search field. */
+  .fb-store-directory-search {
+    min-height: 3.1rem;
+  }
+  html.fb-dark-mode .fb-customer-shell .fb-store-directory-search {
+    background: #0f172a !important;
+    color: #f1f5f9 !important;
+    border-color: #475569 !important;
+  }
+  html.fb-dark-mode .fb-customer-shell .fb-store-directory-search::placeholder {
+    color: #94a3b8 !important;
+  }
+`;
+
 function AccessibilityStyles() {
   return (
+    <>
     <style>{`
       html { scroll-behavior: smooth; }
       body { overflow-x: hidden; }
@@ -607,6 +1012,33 @@ function AccessibilityStyles() {
          functionality intact while replacing the plain white canvas with a
          soft, colorful FreshBasket background. Employee/admin screens are not
          affected because the shell is applied only to customer Layout pages. */
+      /* Customer Stores entry: keep the store-directory button available at every
+         Android width. The previous hidden-md rule made it disappear in portrait.
+         The directory itself already contains search, visit-store, offers/products
+         information, favourites and the existing shopping flow. */
+      .fb-stores-header-link { min-width: 38px; justify-content: center; }
+      @media (max-width: 900px) {
+        /* Restore the existing Stores header entry on Android. A later
+           legacy rule targets a[href="/stores"] with higher specificity,
+           so this selector intentionally includes both the class and href. */
+        .fb-customer-shell > header > div > a.fb-stores-header-link[href="/stores"] {
+          display: flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+      }
+      @media (max-width: 640px) {
+        .fb-stores-header-label { display: none !important; }
+        .fb-stores-header-link {
+          width: 38px; height: 38px; padding: 0 !important;
+          background: rgba(16,185,129,.08);
+          color: #047857 !important;
+        }
+      }
+      @media (min-width: 641px) {
+        .fb-stores-header-link { padding-left: .5rem; padding-right: .5rem; }
+      }
+
       .fb-customer-shell {
         min-height: 100vh;
         background:
@@ -936,7 +1368,11 @@ function AccessibilityStyles() {
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
       }
-    `}</style>
+    `}
+      </style>
+      <style dangerouslySetInnerHTML={{ __html: DELIVERY_ANDROID_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: CUSTOMER_ANDROID_CSS }} />
+    </>
   );
 }
 
@@ -1729,8 +2165,6 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
 };
 
 void setup();
-
-    void setup();
     return () => {
       active = false;
       handles.forEach((h) => { try { void h.remove(); } catch {} });
@@ -1759,6 +2193,19 @@ function useStore() {
     () => JSON.parse(localStorage.getItem("fb-wishlist") || "[]")
   );
   const [favoriteStores, setFavoriteStores] = useState<string[]>([]);
+
+  // Keep every authenticated role signed in across app/browser back navigation.
+  // The session expires only after seven days without a manual logout.
+  useEffect(() => {
+    if (!user) return;
+    const remaining = Math.max(1000, AUTH_SESSION_MAX_AGE_MS - (Date.now() - getAuthSessionStartedAt()));
+    const timer = window.setTimeout(() => {
+      clearAuthSession(getAuthToken());
+      setUser(null);
+      window.location.replace("/login?session=expired");
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [user?.id]);
 
   // Point 23: keep the existing local wishlist, while also syncing saved
   // products to the authenticated customer account so price-drop alerts can
@@ -2124,9 +2571,12 @@ function WebsiteBackButton({ fallback, label = "Back" }: { fallback?: string; la
   const location = useLocation();
   const canGoBack = Number((window.history.state as any)?.idx ?? 0) > 0;
   const goBack = () => {
+    const detail = { handled: false };
+    window.dispatchEvent(new CustomEvent("fb-global-back", { detail }));
+    if (detail.handled) return;
     if (canGoBack) nav(-1);
-    else if (fallback && location.pathname !== fallback) nav(fallback);
-    else nav("/");
+    else if (fallback && location.pathname !== fallback) nav(fallback, { replace: true });
+    else nav("/", { replace: true });
   };
   return <button type="button" onClick={goBack} className="inline-flex items-center gap-2 text-sm font-black text-emerald-700 hover:text-emerald-800 hover:-translate-x-0.5 transition-transform" aria-label={label}><ArrowRight size={16} className="rotate-180"/>{label}</button>;
 }
@@ -2408,6 +2858,7 @@ function Layout({
   store: ReturnType<typeof useStore>;
 }) {
   const nav = useNavigate();
+  const location = useLocation();
   const [count, setCount] = useState(0);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -2470,6 +2921,42 @@ function Layout({
 
   useEffect(() => { void flushVoiceQueue(); }, [voiceAlertsEnabled]);
 
+  // Global back layers register through one root-level Android listener.
+  // This layer only reports that it consumed Back; route navigation remains
+  // centralized in GlobalBackHandler.
+  useEffect(() => {
+    const onGlobalBack = (event: Event) => {
+      const detail = (event as CustomEvent<{ handled?: boolean }>).detail;
+      if (showNotifications) {
+        setShowNotifications(false);
+        if (detail) detail.handled = true;
+        return;
+      }
+      if (showLocationSelector) {
+        setShowLocationSelector(false);
+        if (detail) detail.handled = true;
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        const detail = { handled: false };
+        window.dispatchEvent(new CustomEvent("fb-global-back", { detail }));
+        if (detail.handled) event.preventDefault();
+      }
+    };
+    window.addEventListener("fb-global-back", onGlobalBack as EventListener);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("fb-global-back", onGlobalBack as EventListener);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showNotifications, showLocationSelector]);
+
+  // Never carry an open notification popover across route changes.
+  useEffect(() => {
+    setShowNotifications(false);
+  }, [location.pathname, location.search, location.hash]);
+
   const markNotificationRead = async (id: string) => {
     try {
       await axios.patch(API + "/notifications/" + id + "/read", {}, { headers: adminHeaders() });
@@ -2509,9 +2996,9 @@ function Layout({
             </button>
           )}
 
-          <div className="flex-1 hidden sm:block relative">
+          <div className="flex-1 min-w-0 relative fb-customer-global-search">
             <Search
-              className="absolute left-4 top-3.5 text-slate-400"
+              className="absolute left-4 top-3.5 text-slate-400 pointer-events-none"
               size={19}
             />
             <input
@@ -2524,12 +3011,19 @@ function Layout({
               }}
               placeholder="Search groceries, brands & more..."
               className="w-full rounded-2xl bg-slate-100 pl-11 pr-4 py-3 outline-none focus:ring-2 ring-emerald-200"
+              aria-label="Search groceries, brands and more"
             />
           </div>
 
-          {store.user?.role === "customer" && (
-            <Link to="/stores" className="hidden md:flex items-center gap-1.5 px-2 py-2 text-sm font-bold text-slate-600 hover:text-emerald-700">
-              <Store size={18} /> Stores
+          {(store.user?.role === "customer" || Boolean(deliveryAddress)) && (
+            <Link
+              to="/stores"
+              className="fb-stores-header-link flex items-center gap-1.5 px-2 py-2 text-sm font-bold text-slate-600 hover:text-emerald-700 shrink-0 rounded-xl"
+              aria-label="Browse stores"
+              title="Browse stores"
+            >
+              <Store size={18} />
+              <span className="fb-stores-header-label">Stores</span>
             </Link>
           )}
 
@@ -2557,16 +3051,27 @@ function Layout({
               </button>
               {showNotifications && (
                 <div className="absolute right-0 top-12 w-[340px] max-w-[90vw] bg-white border border-slate-200 rounded-2xl shadow-xl z-[60] overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b">
-                    <div>
+                  <div className="flex items-center justify-between px-4 py-3 border-b gap-3">
+                    <div className="min-w-0">
                       <b>Notifications</b>
                       <p className="text-xs text-slate-500">{unreadNotifications} unread</p>
                     </div>
-                    {unreadNotifications > 0 && (
-                      <button onClick={markAllNotificationsRead} className="text-xs font-bold text-emerald-700">
-                        Mark all read
+                    <div className="flex items-center gap-2 shrink-0">
+                      {unreadNotifications > 0 && (
+                        <button onClick={markAllNotificationsRead} className="text-xs font-bold text-emerald-700">
+                          Mark all read
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowNotifications(false)}
+                        className="w-8 h-8 rounded-full grid place-items-center text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                        aria-label="Close notifications"
+                        title="Close notifications"
+                      >
+                        <X size={18} />
                       </button>
-                    )}
+                    </div>
                   </div>
                   <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between gap-3">
                     <span className="text-xs font-bold text-slate-600">Voice alerts</span>
@@ -2785,6 +3290,7 @@ function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typ
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [storeSearch, setStoreSearch] = useState("");
 
   const loadStores = async () => {
     setLoading(true);
@@ -2803,7 +3309,13 @@ function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typ
 
   useEffect(() => { loadStores(); }, [store.user?.role]);
 
-  const displayStores = favoriteOnly ? stores.filter((st) => store.isFavoriteStore(String(st.id))) : stores;
+  const visibleStores = favoriteOnly
+    ? stores.filter((st) => store.isFavoriteStore(String(st.id)))
+    : stores;
+  const normalizedStoreSearch = storeSearch.trim().toLowerCase();
+  const displayStores = normalizedStoreSearch
+    ? visibleStores.filter((st) => String(st.name || "").toLowerCase().includes(normalizedStoreSearch))
+    : visibleStores;
 
   const openStore = (id: string) => {
     const previous = localStorage.getItem("fb-store-admin-id") || "";
@@ -2824,6 +3336,32 @@ function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typ
       <p className="text-emerald-600 text-sm font-bold">LOCAL STORE NETWORK</p>
       <h1 className="text-3xl font-bold">{favoriteOnly ? "Favorite Stores" : "Choose a store"}</h1>
       <p className="text-slate-500 mt-1">{favoriteOnly ? "Your saved local stores are shown here for quick access." : "All stores available to your customer account are shown here. Each store has its own products, offers, coupons and pricing."}</p>
+      <div className="mt-5 relative max-w-2xl">
+        <Search className="absolute left-4 top-3.5 text-slate-400 pointer-events-none" size={19} />
+        <input
+          value={storeSearch}
+          onChange={(e) => setStoreSearch(e.target.value)}
+          placeholder="Search stores by store name..."
+          aria-label="Search stores by store name"
+          className="fb-store-directory-search w-full rounded-2xl border bg-white px-11 py-3.5 outline-none focus:ring-2 ring-emerald-200 shadow-sm"
+        />
+        {storeSearch && (
+          <button
+            type="button"
+            onClick={() => setStoreSearch("")}
+            className="absolute right-3 top-2.5 w-9 h-9 rounded-xl grid place-items-center text-slate-500 hover:bg-slate-100"
+            aria-label="Clear store search"
+            title="Clear store search"
+          >
+            <X size={17} />
+          </button>
+        )}
+      </div>
+      {!loading && normalizedStoreSearch && (
+        <p className="text-xs text-slate-500 mt-2">
+          {displayStores.length} {displayStores.length === 1 ? "store" : "stores"} found for "{storeSearch.trim()}".
+        </p>
+      )}
     </div>
 
     {error && <PageError message={error} onRetry={loadStores} />}
@@ -2849,7 +3387,13 @@ function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typ
           </button>
         </div>
       </div>
-    ))}</div> : <EmptyState icon={Store} title="No stores available" text="Store owners will appear here when their store accounts are active."/>}
+    ))}</div> : (
+      <EmptyState
+        icon={Store}
+        title={normalizedStoreSearch ? "No matching stores" : "No stores available"}
+        text={normalizedStoreSearch ? `No store matches "${storeSearch.trim()}". Try another store name.` : "Store owners will appear here when their store accounts are active."}
+      />
+    )}
   </main></Layout>;
 }
 
@@ -9667,6 +10211,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
   const [deliveryNotifications, setDeliveryNotifications] = useState<any[]>([]);
   const [deliveryUnreadNotifications, setDeliveryUnreadNotifications] = useState(0);
   const [showDeliveryNotifications, setShowDeliveryNotifications] = useState(false);
+  const [deliveryPanel, setDeliveryPanel] = useState<"dashboard"|"assignments"|"orders"|"route"|"replacements"|"profile">("dashboard");
   const [routePlan, setRoutePlan] = useState<any | null>(null);
   const [routePlanLoading, setRoutePlanLoading] = useState(false);
   const { voiceAlertsEnabled: deliveryVoiceAlertsEnabled, setVoiceAlertsEnabled: setDeliveryVoiceAlertsEnabled, flushVoiceQueue: flushDeliveryVoiceQueue } = useRoleNotificationVoiceAlerts(store, deliveryNotifications);
@@ -10233,13 +10778,47 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-5 py-8">
+      <main className="max-w-7xl mx-auto px-5 py-8" data-delivery-panel={deliveryPanel}>         {deliveryPanel === "dashboard" && <MyIdentityCard store={store} />}
+        <section className="fb-delivery-menu mb-6">
+          <div className="bg-slate-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl overflow-hidden relative">
+            <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-emerald-400/20 blur-2xl pointer-events-none" />
+            <div className="relative">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Delivery Partner Workspace</p>
+                  <h2 className="text-2xl sm:text-3xl font-black mt-1">Delivery Dashboard</h2>
+                  <p className="text-sm text-slate-300 mt-2">Open one section at a time. Your existing delivery, route, payout and proof workflows remain unchanged.</p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full lg:w-auto lg:min-w-[680px]">
+                  {[
+                    ["dashboard","Dashboard",LayoutDashboard,`${active.length} active`],
+                    ["assignments","New Assignments",Bell,`${assignments.filter((a:any)=>a.status==="PENDING_ACCEPTANCE").length} pending`],
+                    ["orders","My Deliveries",Truck,`${active.length} active`],
+                    ["route","Route & Batches",MapPin,`${routableActive.length} routable`],
+                    ["replacements","Replacements",RefreshCw,`${replacementRequests.length} assigned`],
+                    ["profile","Profile & Status",User,deliveryProfile?.onlineStatus==="ONLINE"?"Online":"Offline"],
+                  ].map(([id,label,Icon,meta]:any)=><button key={id} type="button" onClick={()=>setDeliveryPanel(id)} className={`min-w-0 rounded-2xl border px-3 py-3 text-left transition-all ${deliveryPanel===id?"bg-emerald-500 text-white border-emerald-300 shadow-lg":"bg-white/10 text-slate-100 border-white/15 hover:bg-white/15"}`}>
+                    <Icon size={19} className="mb-2"/>
+                    <span className="block text-xs sm:text-sm font-black leading-tight">{label}</span>
+                    <span className={`block mt-1 text-[10px] ${deliveryPanel===id?"text-emerald-50":"text-slate-400"}`}>{meta}</span>
+                  </button>)}
+                </div>
+              </div>
+              <div className="relative mt-3 flex flex-wrap gap-2">
+                <Link to="/delivery/earnings" className="fb-delivery-menu-link"><CircleDollarSign size={16}/> My Earnings & Payout</Link>
+                <Link to="/login-history" className="fb-delivery-menu-link"><History size={16}/> Login History</Link>
+                <button type="button" onClick={()=>setShowDeliveryNotifications(v=>!v)} className="fb-delivery-menu-link"><Bell size={16}/> Notifications{deliveryUnreadNotifications>0?` (${deliveryUnreadNotifications})`:""}</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {locationError && (
           <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             {locationError}
           </div>
         )}
-        <div className="grid sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid sm:grid-cols-3 gap-4 mb-6 fb-delivery-panel-dashboard">
           <div className="bg-white border rounded-2xl p-5">
             <p className="text-sm text-slate-500">Active deliveries</p>
             <p className="text-3xl font-bold mt-1">{active.length}</p>
@@ -10254,7 +10833,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-5 mb-6">
+        <div className="grid lg:grid-cols-3 gap-5 mb-6 fb-delivery-panel-profile">
           <section className="lg:col-span-2 bg-white border rounded-3xl p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
@@ -10287,7 +10866,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         </div>
 
         {assignments.filter((a:any)=>a.status==="PENDING_ACCEPTANCE").length > 0 && (
-          <section className="bg-white border-2 border-amber-200 rounded-3xl overflow-hidden mb-6">
+          <section className="bg-white border-2 border-amber-200 rounded-3xl overflow-hidden mb-6 fb-delivery-panel-assignments">
             <div className="p-5 border-b bg-amber-50/60"><p className="text-xs text-amber-700 font-black uppercase tracking-wider">New Delivery Assignment</p><h2 className="text-xl font-black mt-1">Action required</h2><p className="text-sm text-slate-600 mt-1">Review the store, customer area, distance and ETA before accepting.</p></div>
             <div className="divide-y">
               {assignments.filter((a:any)=>a.status==="PENDING_ACCEPTANCE").map((a:any)=>{
@@ -10304,7 +10883,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         )}
 
         {routableActive.length > 1 && (
-          <section className="bg-white border-2 border-blue-100 rounded-3xl p-5 mb-6">
+          <section className="bg-white border-2 border-blue-100 rounded-3xl p-5 mb-6 fb-delivery-panel-route">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
               <div>
                 <p className="text-xs text-blue-600 font-black uppercase tracking-wider">Multi-order navigation</p>
@@ -10343,7 +10922,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         )}
 
         {batchGroups.length > 0 && (
-          <section className="bg-white border-2 border-emerald-100 rounded-3xl p-5 mb-6">
+          <section className="bg-white border-2 border-emerald-100 rounded-3xl p-5 mb-6 fb-delivery-panel-route">
             <div className="flex items-center justify-between gap-3"><div><p className="text-xs text-emerald-600 font-black uppercase tracking-wider">Active delivery batches</p><h2 className="text-lg font-black mt-1">Route-aware delivery sequence</h2><p className="text-xs text-slate-500 mt-1">Sequence is an estimated geographical order, not a traffic-optimized route.</p></div><span className="text-xs font-bold text-slate-500">{batchGroups.length} batch{batchGroups.length===1?"":"es"}</span></div>
             <div className="grid md:grid-cols-2 gap-3 mt-4">
               {batchGroups.map(([batchId, rows]:any)=><div key={batchId} className="border rounded-2xl p-4"><div className="flex items-center justify-between gap-3"><b>{rows.length} active orders</b><span className="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">{batchId}</span></div><div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><span className="font-bold">Store pickup</span>{rows.map((o:any,i:number)=><React.Fragment key={o._id}><ArrowRight size={14} className="text-slate-400"/><span>{o.user?.name||`Customer ${i+1}`}</span></React.Fragment>)}</div></div>)}
@@ -10351,9 +10930,9 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
           </section>
         )}
 
-        <div className="bg-white border rounded-3xl overflow-hidden mb-6"><div className="p-6 border-b"><h2 className="text-xl font-bold">Replacement Deliveries</h2><p className="text-sm text-slate-500 mt-1">Only replacements explicitly assigned to your Delivery Partner ID appear here. The original order remains historical.</p></div>{replacementRequests.length?<div className="divide-y">{replacementRequests.map((r:any)=><div key={r._id} className="p-5"><div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4"><div><b>{r.replacementId||r.requestId||String(r._id).slice(-8).toUpperCase()}</b><p className="text-sm text-slate-600 mt-1">Request {r.requestId||"—"} · Order #{String(r.order?._id||r.order||"").slice(-8).toUpperCase()} · {r.customer?.name||"Customer"}</p><p className="text-xs text-slate-500 mt-1">{r.order?.address?.address||r.order?.address?.formattedAddress||"Historical order address"}</p><p className="text-xs text-slate-500 mt-1">Product: {r.productId?.name||r.items?.[0]?.name||"—"} · Qty {r.items?.[0]?.quantity||1} · Status: <b>{r.status}</b></p></div><div className="flex flex-wrap gap-2">{r.status==="DELIVERY_ASSIGNED"&&<button onClick={()=>updateReplacementStatus(r._id,"OUT_FOR_DELIVERY")} className="bg-blue-600 text-white rounded-xl px-4 py-2.5 font-bold">Start Delivery</button>}{["DELIVERY_ASSIGNED","OUT_FOR_DELIVERY"].includes(r.status)&&<ImagePickerButtons compact disabled={proofUploading==="replacement:"+r._id} onFile={(f)=>uploadReplacementProof(r._id,f)}/>}{r.status==="OUT_FOR_DELIVERY"&&<button disabled={!r.deliveryProof?.image} onClick={()=>updateReplacementStatus(r._id,"COMPLETED",r.deliveryProof?.image)} className="bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold disabled:opacity-40">Confirm Replacement</button>}{["DELIVERY_ASSIGNED","OUT_FOR_DELIVERY"].includes(r.status)&&<button onClick={()=>{const reason=window.prompt("Reason for replacement delivery failure")||"";if(reason.trim().length>=3)axios.patch(API+"/delivery/replacement-requests/"+r._id,{status:"FAILED",note:reason},{headers:adminHeaders()}).then(()=>loadReplacements()).catch((e:any)=>alert(e?.response?.data?.message||"Unable to mark failed"));}} className="border border-red-200 text-red-700 rounded-xl px-4 py-2.5 font-bold">Delivery Failed</button>}</div></div>{r.deliveryProof?.image&&<div className="mt-3 flex items-center gap-3"><img src={r.deliveryProof.image} alt="Replacement delivery proof" className="w-16 h-16 rounded-xl border object-cover"/><span className="text-xs text-emerald-700 font-semibold">Proof persisted · {r.deliveryProof.uploadedAt?new Date(r.deliveryProof.uploadedAt).toLocaleString("en-IN"):""}</span></div>}</div>)}</div>:<div className="p-8 text-center text-slate-500">No replacement deliveries assigned.</div>}</div>
+        <div className="bg-white border rounded-3xl overflow-hidden mb-6 fb-delivery-panel-replacements"><div className="p-6 border-b"><h2 className="text-xl font-bold">Replacement Deliveries</h2><p className="text-sm text-slate-500 mt-1">Only replacements explicitly assigned to your Delivery Partner ID appear here. The original order remains historical.</p></div>{replacementRequests.length?<div className="divide-y">{replacementRequests.map((r:any)=><div key={r._id} className="p-5"><div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4"><div><b>{r.replacementId||r.requestId||String(r._id).slice(-8).toUpperCase()}</b><p className="text-sm text-slate-600 mt-1">Request {r.requestId||"—"} · Order #{String(r.order?._id||r.order||"").slice(-8).toUpperCase()} · {r.customer?.name||"Customer"}</p><p className="text-xs text-slate-500 mt-1">{r.order?.address?.address||r.order?.address?.formattedAddress||"Historical order address"}</p><p className="text-xs text-slate-500 mt-1">Product: {r.productId?.name||r.items?.[0]?.name||"—"} · Qty {r.items?.[0]?.quantity||1} · Status: <b>{r.status}</b></p></div><div className="flex flex-wrap gap-2">{r.status==="DELIVERY_ASSIGNED"&&<button onClick={()=>updateReplacementStatus(r._id,"OUT_FOR_DELIVERY")} className="bg-blue-600 text-white rounded-xl px-4 py-2.5 font-bold">Start Delivery</button>}{["DELIVERY_ASSIGNED","OUT_FOR_DELIVERY"].includes(r.status)&&<ImagePickerButtons compact disabled={proofUploading==="replacement:"+r._id} onFile={(f)=>uploadReplacementProof(r._id,f)}/>}{r.status==="OUT_FOR_DELIVERY"&&<button disabled={!r.deliveryProof?.image} onClick={()=>updateReplacementStatus(r._id,"COMPLETED",r.deliveryProof?.image)} className="bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold disabled:opacity-40">Confirm Replacement</button>}{["DELIVERY_ASSIGNED","OUT_FOR_DELIVERY"].includes(r.status)&&<button onClick={()=>{const reason=window.prompt("Reason for replacement delivery failure")||"";if(reason.trim().length>=3)axios.patch(API+"/delivery/replacement-requests/"+r._id,{status:"FAILED",note:reason},{headers:adminHeaders()}).then(()=>loadReplacements()).catch((e:any)=>alert(e?.response?.data?.message||"Unable to mark failed"));}} className="border border-red-200 text-red-700 rounded-xl px-4 py-2.5 font-bold">Delivery Failed</button>}</div></div>{r.deliveryProof?.image&&<div className="mt-3 flex items-center gap-3"><img src={r.deliveryProof.image} alt="Replacement delivery proof" className="w-16 h-16 rounded-xl border object-cover"/><span className="text-xs text-emerald-700 font-semibold">Proof persisted · {r.deliveryProof.uploadedAt?new Date(r.deliveryProof.uploadedAt).toLocaleString("en-IN"):""}</span></div>}</div>)}</div>:<div className="p-8 text-center text-slate-500">No replacement deliveries assigned.</div>}</div>
 
-        <div className="bg-white border rounded-3xl overflow-hidden">
+        <div className="bg-white border rounded-3xl overflow-hidden fb-delivery-panel-orders">
           <div className="p-6 border-b">
             <h2 className="text-xl font-bold">Assigned Orders</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -11743,6 +12322,30 @@ function EmployeeVerificationPage() {
   </div></div></div></div>;
 }
 
+function MyIdentityCard({ store }: { store: ReturnType<typeof useStore> }) {
+  const [card, setCard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    if (!store.user?.id || store.user?.role === "customer") { setCard(null); setLoading(false); return () => { cancelled = true; }; }
+    setLoading(true);
+    axios.get(API + "/my/identity-card", { headers: adminHeaders() })
+      .then((r) => { if (!cancelled) setCard(r.data?.data || null); })
+      .catch(() => { if (!cancelled) setCard(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [store.user?.id, store.user?.role]);
+  if (loading || !card) return null;
+  const status = String(card.currentStatus || card.status || "ACTIVE").toUpperCase();
+  return <section className="bg-white border rounded-3xl p-5 sm:p-6 shadow-sm">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div><p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">My FreshBasket ID</p><h2 className="text-xl sm:text-2xl font-black mt-1">Your Employee Identity Card</h2><p className="text-xs sm:text-sm text-slate-500 mt-1">This card is linked to your FreshBasket account.</p></div>
+      <div className={`self-start sm:self-auto inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}><span>●</span>{status}</div>
+    </div>
+    <div className="overflow-x-auto pb-1"><ProfessionalIdCard card={card} printId={`fb-my-id-card-${String(card._id || "card")}`} /></div>
+  </section>;
+}
+
 function MainAdminIdCardGenerator() {
   const [cards, setCards] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
@@ -11775,7 +12378,14 @@ function MainAdminIdCardGenerator() {
   const chooseSource = (id: string) => {
     setForm((f: any) => {
       const expectedRole = linkedAccountRoles[String(f.holderType)];
-      const list = expectedRole ? (f.holderType === "delivery" ? partners : accounts.filter((x:any) => String(x.role) === expectedRole)) : [];
+      const list = expectedRole ? (f.holderType === "delivery"
+        ? partners
+        : accounts.filter((x:any) => {
+            if (String(x.role) !== expectedRole) return false;
+            if (f.holderType === "main-admin") return Boolean(x.isMainAdmin);
+            if (f.holderType === "sub-admin") return !Boolean(x.isMainAdmin);
+            return true;
+          })) : [];
       const person = list.find((x: any) => String(x._id) === String(id));
       if (!person) return { ...f, sourceId: id };
       const meta:any = {
@@ -11847,6 +12457,16 @@ function MainAdminIdCardGenerator() {
     } catch (e:any) { alert(e?.response?.data?.message || "Unable to revoke identity card."); }
   };
 
+  const deleteCard = async (card: any) => {
+    if (!confirm(`Delete identity card ${card.cardNumber}? This cannot be undone.`)) return;
+    try {
+      await axios.delete(API + "/admin/identity-cards/" + card._id, { headers: adminHeaders() });
+      setCards(list => list.filter(x => String(x._id) !== String(card._id)));
+      if (selectedCard && String(selectedCard._id) === String(card._id)) setSelectedCard(null);
+      alert("Identity card deleted.");
+    } catch (e:any) { alert(e?.response?.data?.message || "Unable to delete identity card."); }
+  };
+
   const printCard = (card: any) => {
     setSelectedCard(card);
     setTimeout(() => {
@@ -11873,7 +12493,7 @@ function MainAdminIdCardGenerator() {
       <h3 className="font-bold text-lg">Create new identity card</h3>
       <div className="grid md:grid-cols-3 gap-4 mt-5">
         <label className="text-sm font-semibold">Card for<select value={form.holderType} onChange={e => changeType(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="" disabled>Select employee type</option><option value="main-admin">Main Admin</option><option value="sub-admin">Sub Admin</option><option value="delivery">Delivery Partner</option><option value="store-admin">Store Admin</option><option value="customer-care">Customer Care</option><option value="finance-manager">Finance Manager</option><option value="finance-executive">Finance Executive</option><option value="operations-executive">Operations Executive</option><option value="ecommerce-marketplace-executive">E-commerce / Marketplace Executive</option><option value="inventory-warehouse-executive">Inventory / Warehouse Executive</option><option value="sales-business-development-executive">Sales / Business Development Executive</option><option value="marketing-executive">Marketing Executive</option><option value="technology-it-employee">Technology / IT Employee</option><option value="hr-administration">Human Resources / Administration</option><option value="employee">Company Employee / Other Employee</option></select></label>
-        {linkedAccountTypes.has(String(form.holderType)) && <label className="text-sm font-semibold">Select existing account<select value={form.sourceId} onChange={e => chooseSource(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="">Select...</option>{(form.holderType === "delivery" ? partners : accounts.filter((x:any) => String(x.role) === linkedAccountRoles[String(form.holderType)])).map((x:any)=><option key={x._id} value={x._id}>{x.name} · {x.employeeId || x.email}</option>)}</select></label>}
+        {linkedAccountTypes.has(String(form.holderType)) && <label className="text-sm font-semibold">Select existing account<select value={form.sourceId} onChange={e => chooseSource(e.target.value)} className="mt-2 w-full border rounded-xl px-3 py-2.5"><option value="">Select...</option>{(form.holderType === "delivery" ? partners : accounts.filter((x:any) => { if (String(x.role) !== linkedAccountRoles[String(form.holderType)]) return false; if (form.holderType === "main-admin") return Boolean(x.isMainAdmin); if (form.holderType === "sub-admin") return !Boolean(x.isMainAdmin); return true; })).map((x:any)=><option key={x._id} value={x._id}>{x.name} · {x.employeeId || x.email}</option>)}</select></label>}
         <label className="text-sm font-semibold">Full name<input value={form.name} onChange={e => setForm({...form,name:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
         <label className="text-sm font-semibold">Designation<input value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
         <label className="text-sm font-semibold">Employee / Staff ID<input value={form.employeeId} onChange={e => setForm({...form,employeeId:e.target.value})} placeholder="Optional" className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
@@ -11890,7 +12510,7 @@ function MainAdminIdCardGenerator() {
     {selectedCard && <div className="bg-slate-100 border rounded-3xl p-5"><div className="flex items-center justify-between mb-4"><div><h3 className="font-bold">Card Preview</h3><p className="text-xs text-slate-500">Print this card on an ID-card/PVC printer or save it through your browser's print dialog.</p></div><div className="flex gap-2"><button onClick={() => printCard(selectedCard)} className="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold"><Printer size={17}/> Print Card</button><button onClick={() => setSelectedCard(null)} className="border rounded-xl px-3 py-2.5"><X size={18}/></button></div></div><div className="overflow-auto"><ProfessionalIdCard card={selectedCard}/></div></div>}
     <div className="bg-white border rounded-3xl overflow-hidden"><div className="px-5 py-4 border-b flex items-center justify-between"><div><b>Generated identity cards</b><p className="text-xs text-slate-500 mt-1">Main-admin controlled issuance register</p></div><button onClick={load} className="text-sm text-emerald-700 font-bold">Refresh</button></div>{loading ? <div className="p-10 text-center text-slate-500">Loading identity cards...</div> : cards.length ? <div className="divide-y">{cards.map(c => <div key={c._id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><b>{c.name}</b><p className="text-sm text-slate-500">{c.designation} · {c.cardNumber}</p><p className="text-xs text-slate-400 mt-1">{IDENTITY_CARD_TYPE_LABELS[String(c.holderType || "")] || "COMPANY EMPLOYEE"}{c.employeeId ? ` · Employee ID: ${c.employeeId}` : ""}</p><p className="text-xs text-slate-400">Valid until {c.expiryDate ? new Date(c.expiryDate).toLocaleDateString("en-IN") : "—"} · {c.currentStatus === "ACTIVE" ? "Active" : c.currentStatus === "EXPIRED" ? "Expired" : c.currentStatus === "INACTIVE" ? "Inactive" : "Revoked"}</p></div><div className="flex flex-wrap gap-2">
   <button onClick={() => printCard(c)} className="inline-flex items-center gap-2 border rounded-xl px-4 py-2 font-bold text-sm"><Printer size={16}/> {c.status === "active" ? "Print / Reprint" : "View Card"}</button>
-  {String(c.status || "active").toLowerCase() === "active" && <button onClick={() => revokeCard(c)} className="inline-flex items-center gap-2 border border-red-200 text-red-700 rounded-xl px-4 py-2 font-bold text-sm">Revoke</button>}
+  {String(c.status || "active").toLowerCase() === "active" && <button onClick={() => revokeCard(c)} className="inline-flex items-center gap-2 border border-red-200 text-red-700 rounded-xl px-4 py-2 font-bold text-sm">Revoke</button>} <button onClick={() => deleteCard(c)} className="inline-flex items-center gap-2 border border-red-300 text-red-800 rounded-xl px-4 py-2 font-bold text-sm">Delete</button>
 </div></div>)}</div> : <div className="p-10 text-center text-slate-500">No identity cards generated yet.</div>}</div>
     {selectedCard && <div className="fixed left-[-10000px] top-0"><ProfessionalIdCard card={selectedCard}/></div>}
   </div>;
@@ -12812,7 +13432,7 @@ function CustomerCareDashboard({ store }: { store: ReturnType<typeof useStore> }
   if (store.user?.role !== "customer_care") return <NavigateToLogin />;
   return <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-care-shell">
     <header className="bg-white border-b sticky top-0 z-30"><div className="max-w-7xl mx-auto px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Headphones size={22}/></div><div><h1 className="font-bold text-xl">FreshBasket Customer Care</h1><p className="text-xs text-slate-500">{store.user.name} · {store.user.employeeId || "CUSTOMER_CARE"}</p></div></div><div className="flex gap-2"><button onClick={()=>nav("/customer-360")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><UserRoundSearch size={16}/>Customer 360</button><button onClick={()=>nav("/support-view-as")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><Eye size={16}/>View As</button><Link to="/login-history" className="border rounded-xl px-4 py-2.5 font-semibold">Login History</Link><button onClick={store.logout} className="bg-slate-950 text-white px-4 py-2.5 rounded-xl font-semibold inline-flex items-center gap-2"><LogOut size={16}/>Logout</button></div></div></header>
-    <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">
+    <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">       <MyIdentityCard store={store} />
       <div><p className="text-emerald-600 text-sm font-bold">SUPPORT OPERATIONS</p><h2 className="text-3xl font-bold">Customer Care Dashboard</h2><p className="text-sm text-slate-500 mt-1">Search customers and orders, manage tickets and create support requests without changing the existing customer/order flows.</p></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{cards.map(([label,value,Icon]:any)=>{const clickable=label==="Replacement Requests"||label==="Refund Requests";return <button key={label} type="button" onClick={()=>label==="Replacement Requests"?nav("/customer-care/replacement-requests"):label==="Refund Requests"?document.getElementById("customer-care-refunds")?.scrollIntoView({behavior:"smooth",block:"center"}):undefined} className={`text-left bg-white border rounded-3xl p-5 ${clickable?"hover:border-emerald-300 hover:shadow-sm cursor-pointer":""}`}><div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl grid place-items-center"><Icon size={19}/></div><p className="text-sm text-slate-500 mt-4">{label}</p><b className="text-2xl">{value||0}</b>{label==="Replacement Requests"&&<span className="block text-xs text-emerald-700 font-semibold mt-2">Open replacement queue →</span>}{label==="Refund Requests"&&<span className="block text-xs text-emerald-700 font-semibold mt-2">Open verification queue →</span>}</button>})}</div>
 
@@ -13059,7 +13679,7 @@ function FinanceDashboard({store}:{store:ReturnType<typeof useStore>}){
     <DepartmentSidebar title="FreshBasket" subtitle={String(store.user?.role||"Finance").replace("_"," ")} departments={financeDepartments} activeId={section} onSelect={(id)=>{ setSection(id); }} logout={()=>{store.logout();window.location.href="/login"}} mobileOpen={financeSidebarOpen} setMobileOpen={setFinanceSidebarOpen}/>
     <main className="md:ml-64 flex-1 min-w-0"><header className="sticky top-0 z-20 bg-white border-b px-4 md:px-8 py-4 flex justify-between items-center"><div className="flex items-center gap-3"><button type="button" className="md:hidden border rounded-xl p-2" aria-label="Open navigation" onClick={()=>setFinanceSidebarOpen(true)}><Menu size={19}/></button><div><p className="text-xs text-emerald-600 font-bold">{String(store.user?.role||"").replace("_"," ").toUpperCase()}</p><h1 className="text-2xl font-bold">Finance {section[0].toUpperCase()+section.slice(1)}</h1></div></div><button onClick={load} className="border rounded-xl px-4 py-2 font-bold"><RefreshCw size={16} className="inline mr-1"/>Refresh</button></header><div className="p-4 md:p-8">
     {dashboard.forcePasswordChange&&<div className="mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900"><b>Password change required.</b> Please update your password from Profile before continuing.</div>}
-    {section==="dashboard"&&<div className="space-y-6"><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Refunds",statusRefund("REQUESTED"),()=>{setRefundFilter("REQUESTED");setSection("refunds")})}{card("Under Review",statusRefund("FINANCE_REVIEW"),()=>{setRefundFilter("FINANCE_REVIEW");setSection("refunds")})}{card("Approved Refunds",statusRefund("APPROVED"),()=>{setRefundFilter("APPROVED");setSection("refunds")})}{card("Completed Refunds",statusRefund("COMPLETED"),()=>{setRefundFilter("COMPLETED");setSection("refunds")})}{card("Failed Refunds",dashboardCount("refunds","FAILED"),()=>{setRefundFilter("FAILED");setSection("refunds")})}</div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Store Payouts",storePayouts.filter((x:any)=>Number(x.pendingPayout||0)>0).length,()=>setSection("store-payouts"))}{card("Pending Payouts",statusPayout("PENDING"),()=>{setPayoutFilter("PENDING");setSection("payouts")})}{card("Eligible Payouts",statusPayout("ELIGIBLE"),()=>{setPayoutFilter("ELIGIBLE");setSection("payouts")})}{card("Finalized Payouts",statusPayout("FINALIZED"),()=>{setPayoutFilter("FINALIZED");setSection("payouts")})}{card("Paid Payouts",statusPayout("PAID"),()=>{setPayoutFilter("PAID");setSection("payouts")})}{card("Failed Payouts",statusPayout("FAILED"),()=>{setPayoutFilter("FAILED");setSection("payouts")})}</div><div className="grid grid-cols-3 gap-3">{card("Pending Incentives",statusInc("PENDING"),()=>{setIncentiveFilter("PENDING");setSection("incentives")})}{card("Approved Incentives",statusInc("APPROVED"),()=>{setIncentiveFilter("APPROVED");setSection("incentives")})}{card("Paid Incentives",statusInc("PAID"),()=>{setIncentiveFilter("PAID");setSection("incentives")})}</div><div className="grid md:grid-cols-5 gap-3">{card("Today's Refunds",money(dashboard.summary?.todayRefunds||0))}{card("Today's Payouts",money(dashboard.summary?.todayPayouts||0))}{card("Monthly Refunds",money(dashboard.summary?.monthlyRefunds||0))}{card("Monthly Delivery Payout",money(dashboard.summary?.monthlyDeliveryPayout||0))}{card("Monthly Incentives",money(dashboard.summary?.monthlyIncentives||0))}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">Recent Activities</h2></div>{(dashboard.recentActivities||[]).map((x:any)=><button type="button" key={x._id} onClick={()=>setSection("transactions")} className="w-full p-4 border-b flex justify-between text-sm text-left hover:bg-slate-50"><span><b>{x.transactionId}</b><span className="text-slate-500 ml-2">{x.type}</span></span><span>{money(x.amount)} · {x.status}</span></button>)}{!(dashboard.recentActivities||[]).length&&<div className="p-5 text-sm text-slate-500">No recent finance activity.</div>}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">My Work Queue</h2><p className="text-xs text-slate-500 mt-1">Live records that require the current Finance role's attention.</p></div><div className="divide-y">{[...refunds.filter((x:any)=>["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE","FINANCE_REVIEW","APPROVAL_PENDING","APPROVED","PROCESSING"].includes(x.status)).slice(0,4).map((x:any)=>({key:"r"+x._id,label:"REFUND",id:x.requestId||x._id,amount:x.approvedAmount??x.amount,status:x.status,go:"refunds"})),...payouts.filter((x:any)=>["ELIGIBLE","FINALIZED","PROCESSING","ON_HOLD"].includes(x.deliveryPayoutStatus)).slice(0,3).map((x:any)=>({key:"p"+x._id,label:"DELIVERY PAYOUT",id:x._id,amount:Number(x.deliveryPayout||0)+Number(x.performanceIncentive||0),status:x.deliveryPayoutStatus,go:"payouts"})),...incentives.filter((x:any)=>["PENDING","APPROVED","ON_HOLD"].includes(x.status)).slice(0,3).map((x:any)=>({key:"i"+x._id,label:"INCENTIVE",id:x.incentiveId||x._id,amount:x.approvedAmount||x.eligibleAmount,status:x.status,go:"incentives"}))].slice(0,8).map((x:any)=><button key={x.key} onClick={()=>setSection(x.go)} className="w-full p-4 text-left flex items-center justify-between gap-4 hover:bg-slate-50"><span><b>{x.label}</b><span className="ml-2 text-slate-500">{x.id}</span><p className="text-xs text-amber-700 mt-1">Action Required · {x.status}</p></span><b>{money(x.amount||0)}</b></button>)}{!refunds.length&&!payouts.length&&!incentives.length&&<div className="p-5 text-sm text-slate-500">No finance work is currently assigned.</div>}</div></div></div>}
+    {section==="dashboard"&&<div className="space-y-6"><MyIdentityCard store={store} /><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Refunds",statusRefund("REQUESTED"),()=>{setRefundFilter("REQUESTED");setSection("refunds")})}{card("Under Review",statusRefund("FINANCE_REVIEW"),()=>{setRefundFilter("FINANCE_REVIEW");setSection("refunds")})}{card("Approved Refunds",statusRefund("APPROVED"),()=>{setRefundFilter("APPROVED");setSection("refunds")})}{card("Completed Refunds",statusRefund("COMPLETED"),()=>{setRefundFilter("COMPLETED");setSection("refunds")})}{card("Failed Refunds",dashboardCount("refunds","FAILED"),()=>{setRefundFilter("FAILED");setSection("refunds")})}</div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Store Payouts",storePayouts.filter((x:any)=>Number(x.pendingPayout||0)>0).length,()=>setSection("store-payouts"))}{card("Pending Payouts",statusPayout("PENDING"),()=>{setPayoutFilter("PENDING");setSection("payouts")})}{card("Eligible Payouts",statusPayout("ELIGIBLE"),()=>{setPayoutFilter("ELIGIBLE");setSection("payouts")})}{card("Finalized Payouts",statusPayout("FINALIZED"),()=>{setPayoutFilter("FINALIZED");setSection("payouts")})}{card("Paid Payouts",statusPayout("PAID"),()=>{setPayoutFilter("PAID");setSection("payouts")})}{card("Failed Payouts",statusPayout("FAILED"),()=>{setPayoutFilter("FAILED");setSection("payouts")})}</div><div className="grid grid-cols-3 gap-3">{card("Pending Incentives",statusInc("PENDING"),()=>{setIncentiveFilter("PENDING");setSection("incentives")})}{card("Approved Incentives",statusInc("APPROVED"),()=>{setIncentiveFilter("APPROVED");setSection("incentives")})}{card("Paid Incentives",statusInc("PAID"),()=>{setIncentiveFilter("PAID");setSection("incentives")})}</div><div className="grid md:grid-cols-5 gap-3">{card("Today's Refunds",money(dashboard.summary?.todayRefunds||0))}{card("Today's Payouts",money(dashboard.summary?.todayPayouts||0))}{card("Monthly Refunds",money(dashboard.summary?.monthlyRefunds||0))}{card("Monthly Delivery Payout",money(dashboard.summary?.monthlyDeliveryPayout||0))}{card("Monthly Incentives",money(dashboard.summary?.monthlyIncentives||0))}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">Recent Activities</h2></div>{(dashboard.recentActivities||[]).map((x:any)=><button type="button" key={x._id} onClick={()=>setSection("transactions")} className="w-full p-4 border-b flex justify-between text-sm text-left hover:bg-slate-50"><span><b>{x.transactionId}</b><span className="text-slate-500 ml-2">{x.type}</span></span><span>{money(x.amount)} · {x.status}</span></button>)}{!(dashboard.recentActivities||[]).length&&<div className="p-5 text-sm text-slate-500">No recent finance activity.</div>}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">My Work Queue</h2><p className="text-xs text-slate-500 mt-1">Live records that require the current Finance role's attention.</p></div><div className="divide-y">{[...refunds.filter((x:any)=>["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE","FINANCE_REVIEW","APPROVAL_PENDING","APPROVED","PROCESSING"].includes(x.status)).slice(0,4).map((x:any)=>({key:"r"+x._id,label:"REFUND",id:x.requestId||x._id,amount:x.approvedAmount??x.amount,status:x.status,go:"refunds"})),...payouts.filter((x:any)=>["ELIGIBLE","FINALIZED","PROCESSING","ON_HOLD"].includes(x.deliveryPayoutStatus)).slice(0,3).map((x:any)=>({key:"p"+x._id,label:"DELIVERY PAYOUT",id:x._id,amount:Number(x.deliveryPayout||0)+Number(x.performanceIncentive||0),status:x.deliveryPayoutStatus,go:"payouts"})),...incentives.filter((x:any)=>["PENDING","APPROVED","ON_HOLD"].includes(x.status)).slice(0,3).map((x:any)=>({key:"i"+x._id,label:"INCENTIVE",id:x.incentiveId||x._id,amount:x.approvedAmount||x.eligibleAmount,status:x.status,go:"incentives"}))].slice(0,8).map((x:any)=><button key={x.key} onClick={()=>setSection(x.go)} className="w-full p-4 text-left flex items-center justify-between gap-4 hover:bg-slate-50"><span><b>{x.label}</b><span className="ml-2 text-slate-500">{x.id}</span><p className="text-xs text-amber-700 mt-1">Action Required · {x.status}</p></span><b>{money(x.amount||0)}</b></button>)}{!refunds.length&&!payouts.length&&!incentives.length&&<div className="p-5 text-sm text-slate-500">No finance work is currently assigned.</div>}</div></div></div>}
     {section==="refunds"&&<div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex flex-wrap gap-3 justify-between"><div><h2 className="font-bold text-lg">Refund Management</h2><p className="text-xs text-slate-500">Customer Care verification → Finance review → approval → processing.</p></div><select value={refundFilter} onChange={e=>setRefundFilter(e.target.value)} className="border rounded-xl px-3 py-2 text-sm font-semibold"><option value="ALL">All</option><option value="REQUESTED">Pending</option><option value="UNDER_REVIEW">Under Review</option><option value="FINANCE_REVIEW">Finance Review</option><option value="APPROVED">Approved</option><option value="PROCESSING">Processing</option><option value="COMPLETED">Completed</option><option value="FAILED">Failed</option><option value="REJECTED">Rejected</option></select></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr>{["Request ID","Customer","Order","Product / Item","Amount","Method","Status","Action"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody>{visibleRefunds.map((r:any)=><tr key={r._id} className="border-t"><td className="p-3 font-semibold">{r.requestId||("#"+String(r._id).slice(-8))}</td><td className="p-3">{r.customer?.name||"—"}<div className="text-xs text-slate-500">{r.customer?.customerId||r.customer?.email||""}</div></td><td className="p-3">#{String(r.order?._id||r.order||"").slice(-8)}</td><td className="p-3">{r.orderItemId||r.productId||"—"}</td><td className="p-3 font-bold">{money(r.approvedAmount??r.amount)}</td><td className="p-3">{r.refundMethod||"ORIGINAL"}{r.bankAccountMasked&&<div className="text-xs text-slate-500">{r.bankAccountMasked}</div>}{r.upiMasked&&<div className="text-xs text-slate-500">{r.upiMasked}</div>}</td><td className="p-3">{r.status}</td><td className="p-3 flex gap-2">{["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE"].includes(r.status)&&can("FINANCE_REVIEW_REFUNDS")&&<button onClick={()=>updateRefund(r._id,"FINANCE_REVIEW")} className="border rounded-lg px-2 py-1">Review</button>}{["FINANCE_REVIEW","APPROVAL_PENDING"].includes(r.status)&&can("FINANCE_APPROVE_REFUNDS")&&r.status!=="APPROVAL_PENDING"&&<button onClick={()=>{const v=window.prompt("Approved amount",String(r.amount||0));if(v!==null)updateRefund(r._id,"APPROVED",{approvedAmount:Number(v)})}} className="bg-emerald-600 text-white rounded-lg px-2 py-1">Approve</button>}{!["COMPLETED","REJECTED","FAILED"].includes(r.status)&&can("FINANCE_APPROVE_REFUNDS")&&<button onClick={()=>{const reason=window.prompt("Mandatory rejection reason");if(reason)updateRefund(r._id,"REJECTED",{reason})}} className="border border-red-200 text-red-700 rounded-lg px-2 py-1">Reject</button>}{r.status==="APPROVED"&&can("FINANCE_PROCESS_REFUNDS")&&<button onClick={()=>updateRefund(r._id,"PROCESSING")} className="bg-blue-600 text-white rounded-lg px-2 py-1">Process</button>}{r.status==="PROCESSING"&&can("FINANCE_PROCESS_REFUNDS")&&<button onClick={()=>{const ref=window.prompt("Transaction reference (if manual)")||"";axios.patch(API+"/finance/refunds/"+r._id+"/process",{status:"COMPLETED",transactionReference:ref},{headers:adminHeaders()}).then(load).catch((e:any)=>alert(e?.response?.data?.message||"Unable to complete refund"))}} className="bg-emerald-600 text-white rounded-lg px-2 py-1">Complete</button>}<button onClick={async()=>{try{const x=await axios.get(API+"/finance/refunds/"+r._id,{headers:adminHeaders()});const detail=x.data.data||{};const merged={...r,...detail};const evidence=normalizeRefundEvidence(detail);const listEvidence=normalizeRefundEvidence(r);setSelectedRefund({...merged,evidence:evidence.length?evidence:listEvidence})}catch(e:any){alert(e?.response?.data?.message||"Unable to load refund")}}} className="border rounded-lg px-2 py-1"><Eye size={14}/></button></td></tr>)}</tbody></table></div></div>}
     {section==="payouts"&&<div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex flex-wrap gap-3 justify-between"><div><h2 className="font-bold text-lg">Delivery Partner Payouts</h2><p className="text-xs text-slate-500">Base payout is taken from the Store/Admin assignment; Finance cannot silently change it.</p></div><select value={payoutFilter} onChange={e=>setPayoutFilter(e.target.value)} className="border rounded-xl px-3 py-2 text-sm font-semibold"><option value="ALL">All</option><option value="PENDING">Pending</option><option value="ELIGIBLE">Eligible</option><option value="FINALIZED">Finalized</option><option value="PROCESSING">Processing</option><option value="PAID">Paid</option><option value="FAILED">Failed</option><option value="ON_HOLD">On Hold</option></select></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr>{["Order","Partner","Delivery Date","Base Payout","Incentive","Total","Status","Action"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody>{visiblePayouts.map((p:any)=><tr key={p._id} className="border-t"><td className="p-3">#{String(p._id).slice(-8)}</td><td className="p-3">{p.deliveryPartner?.name||"—"}<div className="text-xs text-slate-500">{p.deliveryPartner?.employeeId||""}</div></td><td className="p-3">{p.deliveredAt?new Date(p.deliveredAt).toLocaleString("en-IN"):"—"}</td><td className="p-3">{money(p.deliveryPayout||0)}</td><td className="p-3">{money(p.performanceIncentive||0)}</td><td className="p-3 font-bold">{money(Number(p.deliveryPayout||0)+Number(p.performanceIncentive||0))}</td><td className="p-3">{p.deliveryPayoutStatus}</td><td className="p-3">{can("FINANCE_PROCESS_PAYOUTS")&&<select value={p.deliveryPayoutStatus} onChange={e=>updatePayout(p._id,e.target.value)} className="border rounded-lg p-2"><option>ELIGIBLE</option><option>FINALIZED</option><option>PROCESSING</option><option>PAID</option><option>ON_HOLD</option></select>}</td></tr>)}</tbody></table></div></div>}
     {section==="store-payouts"&&<div className="space-y-5"><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold text-lg">Store Payout Verification</h2><p className="text-xs text-slate-500 mt-1">Store payouts use the existing finance transaction ledger. Finance Executive prepares the batch; Finance Manager approves and settles it.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr>{["Store","Gross Sales","Refunds","Commission","Adjustments","Net Earnings","Pending","Paid","Action"].map(x=><th key={x} className="p-3 text-left">{x}</th>)}</tr></thead><tbody>{storePayouts.map((x:any)=><tr key={x.storeId} className="border-t"><td className="p-3 font-semibold">{x.name}<div className="text-xs text-slate-500">{x.employeeId||""}</div></td><td className="p-3">{money(x.grossSales||0)}</td><td className="p-3">{money(x.refunds||0)}</td><td className="p-3">{money(x.commission||0)}</td><td className="p-3">{money(x.adjustments||0)}</td><td className="p-3 font-bold">{money(x.storeEarnings||0)}</td><td className="p-3">{money(x.pendingPayout||0)}</td><td className="p-3">{money(x.paidPayout||0)}</td><td className="p-3">{can("FINANCE_PROCESS_PAYOUTS")&&Number(x.pendingPayout||0)>0&&<button onClick={()=>createStorePayout(x)} className="bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-bold">Create Batch</button>}</td></tr>)}</tbody></table>{!storePayouts.length&&<div className="p-10 text-center text-slate-500">No Store payout data for the current period.</div>}</div></div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h3 className="font-bold text-lg">Store Payout Approval Queue</h3></div><div className="divide-y">{storePayoutBatches.map((b:any)=><div key={b._id} className="p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"><div><b>{b.batchId}</b><p className="text-sm mt-1">{b.storeAdmin?.name||"Store"} · {money(b.netPayable||b.total||0)}</p><p className="text-xs text-slate-500 mt-1">{b.payoutPeriodStart?new Date(b.payoutPeriodStart).toLocaleDateString("en-IN"):"—"} → {b.payoutPeriodEnd?new Date(b.payoutPeriodEnd).toLocaleDateString("en-IN"):"—"} · {b.status}</p></div><div className="flex flex-wrap gap-2">{can("FINANCE_PROCESS_PAYOUTS")&&b.status==="CREATED"&&<button onClick={()=>updateStorePayout(b._id,"UNDER_REVIEW")} className="border rounded-lg px-3 py-1.5 font-bold">Review</button>}{store.user?.role==="finance_manager"&&b.status==="UNDER_REVIEW"&&<button onClick={()=>updateStorePayout(b._id,"APPROVED")} className="bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-bold">Approve</button>}{store.user?.role==="finance_manager"&&b.status==="APPROVED"&&<button onClick={()=>updateStorePayout(b._id,"PROCESSING")} className="border rounded-lg px-3 py-1.5 font-bold">Process</button>}{store.user?.role==="finance_manager"&&b.status==="PROCESSING"&&<button onClick={()=>updateStorePayout(b._id,"PAID")} className="bg-blue-600 text-white rounded-lg px-3 py-1.5 font-bold">Mark Paid</button>}</div></div>)}{!storePayoutBatches.length&&<div className="p-10 text-center text-slate-500">No Store payout batches created yet.</div>}</div></div></div>}
@@ -13778,10 +14398,18 @@ function Admin({
   }, [location.search, location.pathname]);
 
   const changeTab = (next: string) => {
+    // A sidebar click is a real page navigation, so let React Router create
+    // a normal history entry. Re-clicking the already active item must not
+    // create a duplicate A -> A history entry.
+    if (next === tab) {
+      setAdminSidebarOpen(false);
+      return;
+    }
     setTab(next);
+    setAdminSidebarOpen(false);
     if (next === "store-applications") return nav("/admin/store-applications");
     if (next === "delivery-applications") return nav("/admin/delivery-applications");
-    nav(next === "dashboard" ? "/admin" : "/admin?tab=" + next);
+    nav(next === "dashboard" ? "/admin" : "/admin?tab=" + encodeURIComponent(next));
   };
 
   const navs: any[] = [
@@ -13856,13 +14484,18 @@ function Admin({
       <main id="admin-main" className="md:ml-64 flex-1 min-w-0">
         <header className="min-h-16 bg-white border-b px-3 sm:px-5 md:px-8 py-2 flex items-center gap-3 justify-between sticky top-0 z-30">
           <button type="button" className="md:hidden shrink-0 border rounded-xl p-2" aria-label="Open navigation" onClick={() => setAdminSidebarOpen(true)}><Menu size={19}/></button>
-          <div className="min-w-0">
-            <p className="text-xs text-slate-400">
-              STORE CONTROL
-            </p>
-            <h1 className="font-bold truncate">
-              {visibleNavs.find((x) => x[0] === tab)?.[2]}
-            </h1>
+          <div className="min-w-0 flex items-center gap-3">
+            {tab !== "dashboard" && (
+              <WebsiteBackButton fallback="/admin" label="Back" />
+            )}
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">
+                STORE CONTROL
+              </p>
+              <h1 className="font-bold truncate">
+                {visibleNavs.find((x) => x[0] === tab)?.[2]}
+              </h1>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -13936,6 +14569,7 @@ function Admin({
 
           {tab === "dashboard" && (
             <>
+              <MyIdentityCard store={store} />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                   [
@@ -14185,6 +14819,105 @@ function Admin({
   );
 }
 
+function getFreshBasketRoleRoot(role: string) {
+  if (role === "admin") return "/admin";
+  if (role === "delivery") return "/delivery";
+  if (role === "customer_care") return "/customer-care";
+  if (role === "finance_manager" || role === "finance_executive") return "/finance";
+  return "/";
+}
+
+function getFreshBasketBackFallback(pathname: string, role: string) {
+  if (/^\/product\/[^/]+/.test(pathname)) return role === "customer" ? "/shop" : "/";
+  if (/^\/orders\/[^/]+/.test(pathname)) return "/orders";
+  if (/^\/invoice\/[^/]+/.test(pathname)) return "/orders";
+  if (pathname === "/checkout") return "/cart";
+  if (pathname === "/cart") return role === "customer" ? "/" : getFreshBasketRoleRoot(role);
+  if (pathname === "/delivery/earnings") return "/delivery";
+  if (pathname === "/customer-360") {
+    if (role === "customer_care") return "/customer-care";
+    if (role === "finance_manager" || role === "finance_executive") return "/finance";
+    return "/admin";
+  }
+  if (pathname === "/support-view-as" || pathname.startsWith("/customer-care/")) return "/customer-care";
+  if (pathname.startsWith("/admin")) return "/admin";
+  if (pathname.startsWith("/finance")) return "/finance";
+  if (pathname === "/notifications" || pathname === "/orders" || pathname === "/wishlist" ||
+      pathname === "/account" || pathname === "/profile" || pathname === "/login-history" ||
+      pathname === "/stores" || pathname === "/favorite-stores" || pathname === "/shop" ||
+      pathname === "/rewards" || pathname === "/support") {
+    return getFreshBasketRoleRoot(role);
+  }
+  return getFreshBasketRoleRoot(role);
+}
+
+function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
+  const nav = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!IS_NATIVE_APP) return;
+
+    let active = true;
+    let listener: { remove: () => Promise<void> } | null = null;
+
+    const handleBack = () => {
+      if (!active) return;
+
+      // Give the currently open application layer (notification popover,
+      // drawer, modal, sheet, etc.) first chance to consume Back.
+      const detail = { handled: false };
+      window.dispatchEvent(new CustomEvent("fb-global-back", { detail }));
+      if (detail.handled) return;
+
+      const historyState = (window.history.state || {}) as any;
+      const historyIndex = Number(historyState?.idx);
+      if (Number.isFinite(historyIndex) && historyIndex > 0) {
+        nav(-1);
+        return;
+      }
+
+      // React Router normally supplies `idx`. If an embedded Android/WebView
+      // state does not expose it, an Admin sidebar page still has a concrete
+      // route (`/admin?tab=...` or an application route). In that no-index
+      // case, return to the Admin root instead of doing nothing. This is only
+      // a fallback; real router history always takes priority above.
+      if (location.pathname === "/admin" && new URLSearchParams(location.search).has("tab")) {
+        nav("/admin", { replace: true });
+        return;
+      }
+
+      const role = String(store.user?.role || "");
+      const fallback = getFreshBasketBackFallback(location.pathname, role);
+      const root = getFreshBasketRoleRoot(role);
+
+      if (location.pathname !== fallback) {
+        nav(fallback, { replace: true });
+        return;
+      }
+
+      // At the role root there is no valid previous application screen.
+      // Preserve the existing Android exit behavior instead of inventing
+      // another navigation destination.
+      if (location.pathname === root) {
+        return;
+      }
+    };
+
+    void CapacitorApp.addListener("backButton", handleBack).then((handle) => {
+      if (!active) void handle.remove();
+      else listener = handle;
+    });
+
+    return () => {
+      active = false;
+      if (listener) void listener.remove();
+    };
+  }, [location.pathname, nav, store.user?.role]);
+
+  return null;
+}
+
 export default function App() {
   const store = useStore();
   useNativeFreshBasketPush(store);
@@ -14194,6 +14927,7 @@ export default function App() {
       <AccessibilityStyles />
       <GlobalPreferences store={store} />
       <LocalizedUI store={store} />
+      <GlobalBackHandler store={store} />
       <Routes>
       <Route
         path="/"

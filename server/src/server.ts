@@ -259,7 +259,7 @@ const DeliveryNotAvailableAttempt = mongoose.models.DeliveryNotAvailableAttempt 
 const identityCardSchema = new mongoose.Schema({
   cardNumber: { type: String, required: true, unique: true, index: true },
   verificationToken: { type: String, unique: true, sparse: true, index: true, default: () => crypto.randomBytes(24).toString("hex") },
-  holderType: { type: String, enum: ["delivery", "store-admin", "customer-care", "finance-manager", "finance-executive", "employee"], required: true },
+  holderType: { type: String, enum: ["delivery", "store-admin", "customer-care", "finance-manager", "finance-executive", "main-admin", "sub-admin", "operations-executive", "ecommerce-marketplace-executive", "inventory-warehouse-executive", "sales-business-development-executive", "marketing-executive", "technology-it-employee", "hr-administration", "employee"], required: true },
   name: { type: String, required: true, trim: true, maxlength: 120 },
   email: { type: String, default: "", trim: true, maxlength: 160 },
   phone: { type: String, default: "", trim: true, maxlength: 20 },
@@ -427,6 +427,12 @@ if (orderItemsSchemaPath?.schema?.add) {
 
 // Point 42 — Android FCM device registrations. This is additive and optional;
 // existing users/documents remain valid when the field is absent.
+// Rolling authenticated-session activity. This is backend-authoritative and
+// is used together with the existing 7-day JWT to enforce inactivity expiry.
+(User as any).schema.add({
+  lastActivityAt: { type: Date, default: null, index: true },
+});
+
 (User as any).schema.add({
   pushTokens: {
     type: [{
@@ -1170,6 +1176,20 @@ const buildNotificationDeepLink = ({ relatedEntity, relatedEntityId, order, deep
   return "/notifications";
 };
 
+const getPushChannelId = (relatedEntity: any, type: any) => {
+  const entity = String(relatedEntity || "").toUpperCase();
+  const text = `${entity} ${String(type || "")}`.toLowerCase();
+  if (entity.includes("DELIVERY") || entity.includes("ASSIGNMENT") || text.includes("delivery")) return "delivery";
+  if (entity.includes("REFUND") || text.includes("refund")) return "refunds";
+  if (entity.includes("SUPPORT") || text.includes("support")) return "support";
+  if (entity.includes("CHAT") || text.includes("chat")) return "chat";
+  if (entity.includes("FINANCE") || entity.includes("PAYOUT") || text.includes("finance") || text.includes("payout")) return "finance";
+  if (text.includes("payment")) return "payments";
+  if (text.includes("security")) return "security";
+  if (entity.includes("ORDER") || text.includes("order")) return "orders";
+  return "system";
+};
+
 const sendPushToUsers = async ({ users, title, message, type = "info", relatedEntity = "ORDER", relatedEntityId = "", order, deepLink }: any) => {
   try {
     if (!firebaseMessaging) return;
@@ -1191,7 +1211,7 @@ const sendPushToUsers = async ({ users, title, message, type = "info", relatedEn
       },
       android: {
         priority: "high",
-        notification: { sound: "default" },
+        notification: { sound: "default", channelId: getPushChannelId(relatedEntity, type) },
       },
     });
     const invalidTokens = response.responses.map((r:any, i:number) => (!r.success ? tokens[i] : "")).filter(Boolean);
@@ -1206,9 +1226,23 @@ const sendPushToUsers = async ({ users, title, message, type = "info", relatedEn
   }
 };
 
+const recentNotificationEventKeys = new Map<string, number>();
+const claimNotificationEvent = (key: string, ttlMs = 60_000) => {
+  const now = Date.now();
+  for (const [storedKey, expiresAt] of recentNotificationEventKeys) {
+    if (expiresAt <= now) recentNotificationEventKeys.delete(storedKey);
+  }
+  const existing = recentNotificationEventKeys.get(key);
+  if (existing && existing > now) return false;
+  recentNotificationEventKeys.set(key, now + ttlMs);
+  return true;
+};
+
 const notifyUser = async ({ user, title, message, type = "info", order, relatedEntity = "ORDER", relatedEntityId, deepLink }: { user: any; title: string; message: string; type?: string; order?: any; relatedEntity?: string; relatedEntityId?: any; deepLink?: string }) => {
   try {
     if (!user) return;
+    const eventKey = [String(user), String(relatedEntity || ""), String(relatedEntityId || order || ""), String(title || ""), String(message || "")].join("|");
+    if (!claimNotificationEvent(eventKey)) return;
     const recipient = await User.findById(user).select("role").lean();
     const resolvedDeepLink = buildNotificationDeepLink({ relatedEntity, relatedEntityId, order, deepLink });
     await Notification.create({ user, title, message, type, ...(order ? { order } : {}), relatedEntity, relatedEntityId: String(relatedEntityId || order || ""), recipientRole: String((recipient as any)?.role || ""), deepLink: resolvedDeepLink });
@@ -1227,8 +1261,10 @@ const notifyAdmins = async ({ title, message, type = "info", order, storeAdmin, 
     }).select("_id").lean();
     if (!admins.length) return;
     const resolvedDeepLink = buildNotificationDeepLink({ relatedEntity, relatedEntityId, order, deepLink });
-    await Notification.insertMany(admins.map((admin: any) => ({ user: admin._id, title, message, type, ...(order ? { order } : {}), relatedEntity, relatedEntityId: String(relatedEntityId || order || ""), recipientRole: "admin", deepLink: resolvedDeepLink })));
-    await sendPushToUsers({ users: admins.map((x:any) => x._id), title, message, type, relatedEntity, relatedEntityId, order, deepLink: resolvedDeepLink });
+    const eligibleAdmins = admins.filter((admin: any) => claimNotificationEvent([String(admin._id), String(relatedEntity || ""), String(relatedEntityId || order || ""), String(title || ""), String(message || "")].join("|")));
+    if (!eligibleAdmins.length) return;
+    await Notification.insertMany(eligibleAdmins.map((admin: any) => ({ user: admin._id, title, message, type, ...(order ? { order } : {}), relatedEntity, relatedEntityId: String(relatedEntityId || order || ""), recipientRole: "admin", deepLink: resolvedDeepLink })));
+    await sendPushToUsers({ users: eligibleAdmins.map((x:any) => x._id), title, message, type, relatedEntity, relatedEntityId, order, deepLink: resolvedDeepLink });
   } catch (error) {
     console.error("ADMIN NOTIFICATION ERROR:", error);
   }
@@ -1387,6 +1423,7 @@ const createLoginHistory = async (user: any, req: any) => {
   // timestamp for Point 40 session visibility. This is metadata already generated
   // by the authenticated session and does not contain passwords or tokens.
   await LoginHistory.collection.updateOne({ _id: doc._id }, { $set: { lastActivityAt: loginAt } });
+  await User.collection.updateOne({ _id: user._id }, { $set: { lastActivityAt: loginAt } });
   return String(doc.loginHistoryId);
 };
 
@@ -1658,8 +1695,10 @@ app.post("/api/session-management/heartbeat", auth, async (req: AuthRequest, res
   try {
     const id = String(req.body.loginHistoryId || req.headers["x-login-history-id"] || "").trim();
     if (!id) return res.status(400).json({ success: false, message: "Login session ID is required" });
-    const updated = await LoginHistory.collection.updateOne({ loginHistoryId: id, userId: new mongoose.Types.ObjectId(req.user!.id), status: "ACTIVE" }, { $set: { lastActivityAt: new Date() } });
+    const now = new Date();
+    const updated = await LoginHistory.collection.updateOne({ loginHistoryId: id, userId: new mongoose.Types.ObjectId(req.user!.id), status: "ACTIVE" }, { $set: { lastActivityAt: now } });
     if (!updated.matchedCount) return res.status(404).json({ success: false, message: "Active login session not found" });
+    await User.collection.updateOne({ _id: new mongoose.Types.ObjectId(req.user!.id) }, { $set: { lastActivityAt: now } });
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Unable to update session activity" });
@@ -3734,8 +3773,10 @@ app.post("/api/push/register", auth, async (req: AuthRequest, res) => {
     const platform = String(req.body?.platform || "android").trim().toLowerCase();
     const appId = String(req.body?.appId || "com.freshbasket.grocery").trim();
     if (!token || token.length < 20 || token.length > 4096) return res.status(400).json({ success:false, message:"Invalid push token" });
-    await User.updateOne(
-      { _id: req.user!.id },
+    // A physical device token belongs to one currently authenticated account.
+    // Remove stale ownership from every account before assigning it to this user.
+    await User.updateMany(
+      { pushTokens: { $elemMatch: { token } } },
       { $pull: { pushTokens: { token } } }
     );
     await User.updateOne(
@@ -4512,7 +4553,11 @@ app.get("/api/admin/identity-card-accounts", auth, mainAdminOnly, async (_req, r
       .sort({ name: 1 })
       .lean();
 
-    return res.json({ success: true, data: accounts });
+    const data = accounts.map((account: any) => ({
+      ...account,
+      isMainAdmin: String(account.email || "").trim().toLowerCase() === MAIN_ADMIN_EMAIL,
+    }));
+    return res.json({ success: true, data });
   } catch (error) {
     console.error("IDENTITY CARD ACCOUNT LIST ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load ID card accounts" });
@@ -4570,7 +4615,7 @@ app.post("/api/admin/identity-cards", auth, mainAdminOnly, async (req: AuthReque
     const sourceId = String(req.body.sourceId || req.body.storeAdminId || "").trim();
     const expiryDate = new Date(req.body.expiryDate);
 
-    const validHolderTypes = ["delivery", "store-admin", "customer-care", "finance-manager", "finance-executive", "employee"];
+    const validHolderTypes = ["delivery", "store-admin", "customer-care", "finance-manager", "finance-executive", "main-admin", "sub-admin", "operations-executive", "ecommerce-marketplace-executive", "inventory-warehouse-executive", "sales-business-development-executive", "marketing-executive", "technology-it-employee", "hr-administration", "employee"];
     if (!validHolderTypes.includes(holderType)) {
       return res.status(400).json({ success: false, message: "Select a valid ID card type" });
     }
@@ -4589,12 +4634,14 @@ app.post("/api/admin/identity-cards", auth, mainAdminOnly, async (req: AuthReque
     const roleMap: Record<string, string[]> = {
       delivery: ["delivery"],
       "store-admin": ["admin"],
+      "main-admin": ["admin"],
+      "sub-admin": ["admin"],
       "customer-care": ["customer_care"],
       "finance-manager": ["finance_manager"],
       "finance-executive": ["finance_executive"],
     };
 
-    if (holderType !== "employee") {
+    if (roleMap[holderType]) {
       if (!mongoose.Types.ObjectId.isValid(sourceId)) {
         return res.status(400).json({ success: false, message: "Select an existing account" });
       }
@@ -4603,6 +4650,16 @@ app.post("/api/admin/identity-cards", auth, mainAdminOnly, async (req: AuthReque
         .lean();
       if (!account) return res.status(404).json({ success: false, message: "Selected account not found" });
       if (account.blocked) return res.status(400).json({ success: false, message: "Selected account is inactive" });
+      if (holderType === "main-admin" || holderType === "sub-admin") {
+        const mainAdminId = await getMainAdminId();
+        const isMainAdmin = Boolean(mainAdminId && String(account._id) === String(mainAdminId));
+        if (holderType === "main-admin" && !isMainAdmin) {
+          return res.status(400).json({ success: false, message: "Select the configured Main Admin account" });
+        }
+        if (holderType === "sub-admin" && isMainAdmin) {
+          return res.status(400).json({ success: false, message: "Main Admin cannot be issued as Sub Admin" });
+        }
+      }
       linkedUser = account._id;
       linkedRole = account.role;
       resolvedStoreAdmin = account.role === "admin" ? account._id : (account.storeAdmin || null);
@@ -4623,6 +4680,15 @@ app.post("/api/admin/identity-cards", auth, mainAdminOnly, async (req: AuthReque
       "customer-care": "CARE",
       "finance-manager": "FIN",
       "finance-executive": "FINX",
+      "main-admin": "MAIN",
+      "sub-admin": "SUB",
+      "operations-executive": "OPS",
+      "ecommerce-marketplace-executive": "ECOM",
+      "inventory-warehouse-executive": "INV",
+      "sales-business-development-executive": "SALES",
+      "marketing-executive": "MKT",
+      "technology-it-employee": "IT",
+      "hr-administration": "HR",
       employee: "EMP",
     };
     const prefix = prefixMap[holderType] || "EMP";
@@ -4657,6 +4723,50 @@ app.patch("/api/admin/identity-cards/:id/revoke", auth, mainAdminOnly, async (re
   } catch (error) {
     console.error("IDENTITY CARD REVOKE ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to revoke identity card" });
+  }
+});
+
+app.get("/api/my/identity-card", auth, async (req: AuthRequest, res) => {
+  try {
+    const card: any = await IdentityCard.findOne({ linkedUser: req.user!.id })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (!card) return res.json({ success: true, data: null });
+
+    let currentStatus = String(card.status || "active").toLowerCase() === "revoked" ? "REVOKED" : "ACTIVE";
+    if (currentStatus === "ACTIVE" && card.expiryDate && new Date(card.expiryDate).getTime() <= Date.now()) currentStatus = "EXPIRED";
+    if (currentStatus === "ACTIVE") {
+      const linked: any = await User.findById(req.user!.id).select("blocked").lean();
+      if (!linked || linked.blocked) currentStatus = "INACTIVE";
+    }
+
+    return res.json({ success: true, data: { ...card, currentStatus } });
+  } catch (error) {
+    console.error("MY IDENTITY CARD ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load your identity card" });
+  }
+});
+
+app.delete("/api/admin/identity-cards/:id", auth, mainAdminOnly, async (req: AuthRequest, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ success: false, message: "Identity card not found" });
+    }
+    const card: any = await IdentityCard.findByIdAndDelete(req.params.id).lean();
+    if (!card) return res.status(404).json({ success: false, message: "Identity card not found" });
+
+    await recordCustomerCareAudit({
+      req,
+      action: "IDENTITY_CARD_DELETED",
+      targetType: "IDENTITY_CARD",
+      targetId: card._id,
+      metadata: { cardNumber: card.cardNumber, holderType: card.holderType, linkedUser: card.linkedUser || null },
+    });
+
+    return res.json({ success: true, message: "Identity card deleted", data: card });
+  } catch (error) {
+    console.error("IDENTITY CARD DELETE ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to delete identity card" });
   }
 });
 
