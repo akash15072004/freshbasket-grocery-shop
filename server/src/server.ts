@@ -396,6 +396,15 @@ if (orderItemsSchemaPath?.schema?.add) {
     expiresAt: { type: Date, default: null },
     verifiedAt: { type: Date, default: null },
     verifiedBy: { type: String, default: "" },
+    provider: { type: String, default: "UPI" },
+    razorpayOrderId: { type: String, default: "", index: true },
+    razorpayPaymentId: { type: String, default: "", index: true },
+    razorpaySignature: { type: String, default: "" },
+    lastWebhookEventId: { type: String, default: "", index: true },
+    providerStatus: { type: String, default: "" },
+    qrCodeId: { type: String, default: "", index: true },
+    qrImageUrl: { type: String, default: "" },
+    qrImageContent: { type: String, default: "" },
   },
   deliveryLocation: {
     latitude: { type: Number, default: null },
@@ -995,6 +1004,83 @@ app.use(
     origin: allowedOrigins,
     credentials: true,
   })
+);
+
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json", limit: "2mb" }),
+  async (req: any, res: any) => {
+    try {
+      const secret = String(process.env.RAZORPAY_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || "").trim();
+      if (!secret) return res.status(503).json({ success: false, message: "Payment webhook secret is not configured" });
+      const signature = String(req.headers["x-razorpay-signature"] || "").trim();
+      if (!signature || !Buffer.isBuffer(req.body)) return res.status(400).json({ success: false, message: "Invalid webhook payload" });
+      const expected = crypto.createHmac("sha256", secret).update(req.body).digest("hex");
+      const a = Buffer.from(expected, "utf8");
+      const b = Buffer.from(signature, "utf8");
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ success: false, message: "Invalid webhook signature" });
+      const payload = JSON.parse(req.body.toString("utf8"));
+      const event = String(payload?.event || "").trim();
+      const paymentEntity = payload?.payload?.payment?.entity || null;
+      const razorpayPaymentId = String(paymentEntity?.id || "").trim();
+      const razorpayOrderId = String(paymentEntity?.order_id || "").trim();
+      const eventId = String(req.headers["x-razorpay-event-id"] || payload?.id || "").trim();
+      if (!event || !razorpayPaymentId) return res.json({ success: true, ignored: true });
+
+      const order: any = razorpayOrderId
+        ? await Order.findOne({ "paymentSession.razorpayOrderId": razorpayOrderId })
+        : await Order.findOne({ "paymentSession.razorpayPaymentId": razorpayPaymentId });
+      if (!order) return res.json({ success: true, ignored: true });
+
+      if (eventId && String(order.paymentSession?.lastWebhookEventId || "") === eventId) {
+        return res.json({ success: true, duplicate: true });
+      }
+
+      const status = event === "payment.captured" ? "Paid" : event === "payment.failed" ? "Failed" : String(paymentEntity?.status || "").toLowerCase() === "captured" ? "Paid" : order.paymentStatus || "";
+      const providerStatus = String(paymentEntity?.status || "");
+      const update: any = {
+        "paymentSession.razorpayPaymentId": razorpayPaymentId,
+        "paymentSession.provider": "RAZORPAY",
+        "paymentSession.providerStatus": providerStatus,
+        ...(eventId ? { "paymentSession.lastWebhookEventId": eventId } : {}),
+      };
+      if (status === "Paid") {
+        update.paymentStatus = "Paid";
+        update.paymentMode = String(paymentEntity?.method || "RAZORPAY").toUpperCase();
+        update.paymentPaidAt = new Date();
+        update["paymentSession.verifiedAt"] = new Date();
+        update["paymentSession.verifiedBy"] = "RAZORPAY_WEBHOOK";
+      } else if (status === "Failed") {
+        update.paymentStatus = "Failed";
+        update.paymentMode = String(paymentEntity?.method || "RAZORPAY").toUpperCase();
+      }
+      await Order.collection.updateOne({ _id: order._id }, { $set: update });
+
+      if (status === "Paid") {
+        await createFinancialTransaction({
+          type: "ORDER_PAYMENT",
+          referenceId: `RAZORPAY_PAYMENT:${razorpayPaymentId}`,
+          order: order._id,
+          customer: order.user || null,
+          storeAdmin: order.storeAdmin || null,
+          amount: Number(paymentEntity?.amount || Math.round(Number(order.total || 0) * 100)) / 100,
+          direction: "INFLOW",
+          paymentMethod: String(paymentEntity?.method || "RAZORPAY").toUpperCase(),
+          status: "COMPLETED",
+          completedAt: new Date(),
+          paymentReference: razorpayPaymentId,
+          metadata: { provider: "RAZORPAY", razorpayOrderId, event, eventId },
+        });
+        await notifyUser({ user: order.user, title: "Payment successful", message: `Payment for order #${String(order._id).slice(-8).toUpperCase()} was received successfully.`, type: "payment", order: order._id });
+      } else if (status === "Failed") {
+        await notifyUser({ user: order.user, title: "Payment failed", message: `Payment for order #${String(order._id).slice(-8).toUpperCase()} failed. Please try again.`, type: "payment", order: order._id });
+      }
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("RAZORPAY WEBHOOK ERROR:", e);
+      return res.status(500).json({ success: false, message: "Webhook processing failed" });
+    }
+  }
 );
 
 app.use(express.json({ limit: "12mb" }));
@@ -7258,23 +7344,176 @@ app.post("/api/orders/:id/payment/session",auth,roleAny("customer","delivery"),a
     const allowed=req.user!.role==="customer"?String(order.user)===String(req.user!.id):String(order.deliveryPartner)===String(req.user!.id);
     if(!allowed)return res.status(403).json({success:false,message:"Forbidden"});
     if(order.paymentStatus==="Paid")return res.status(400).json({success:false,message:"Payment is already completed"});
-    if(!["COD","ONLINE"].includes(String(order.paymentMethod||"COD")))return res.status(400).json({success:false,message:"Unsupported payment method"});
-    await AuditLog.create({ actor: req.user!.id, actorRole: req.user!.role, action: "PAYMENT_ATTEMPT", targetType: "ORDER", targetId: String(order._id), order: order._id, securityAlert: false, securityEvent: "PAYMENT_ATTEMPT", metadata: { paymentMethod: String(order.paymentMethod || ""), amount: Number(order.total || 0) } });
-    await inspectSecurityThresholds({ req, event: "PAYMENT_ATTEMPT", actorId: req.user!.id, targetId: order._id, metadata: { amount: Number(order.total || 0) } });
-    const settings:any=order.storeAdmin?await PaymentSetting.findOne({storeAdmin:order.storeAdmin}).lean():await PaymentSetting.findOne({storeAdmin:await getMainAdminId()}).lean();
-    if(!settings?.isEnabled||!settings?.upiId)return res.status(400).json({success:false,message:"UPI payment is not configured for this store"});
+    if(String(order.paymentMethod||"").toUpperCase()!=="ONLINE")return res.status(400).json({success:false,message:"Online payment is not selected for this order"});
     const amount=Number(order.total||0);
-    const existingSession:any=order.paymentSession||null;
-    const existingValid=existingSession?.reference && existingSession?.uri && existingSession?.expiresAt && new Date(existingSession.expiresAt).getTime()>Date.now() && Number(existingSession.amount)===amount && String(existingSession.currency||"INR")==="INR";
-    if(existingValid){
-      return res.json({success:true,data:{reference:existingSession.reference,uri:existingSession.uri,amount,currency:"INR",expiresAt:existingSession.expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"FreshBasket",upiId:settings.upiId}});
+    if(!Number.isFinite(amount)||amount<=0)return res.status(400).json({success:false,message:"Invalid order amount"});
+
+    await AuditLog.create({ actor:req.user!.id, actorRole:req.user!.role, action:"PAYMENT_ATTEMPT", targetType:"ORDER", targetId:String(order._id), order:order._id, securityAlert:false, securityEvent:"PAYMENT_ATTEMPT", metadata:{paymentMethod:"ONLINE",amount,provider:"RAZORPAY"} });
+    await inspectSecurityThresholds({ req, event:"PAYMENT_ATTEMPT", actorId:req.user!.id, targetId:order._id, metadata:{amount,provider:"RAZORPAY"} });
+
+    const keyId=String(process.env.RAZORPAY_KEY_ID||process.env.PAYMENT_PROVIDER_KEY_ID||"").trim();
+    const keySecret=String(process.env.RAZORPAY_KEY_SECRET||process.env.PAYMENT_PROVIDER_KEY_SECRET||"").trim();
+    if(keyId&&keySecret){
+      const existing:any=order.paymentSession||{};
+      const existingRazorpayOrder=String(existing.razorpayOrderId||"");
+      const existingAmount=Number(existing.amount||0);
+      if(existingRazorpayOrder&&existingAmount===amount&&String(existing.currency||"INR")==="INR"&&String(existing.provider||"").toUpperCase()==="RAZORPAY"){
+        return res.json({success:true,data:{provider:"RAZORPAY",keyId,orderId:order._id,razorpayOrderId:existingRazorpayOrder,amount,currency:"INR",reference:existing.reference||`RZP-${String(order._id).slice(-10).toUpperCase()}`,expiresAt:existing.expiresAt||null}});
+      }
+      // Prefer a one-time Razorpay UPI QR for desktop/web checkout.
+      // The QR is generated server-side with the exact FreshBasket order amount.
+      try {
+        const createdAt=new Date();
+        const expiresAt=new Date(createdAt.getTime()+15*60*1000);
+        const closeBy=Math.floor(expiresAt.getTime()/1000);
+        const reference=`RZP-QR-${String(order._id).slice(-10).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+        const qrResp=await axios.post("https://api.razorpay.com/v1/payments/qr_codes",{
+          type:"upi_qr",
+          name:"FreshBasket Order",
+          usage:"single_use",
+          fixed_amount:true,
+          payment_amount:Math.round(amount*100),
+          description:`FreshBasket Order #${String(order._id).slice(-8).toUpperCase()}`,
+          close_by:closeBy,
+          notes:{freshbasketOrderId:String(order._id),reference},
+        },{auth:{username:keyId,password:keySecret},headers:{"Content-Type":"application/json"},timeout:15000});
+        let qr=qrResp.data||{};
+        const qrCodeId=String(qr.id||"");
+        if(!qrCodeId) throw new Error("Razorpay did not return a QR code ID");
+        if(!String(qr.image_content||"").trim()){
+          try {
+            const qrDetails=await axios.get(`https://api.razorpay.com/v1/payments/qr_codes/${encodeURIComponent(qrCodeId)}`,{auth:{username:keyId,password:keySecret},timeout:10000});
+            qr={...qr,...(qrDetails.data||{})};
+          } catch {}
+        }
+        await Order.collection.updateOne({_id:order._id},{$set:{
+          paymentStatus:"Pending",
+          "paymentSession.reference":reference,
+          "paymentSession.amount":amount,
+          "paymentSession.currency":"INR",
+          "paymentSession.createdAt":createdAt,
+          "paymentSession.expiresAt":expiresAt,
+          "paymentSession.provider":"RAZORPAY_QR",
+          "paymentSession.qrCodeId":qrCodeId,
+          "paymentSession.qrImageUrl":String(qr.image_url||""),
+          "paymentSession.qrImageContent":String(qr.image_content||""),
+          "paymentSession.providerStatus":"created",
+          "paymentSession.razorpayPaymentId":"",
+          "paymentSession.razorpaySignature":"",
+          "paymentSession.lastWebhookEventId":""
+        }});
+        return res.json({success:true,data:{provider:"RAZORPAY_QR",keyId,orderId:order._id,qrCodeId,qrImageUrl:String(qr.image_url||""),qrImageContent:String(qr.image_content||""),amount,currency:"INR",reference,expiresAt}});
+      } catch(qrError:any) {
+        console.warn("RAZORPAY QR CREATE FAILED; FALLING BACK TO STANDARD CHECKOUT:",qrError?.response?.data||qrError?.message||qrError);
+      }
+      const receipt=`FB-${String(order._id).slice(-20)}`.replace(/[^A-Za-z0-9_-]/g,"").slice(0,40);
+      const api=await axios.post("https://api.razorpay.com/v1/orders",{amount:Math.round(amount*100),currency:"INR",receipt,notes:{freshbasketOrderId:String(order._id)}},{auth:{username:keyId,password:keySecret},headers:{"Content-Type":"application/json"},timeout:15000});
+      const rzOrder=api.data;
+      const createdAt=new Date();
+      const expiresAt=new Date(createdAt.getTime()+30*60*1000);
+      const reference=`RZP-${String(order._id).slice(-10).toUpperCase()}-${String(rzOrder.id||"").slice(-8).toUpperCase()}`;
+      await Order.collection.updateOne({_id:order._id},{$set:{paymentStatus:"Pending","paymentSession.reference":reference,"paymentSession.amount":amount,"paymentSession.currency":"INR","paymentSession.createdAt":createdAt,"paymentSession.expiresAt":expiresAt,"paymentSession.provider":"RAZORPAY","paymentSession.razorpayOrderId":String(rzOrder.id||""),"paymentSession.razorpayPaymentId":"","paymentSession.providerStatus":"created","paymentSession.razorpaySignature":"","paymentSession.lastWebhookEventId":""}});
+      return res.json({success:true,data:{provider:"RAZORPAY",keyId,orderId:order._id,razorpayOrderId:String(rzOrder.id),amount,currency:"INR",reference,expiresAt}});
     }
+
+    // Existing UPI/QR fallback remains available when Razorpay credentials are not configured.
+    const settings:any=order.storeAdmin?await PaymentSetting.findOne({storeAdmin:order.storeAdmin}).lean():await PaymentSetting.findOne({storeAdmin:await getMainAdminId()}).lean();
+    if(!settings?.isEnabled||!settings?.upiId)return res.status(503).json({success:false,message:"Online payment is not configured. Add Razorpay server credentials or configure the existing UPI payment settings."});
+    const existingSession:any=order.paymentSession||null;
+    const existingValid=existingSession?.reference&&existingSession?.uri&&existingSession?.expiresAt&&new Date(existingSession.expiresAt).getTime()>Date.now()&&Number(existingSession.amount)===amount&&String(existingSession.currency||"INR")==="INR";
+    if(existingValid)return res.json({success:true,data:{provider:"UPI",reference:existingSession.reference,uri:existingSession.uri,amount,currency:"INR",expiresAt:existingSession.expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"FreshBasket",upiId:settings.upiId}});
     const reference=`UPI-${String(order._id).slice(-10).toUpperCase()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
     const uri=`upi://pay?pa=${encodeURIComponent(String(settings.upiId))}&pn=${encodeURIComponent(String(settings.merchantName||"FreshBasket"))}&tr=${encodeURIComponent(reference)}&am=${amount.toFixed(2)}&cu=INR`;
     const createdAt=new Date(),expiresAt=new Date(createdAt.getTime()+15*60*1000);
-    await Order.collection.updateOne({_id:order._id},{$set:{"paymentSession.reference":reference,"paymentSession.uri":uri,"paymentSession.amount":amount,"paymentSession.currency":"INR","paymentSession.createdAt":createdAt,"paymentSession.expiresAt":expiresAt}});
-    return res.json({success:true,data:{reference,uri,amount,currency:"INR",expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"FreshBasket",upiId:settings.upiId}});
-  }catch(e){return res.status(500).json({success:false,message:"Unable to create payment session"});}
+    await Order.collection.updateOne({_id:order._id},{$set:{"paymentSession.reference":reference,"paymentSession.uri":uri,"paymentSession.amount":amount,"paymentSession.currency":"INR","paymentSession.createdAt":createdAt,"paymentSession.expiresAt":expiresAt,"paymentSession.provider":"UPI"}});
+    return res.json({success:true,data:{provider:"UPI",reference,uri,amount,currency:"INR",expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"FreshBasket",upiId:settings.upiId}});
+  }catch(e:any){
+    console.error("PAYMENT SESSION ERROR:",e?.response?.data||e);
+    return res.status(500).json({success:false,message:e?.response?.data?.error?.description||e?.message||"Unable to create payment session"});
+  }
+});
+
+app.get("/api/orders/:id/payment/qr-status",auth,roleAny("customer","delivery"),async(req:AuthRequest,res)=>{
+  try{
+    if(!mongoose.Types.ObjectId.isValid(req.params.id))return res.status(404).json({success:false,message:"Order not found"});
+    const order:any=await Order.findById(req.params.id);
+    if(!order)return res.status(404).json({success:false,message:"Order not found"});
+    const allowed=req.user!.role==="customer"?String(order.user)===String(req.user!.id):String(order.deliveryPartner)===String(req.user!.id);
+    if(!allowed)return res.status(403).json({success:false,message:"Forbidden"});
+    if(String(order.paymentStatus||"")==="Paid")return res.json({success:true,data:{paymentStatus:"Paid",message:"Payment already received"}});
+    const qrCodeId=String(req.query.qrCodeId||order.paymentSession?.qrCodeId||"").trim();
+    const storedQrCodeId=String(order.paymentSession?.qrCodeId||"").trim();
+    if(!qrCodeId||!storedQrCodeId||qrCodeId!==storedQrCodeId)return res.status(400).json({success:false,message:"Invalid QR payment session"});
+    const keyId=String(process.env.RAZORPAY_KEY_ID||process.env.PAYMENT_PROVIDER_KEY_ID||"").trim();
+    const keySecret=String(process.env.RAZORPAY_KEY_SECRET||process.env.PAYMENT_PROVIDER_KEY_SECRET||"").trim();
+    if(!keyId||!keySecret)return res.status(503).json({success:false,message:"Razorpay server credentials are not configured"});
+    const expiresAt=order.paymentSession?.expiresAt ? new Date(order.paymentSession.expiresAt).getTime() : 0;
+    if(expiresAt&&expiresAt<=Date.now())return res.json({success:true,data:{paymentStatus:"Pending",expired:true,message:"This QR has expired. Please start payment again."}});
+    const response=await axios.get(`https://api.razorpay.com/v1/payments/qr_codes/${encodeURIComponent(qrCodeId)}/payments`,{auth:{username:keyId,password:keySecret},params:{count:10},timeout:15000});
+    const items=Array.isArray(response.data?.items)?response.data.items:[];
+    const expectedPaise=Math.round(Number(order.total||0)*100);
+    const captured=items.find((p:any)=>String(p?.status||"").toLowerCase()==="captured"&&Number(p?.amount||0)===expectedPaise&&String(p?.currency||"INR")==="INR");
+    if(captured){
+      const paymentId=String(captured.id||"").trim();
+      if(!paymentId)return res.status(409).json({success:false,message:"Razorpay returned an invalid payment record"});
+      const now=new Date();
+      await Order.collection.updateOne({_id:order._id},{$set:{
+        paymentStatus:"Paid",
+        paymentMode:String(captured.method||"UPI").toUpperCase(),
+        paymentPaidAt:now,
+        "paymentSession.razorpayPaymentId":paymentId,
+        "paymentSession.provider":"RAZORPAY_QR",
+        "paymentSession.providerStatus":"captured",
+        "paymentSession.verifiedAt":now,
+        "paymentSession.verifiedBy":String(req.user!.id)
+      }});
+      await createFinancialTransaction({type:"ORDER_PAYMENT",referenceId:`RAZORPAY_QR_PAYMENT:${paymentId}`,order:order._id,customer:order.user||null,storeAdmin:order.storeAdmin||null,amount:Number(captured.amount||0)/100,direction:"INFLOW",paymentMethod:String(captured.method||"UPI").toUpperCase(),status:"COMPLETED",completedAt:now,paymentReference:paymentId,metadata:{provider:"RAZORPAY_QR",qrCodeId,source:"qr_status"}});
+      await notifyUser({user:order.user,title:"Payment successful",message:`Payment for order #${String(order._id).slice(-8).toUpperCase()} was received successfully.`,type:"payment",order:order._id});
+      return res.json({success:true,data:{paymentStatus:"Paid",paymentId,message:"Payment received successfully"}});
+    }
+    const failed=items.find((p:any)=>String(p?.status||"").toLowerCase()==="failed"&&Number(p?.amount||0)===expectedPaise);
+    if(failed)return res.json({success:true,data:{paymentStatus:"Failed",message:String(failed.error_description||"Payment failed. Please try again.")}});
+    return res.json({success:true,data:{paymentStatus:order.paymentStatus||"Pending",message:"Waiting for Razorpay confirmation..."}});
+  }catch(e:any){
+    console.error("RAZORPAY QR STATUS ERROR:",e?.response?.data||e);
+    return res.status(500).json({success:false,message:e?.response?.data?.error?.description||e?.message||"Unable to check QR payment status"});
+  }
+});
+app.post("/api/orders/:id/payment/verify",auth,roleAny("customer","delivery"),async(req:AuthRequest,res)=>{
+  try{
+    if(!mongoose.Types.ObjectId.isValid(req.params.id))return res.status(404).json({success:false,message:"Order not found"});
+    const order:any=await Order.findById(req.params.id);
+    if(!order)return res.status(404).json({success:false,message:"Order not found"});
+    const allowed=req.user!.role==="customer"?String(order.user)===String(req.user!.id):String(order.deliveryPartner)===String(req.user!.id);
+    if(!allowed)return res.status(403).json({success:false,message:"Forbidden"});
+    const razorpayPaymentId=String(req.body.razorpay_payment_id||"").trim();
+    const razorpayOrderId=String(req.body.razorpay_order_id||"").trim();
+    const razorpaySignature=String(req.body.razorpay_signature||"").trim();
+    const storedOrderId=String(order.paymentSession?.razorpayOrderId||"");
+    if(!razorpayPaymentId||!razorpayOrderId||!razorpaySignature||!storedOrderId||storedOrderId!==razorpayOrderId)return res.status(400).json({success:false,message:"Invalid Razorpay payment details"});
+    const secret=String(process.env.RAZORPAY_KEY_SECRET||process.env.PAYMENT_PROVIDER_KEY_SECRET||"").trim();
+    if(!secret)return res.status(503).json({success:false,message:"Razorpay server secret is not configured"});
+    const expected=crypto.createHmac("sha256",secret).update(`${storedOrderId}|${razorpayPaymentId}`).digest("hex");
+    const a=Buffer.from(expected,"utf8"),b=Buffer.from(razorpaySignature,"utf8");
+    if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.status(400).json({success:false,message:"Razorpay signature verification failed"});
+    const keyId=String(process.env.RAZORPAY_KEY_ID||process.env.PAYMENT_PROVIDER_KEY_ID||"").trim();
+    const paymentResp=await axios.get(`https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpayPaymentId)}`,{auth:{username:keyId,password:secret},timeout:15000});
+    const payment:any=paymentResp.data||{};
+    const expectedPaise=Math.round(Number(order.total||0)*100);
+    if(String(payment.order_id||"")!==storedOrderId||Number(payment.amount||0)!==expectedPaise||String(payment.currency||"INR")!=="INR")return res.status(400).json({success:false,message:"Razorpay payment amount or order does not match FreshBasket order"});
+    if(String(payment.status||"").toLowerCase()!=="captured"){
+      await Order.collection.updateOne({_id:order._id},{$set:{paymentStatus:String(payment.status||"PENDING").toUpperCase(),"paymentSession.razorpayPaymentId":razorpayPaymentId,"paymentSession.razorpaySignature":razorpaySignature,"paymentSession.provider":"RAZORPAY","paymentSession.providerStatus":String(payment.status||"")}});
+      return res.status(202).json({success:false,pending:true,message:`Payment is ${String(payment.status||"pending")}. We will update the order when Razorpay confirms capture.`});
+    }
+    const now=new Date();
+    await Order.collection.updateOne({_id:order._id},{$set:{paymentStatus:"Paid",paymentMode:String(payment.method||"RAZORPAY").toUpperCase(),paymentPaidAt:now,"paymentSession.razorpayPaymentId":razorpayPaymentId,"paymentSession.razorpaySignature":razorpaySignature,"paymentSession.provider":"RAZORPAY","paymentSession.providerStatus":"captured","paymentSession.verifiedAt":now,"paymentSession.verifiedBy":String(req.user!.id)}});
+    await createFinancialTransaction({type:"ORDER_PAYMENT",referenceId:`RAZORPAY_PAYMENT:${razorpayPaymentId}`,order:order._id,customer:order.user||null,storeAdmin:order.storeAdmin||null,amount:Number(payment.amount||0)/100,direction:"INFLOW",paymentMethod:String(payment.method||"RAZORPAY").toUpperCase(),status:"COMPLETED",completedAt:now,paymentReference:razorpayPaymentId,metadata:{provider:"RAZORPAY",razorpayOrderId:storedOrderId,source:"checkout_verify"}});
+    await notifyUser({user:order.user,title:"Payment successful",message:`Payment for order #${String(order._id).slice(-8).toUpperCase()} was received successfully.`,type:"payment",order:order._id});
+    return res.json({success:true,message:"Payment verified successfully",data:{orderId:order._id,paymentStatus:"Paid",paymentId:razorpayPaymentId}});
+  }catch(e:any){
+    console.error("RAZORPAY PAYMENT VERIFY ERROR:",e?.response?.data||e);
+    return res.status(500).json({success:false,message:e?.response?.data?.error?.description||e?.message||"Unable to verify Razorpay payment"});
+  }
 });
 
 app.get("/api/orders/:id/payment",auth,async(req:AuthRequest,res)=>{
@@ -7285,7 +7524,7 @@ app.get("/api/orders/:id/payment",auth,async(req:AuthRequest,res)=>{
     const allowed=req.user!.role==="customer"?String(order.user)===String(req.user!.id):req.user!.role==="delivery"?String(order.deliveryPartner)===String(req.user!.id):req.user!.role==="admin"?await belongsToTenant(req,order):false;
     if(!allowed)return res.status(403).json({success:false,message:"Forbidden"});
     const session=order.paymentSession||null;
-    return res.json({success:true,data:{orderId:order._id,amount:Number(order.total||0),paymentMethod:order.paymentMethod||"COD",paymentStatus:order.paymentStatus||"",paymentMode:order.paymentMode||"",paymentPaidAt:order.paymentPaidAt||null,session:session?{reference:session.reference,uri:session.uri,amount:session.amount,currency:session.currency,createdAt:session.createdAt,expiresAt:session.expiresAt,verifiedAt:session.verifiedAt}:null}});
+    return res.json({success:true,data:{orderId:order._id,amount:Number(order.total||0),paymentMethod:order.paymentMethod||"COD",paymentStatus:order.paymentStatus||"",paymentMode:order.paymentMode||"",paymentPaidAt:order.paymentPaidAt||null,session:session?{reference:session.reference,uri:session.uri,amount:session.amount,currency:session.currency,createdAt:session.createdAt,expiresAt:session.expiresAt,verifiedAt:session.verifiedAt,provider:session.provider||"UPI",razorpayOrderId:session.razorpayOrderId||"",razorpayPaymentId:session.razorpayPaymentId||"",providerStatus:session.providerStatus||""}:null}});
   }catch{return res.status(500).json({success:false,message:"Unable to load payment details"});}
 });
 
