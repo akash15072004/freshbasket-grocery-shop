@@ -1,2 +1,314 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');@tailwind base;@tailwind components;@tailwind utilities;
 :root{font-family:"DM Sans",sans-serif;color:#17201a;background:#f8faf8}*{box-sizing:border-box}body{margin:0}.glass{background:rgba(255,255,255,.8);backdrop-filter:blur(16px)}.gradient{background:linear-gradient(135deg,#effbea 0%,#ffffff 55%,#f0fdf4 100%)}button{transition:.2s ease}button:active{transform:scale(.98)}::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#cbd5cf;border-radius:20px}
+/* ================================================================
+   FreshBasket Android / Responsive UI Layer
+   Presentation-only: existing React state, routes, APIs and workflows
+   remain unchanged.
+   ================================================================ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+
+body {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+img, svg, video, canvas {
+  max-width: 100%;
+}
+
+button, a, input, select, textarea {
+  max-width: 100%;
+}
+
+/* Android WebView safe-area helpers for existing fixed/sticky UI. */
+@supports (padding: max(0px)) {
+  .fb-dashboard-shell > header,
+  .fb-customer-shell > header {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .fb-dashboard-shell [class*="fixed"].bottom-0,
+  .fb-customer-shell [class*="fixed"].bottom-0 {
+    padding-bottom: max(.5rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Prevent accidental width growth from flex/grid children. */
+.fb-dashboard-shell,
+.fb-dashboard-shell > main,
+.fb-dashboard-shell #admin-main,
+.fb-dashboard-shell #main-content,
+.fb-customer-shell,
+.fb-customer-shell #main-content,
+.fb-customer-shell main {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.fb-dashboard-shell .flex > *,
+.fb-dashboard-shell .grid > *,
+.fb-customer-shell .flex > *,
+.fb-customer-shell .grid > * {
+  min-width: 0;
+}
+
+/* Tables scroll inside their own container instead of widening the page. */
+.fb-dashboard-shell .overflow-x-auto,
+.fb-customer-shell .overflow-x-auto,
+.fb-dashboard-shell .overflow-auto,
+.fb-customer-shell .overflow-auto {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.fb-dashboard-shell .overflow-x-auto table,
+.fb-dashboard-shell .overflow-auto table,
+.fb-customer-shell .overflow-x-auto table,
+.fb-customer-shell .overflow-auto table {
+  min-width: max-content;
+}
+
+/* Leaflet/maps must follow their parent dimensions. */
+.leaflet-container,
+[class*="leaflet-container"] {
+  max-width: 100%;
+}
+
+@media screen and (max-width: 767px) {
+  /* 3+ column desktop grids collapse; existing 2-column KPI/product grids
+     remain two-up where the content is already compact. */
+  .fb-dashboard-shell [class~="grid-cols-3"],
+  .fb-dashboard-shell [class~="grid-cols-4"],
+  .fb-dashboard-shell [class~="grid-cols-5"],
+  .fb-dashboard-shell [class~="grid-cols-6"],
+  .fb-dashboard-shell [class~="grid-cols-7"],
+  .fb-dashboard-shell [class~="grid-cols-8"],
+  .fb-customer-shell [class~="grid-cols-3"],
+  .fb-customer-shell [class~="grid-cols-4"],
+  .fb-customer-shell [class~="grid-cols-5"],
+  .fb-customer-shell [class~="grid-cols-6"],
+  .fb-customer-shell [class~="grid-cols-7"],
+  .fb-customer-shell [class~="grid-cols-8"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Responsive versions of common desktop two-column sections. */
+  .fb-dashboard-shell .lg\:grid-cols-2,
+  .fb-dashboard-shell .lg\:grid-cols-3,
+  .fb-dashboard-shell .lg\:grid-cols-4,
+  .fb-dashboard-shell .lg\:grid-cols-5,
+  .fb-dashboard-shell .xl\:grid-cols-2,
+  .fb-dashboard-shell .xl\:grid-cols-3,
+  .fb-dashboard-shell .xl\:grid-cols-4,
+  .fb-dashboard-shell .xl\:grid-cols-5,
+  .fb-customer-shell .lg\:grid-cols-2,
+  .fb-customer-shell .lg\:grid-cols-3,
+  .fb-customer-shell .lg\:grid-cols-4,
+  .fb-customer-shell .xl\:grid-cols-2,
+  .fb-customer-shell .xl\:grid-cols-3,
+  .fb-customer-shell .xl\:grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .fb-dashboard-shell main,
+  .fb-customer-shell main {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Reduce desktop card density without removing content. */
+  .fb-dashboard-shell .rounded-3xl,
+  .fb-customer-shell .rounded-3xl {
+    max-width: 100%;
+  }
+
+  .fb-dashboard-shell .p-6,
+  .fb-customer-shell .p-6 {
+    padding: 1rem !important;
+  }
+
+  .fb-dashboard-shell .p-5,
+  .fb-customer-shell .p-5 {
+    padding: .9rem !important;
+  }
+
+  /* Header/action rows wrap instead of pushing controls beyond the viewport. */
+  .fb-dashboard-shell main .justify-between,
+  .fb-customer-shell main .justify-between {
+    flex-wrap: wrap;
+  }
+
+  /* Long identifiers, addresses and names never force page width. */
+  .fb-dashboard-shell td,
+  .fb-dashboard-shell th,
+  .fb-dashboard-shell p,
+  .fb-dashboard-shell b,
+  .fb-dashboard-shell span,
+  .fb-customer-shell td,
+  .fb-customer-shell th,
+  .fb-customer-shell p,
+  .fb-customer-shell b,
+  .fb-customer-shell span {
+    overflow-wrap: anywhere;
+  }
+
+  /* Keep important action controls comfortably touchable. */
+  .fb-dashboard-shell button,
+  .fb-dashboard-shell a,
+  .fb-customer-shell button,
+  .fb-customer-shell a {
+    min-height: 40px;
+  }
+
+  .fb-dashboard-shell input,
+  .fb-dashboard-shell select,
+  .fb-dashboard-shell textarea,
+  .fb-customer-shell input,
+  .fb-customer-shell select,
+  .fb-customer-shell textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Desktop table controls become horizontally scrollable only inside the
+     table wrapper; the document itself stays at viewport width. */
+  .fb-dashboard-shell .overflow-x-auto table,
+  .fb-dashboard-shell .overflow-auto table,
+  .fb-customer-shell .overflow-x-auto table,
+  .fb-customer-shell .overflow-auto table {
+    width: max-content;
+    max-width: none;
+  }
+
+  /* Maps, chat panels and media previews. */
+  .fb-dashboard-shell .leaflet-container,
+  .fb-customer-shell .leaflet-container {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Common fixed modal/dialog patterns. */
+  .fb-dashboard-shell .fixed.inset-0,
+  .fb-customer-shell .fixed.inset-0,
+  #main-content .fixed.inset-0 {
+    padding: max(.75rem, env(safe-area-inset-top, 0px)) .75rem max(.75rem, env(safe-area-inset-bottom, 0px)) !important;
+    box-sizing: border-box;
+  }
+
+  .fb-dashboard-shell .fixed.inset-0 > *,
+  .fb-customer-shell .fixed.inset-0 > *,
+  #main-content .fixed.inset-0 > * {
+    width: min(100%, calc(100vw - 1.5rem)) !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    max-height: calc(100dvh - 1.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    box-sizing: border-box;
+  }
+
+  /* Bottom-sheet/action footers stay above Android navigation. */
+  .fb-dashboard-shell .sticky.bottom-0,
+  .fb-customer-shell .sticky.bottom-0,
+  #main-content .sticky.bottom-0 {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Images/previews in cards should crop rather than distort. */
+  .fb-dashboard-shell img,
+  .fb-customer-shell img {
+    max-width: 100%;
+  }
+
+  /* Avoid huge dashboard headings on phones. */
+  .fb-dashboard-shell h1.text-3xl,
+  .fb-customer-shell h1.text-3xl {
+    font-size: 1.55rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .fb-dashboard-shell h2.text-2xl,
+  .fb-customer-shell h2.text-2xl {
+    font-size: 1.3rem !important;
+    line-height: 1.25 !important;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  /* On very small phones, retain two compact KPI/product columns only when
+     the component explicitly uses grid-cols-2. Everything larger is stacked. */
+  .fb-dashboard-shell [class~="grid-cols-2"] > *,
+  .fb-customer-shell [class~="grid-cols-2"] > * {
+    min-width: 0 !important;
+  }
+
+  .fb-dashboard-shell .gap-8,
+  .fb-customer-shell .gap-8 {
+    gap: 1rem !important;
+  }
+
+  .fb-dashboard-shell .gap-6,
+  .fb-customer-shell .gap-6 {
+    gap: .9rem !important;
+  }
+
+  .fb-dashboard-shell .px-6,
+  .fb-customer-shell .px-6 {
+    padding-left: .9rem !important;
+    padding-right: .9rem !important;
+  }
+
+  .fb-dashboard-shell .px-5,
+  .fb-customer-shell .px-5 {
+    padding-left: .8rem !important;
+    padding-right: .8rem !important;
+  }
+
+  .fb-dashboard-shell .text-2xl,
+  .fb-customer-shell .text-2xl {
+    font-size: 1.25rem !important;
+  }
+
+  /* Full-width primary actions are easier to tap on 320–430px phones. */
+  .fb-dashboard-shell main button.bg-emerald-600,
+  .fb-dashboard-shell main button.bg-slate-950,
+  .fb-customer-shell main button.bg-emerald-600,
+  .fb-customer-shell main button.bg-slate-950 {
+    max-width: 100%;
+  }
+}
+
+@media screen and (orientation: landscape) and (max-height: 520px) {
+  /* Do not let a short landscape viewport hide modal content behind system UI. */
+  .fixed.inset-0 > * {
+    max-height: calc(100dvh - 1rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Android keyboard: keep focused form controls away from the lower system area. */
+@media screen and (max-width: 767px) {
+  input:focus,
+  select:focus,
+  textarea:focus {
+    scroll-margin-top: 5rem;
+    scroll-margin-bottom: 7rem;
+  }
+}
+
+/* Respect users who request reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

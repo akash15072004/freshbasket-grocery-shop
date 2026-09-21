@@ -4568,6 +4568,108 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
   );
 }
 
+function loadRazorpayCheckoutScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(true); return; }
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => resolve(Boolean((window as any).Razorpay)), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(Boolean((window as any).Razorpay));
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+function RazorpayQrPaymentModal({
+  session,
+  orderId,
+  token,
+  onPaid,
+  onClose,
+}: {
+  session: any;
+  orderId: string;
+  token: string;
+  onPaid: () => void;
+  onClose: () => void;
+}) {
+  const [status, setStatus] = useState<"PENDING" | "PAID" | "FAILED" | "EXPIRED">("PENDING");
+  const [message, setMessage] = useState("Scan this QR with Google Pay, PhonePe, Paytm or another UPI app.");
+  const [checking, setChecking] = useState(false);
+  const qrSrc = session?.qrImageContent
+    ? `https://quickchart.io/qr?text=${encodeURIComponent(String(session.qrImageContent))}&size=360&margin=2`
+    : String(session?.qrImageUrl || "");
+
+  const checkPayment = async () => {
+    if (!orderId || !session?.qrCodeId || checking || status === "PAID") return;
+    try {
+      setChecking(true);
+      const r = await axios.get(API + `/orders/${orderId}/payment/qr-status`, {
+        params: { qrCodeId: session.qrCodeId },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = r.data?.data || {};
+      if (data.paymentStatus === "Paid") {
+        setStatus("PAID");
+        setMessage("Payment received successfully.");
+        onPaid();
+      } else if (data.paymentStatus === "Failed") {
+        setStatus("FAILED");
+        setMessage(data.message || "Payment failed. Please try again.");
+      } else if (data.expired) {
+        setStatus("EXPIRED");
+        setMessage("This QR has expired. Please start payment again.");
+      } else {
+        setMessage(data.message || "Waiting for payment confirmation...");
+      }
+    } catch (e: any) {
+      setMessage(e?.response?.data?.message || "Checking payment status...");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    checkPayment();
+    const id = window.setInterval(checkPayment, 3000);
+    return () => window.clearInterval(id);
+  }, [orderId, session?.qrCodeId, status]);
+
+  return (
+    <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
+        <div className="bg-emerald-600 text-white px-5 py-4 flex items-center justify-between">
+          <div><p className="font-black text-lg">Pay by UPI QR</p><p className="text-xs text-emerald-100 mt-0.5">Secured by Razorpay</p></div>
+          <button type="button" onClick={onClose} className="p-2 rounded-xl hover:bg-white/10" aria-label="Close"><X size={20}/></button>
+        </div>
+        <div className="p-6 text-center">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Amount to pay</p>
+          <p className="text-3xl font-black text-slate-900 mt-1">{money(Number(session?.amount || 0))}</p>
+          {qrSrc ? (
+            <div className="mt-5 mx-auto w-[280px] h-[280px] rounded-2xl border-2 border-slate-200 bg-white p-3 grid place-items-center">
+              <img src={qrSrc} alt="FreshBasket Razorpay UPI QR code" className="w-full h-full object-contain" />
+            </div>
+          ) : (
+            <div className="mt-5 rounded-2xl bg-red-50 border border-red-200 p-5 text-sm text-red-700">QR image could not be loaded. Please retry payment.</div>
+          )}
+          <p className={`mt-4 text-sm font-semibold ${status === "PAID" ? "text-emerald-700" : status === "FAILED" || status === "EXPIRED" ? "text-red-600" : "text-slate-600"}`}>{message}</p>
+          {status === "PENDING" && <div className="mt-2 flex items-center justify-center gap-2 text-xs text-slate-500"><RefreshCw size={14} className={checking ? "animate-spin" : ""}/>Waiting for Razorpay confirmation</div>}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button type="button" onClick={onClose} className="border rounded-xl py-3 font-bold text-slate-700">Close</button>
+            <button type="button" onClick={checkPayment} disabled={checking || status === "PAID"} className="bg-emerald-600 text-white rounded-xl py-3 font-bold disabled:opacity-50">{checking ? "Checking..." : status === "PAID" ? "Paid" : "Check Payment"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Checkout({
   store,
 }: {
@@ -4580,6 +4682,7 @@ function Checkout({
   const [codRisk, setCodRisk] = useState<any>(null);
   const [codRiskLoading, setCodRiskLoading] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<any>(null);
+  const [razorpayQrSession, setRazorpayQrSession] = useState<any>(null);
   const cartPaymentModes = store.cart.map((i: any) => {
     const mode = String(i?.product?.paymentAvailability || "").trim().toUpperCase();
     return ["COD_ONLY", "COD_AND_ONLINE", "ONLINE_ONLY"].includes(mode) ? mode : "LEGACY";
@@ -4895,13 +4998,87 @@ function Checkout({
         },
       });
 
+      const createdOrder = r.data.data || {};
+      const createdOrderId = String(createdOrder?._id || "");
       localStorage.setItem(
         "fb-last-order",
         JSON.stringify({
-          id: r.data.data?._id || "FB" + Date.now(),
-          total: r.data.data?.total ?? total,
+          id: createdOrderId || "FB" + Date.now(),
+          total: createdOrder?.total ?? total,
         })
       );
+
+      if (form.payment === "ONLINE" && createdOrderId) {
+        try {
+          const sessionResponse = await axios.post(API + `/orders/${createdOrderId}/payment/session`, {}, { headers: { Authorization: `Bearer ${token}` } });
+          const session = sessionResponse.data?.data || {};
+          if (String(session.provider || "").toUpperCase() === "RAZORPAY_QR") {
+            setRazorpayQrSession(session);
+            setSubmitting(false);
+            return;
+          }
+
+          if (String(session.provider || "").toUpperCase() === "RAZORPAY") {
+            const loaded = await loadRazorpayCheckoutScript();
+            if (!loaded || !(window as any).Razorpay) {
+              setSubmitting(false);
+              setError("Unable to load Razorpay Checkout. Please check your internet connection and try again from the order page.");
+              nav(`/orders/${createdOrderId}`);
+              return;
+            }
+            const Razorpay = (window as any).Razorpay;
+            const checkout = new Razorpay({
+              key: session.keyId,
+              amount: Math.round(Number(session.amount || createdOrder.total || 0) * 100),
+              currency: session.currency || "INR",
+              name: "FreshBasket",
+              description: `Order #${createdOrderId.slice(-8).toUpperCase()}`,
+              order_id: session.razorpayOrderId,
+              prefill: { name: form.name.trim(), email: store.user?.email || "", contact: form.phone.replace(/\D/g, "") },
+              notes: { freshbasket_order_id: createdOrderId },
+              config: {
+                display: {
+                  blocks: {
+                    freshbasket_upi: {
+                      name: "UPI",
+                      instruments: [{ method: "upi" }]
+                    }
+                  },
+                  sequence: ["block.freshbasket_upi"],
+                  preferences: { show_default_blocks: true }
+                }
+              },
+              theme: { color: "#059669" },
+              modal: { ondismiss: () => { setSubmitting(false); setError("Payment window closed. Your order is created and payment is still pending. You can retry from the order page."); nav(`/orders/${createdOrderId}`); } },
+              handler: async (response: any) => {
+                try {
+                  const verified = await axios.post(API + `/orders/${createdOrderId}/payment/verify`, response, { headers: { Authorization: `Bearer ${token}` } });
+                  if (!verified.data?.success) throw new Error(verified.data?.message || "Payment verification failed.");
+                  store.clearCart();
+                  setSubmitting(false);
+                  nav("/order-success");
+                } catch (e: any) {
+                  setSubmitting(false);
+                  setError(e?.response?.data?.message || e?.message || "Payment verification failed. Please check your order status.");
+                  nav(`/orders/${createdOrderId}`);
+                }
+              },
+            });
+            checkout.on("payment.failed", (response: any) => {
+              setSubmitting(false);
+              setError(response?.error?.description || "Payment failed. Your order is still pending payment.");
+              nav(`/orders/${createdOrderId}`);
+            });
+            checkout.open();
+            return;
+          }
+        } catch (paymentError: any) {
+          setSubmitting(false);
+          setError(paymentError?.response?.data?.message || "Unable to start online payment. Your order was created; you can retry from the order page.");
+          nav(`/orders/${createdOrderId}`);
+          return;
+        }
+      }
 
       store.clearCart();
       setSubmitting(false);
@@ -4922,6 +5099,23 @@ function Checkout({
   };
 
   return (
+    <>
+      {razorpayQrSession && (
+        <RazorpayQrPaymentModal
+          session={razorpayQrSession}
+          orderId={String(razorpayQrSession.orderId || "")}
+          token={getAuthToken()}
+          onPaid={() => {
+            store.clearCart();
+            setRazorpayQrSession(null);
+            nav("/order-success");
+          }}
+          onClose={() => {
+            setRazorpayQrSession(null);
+            setError("Payment window closed. Your order is created and payment is still pending. You can retry from the order page.");
+          }}
+        />
+      )}
     <Layout store={store}>
       <main className="max-w-6xl mx-auto px-4 py-9">
         <div className="mb-4"><WebsiteBackButton fallback="/cart" label="Back to cart" /></div>
@@ -5056,17 +5250,14 @@ function Checkout({
               {codRiskLoading ? <p className="text-xs text-slate-500 font-semibold mt-3">Checking COD eligibility...</p> : codRisk?.state === "COD_RESTRICTED" ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3"><p className="text-sm font-bold text-red-700">COD Restricted</p><p className="text-xs text-red-700 mt-1">{codRisk.reason}</p><p className="text-xs text-red-600 mt-1 font-semibold">Please choose Online Payment to continue.</p></div> : codRisk?.state === "PREPAID_RECOMMENDED" ? <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3"><p className="text-sm font-bold text-blue-700">Prepaid Recommended</p><p className="text-xs text-blue-700 mt-1">{codRisk.reason}</p><p className="text-xs text-blue-600 mt-1">COD remains available under the current rules.</p></div> : codRisk?.state === "COD_ELIGIBLE" ? <p className="text-xs text-emerald-700 font-semibold mt-3">COD Eligible — your current history is within the configured limits.</p> : null}
               {form.payment === "ONLINE" && (
                 <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                  {paymentSettings?.isEnabled && (paymentSettings?.upiId || paymentSettings?.qrImage) ? (
-                    <div className="flex flex-col sm:flex-row gap-4 items-center">
-                      {paymentSettings.qrImage ? <img src={paymentSettings.qrImage} alt="Store UPI QR" className="w-36 h-36 rounded-xl border bg-white object-contain" /> : null}
-                      <div className="text-sm">
-                        <p className="font-bold text-emerald-900">Pay this store online</p>
-                        {paymentSettings.merchantName && <p className="text-emerald-800 mt-1">{paymentSettings.merchantName}</p>}
-                        {paymentSettings.upiId && <p className="mt-2 font-semibold text-emerald-900">UPI: {paymentSettings.upiId}</p>}
-                        <p className="text-xs text-emerald-800 mt-2">Complete the UPI payment using the QR/UPI ID, then place the order.</p>
-                      </div>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 w-9 h-9 rounded-xl bg-white border border-emerald-100 grid place-items-center text-emerald-700 font-black">₹</div>
+                    <div>
+                      <p className="font-bold text-emerald-900">Secure online payment</p>
+                      <p className="text-xs text-emerald-800 mt-1">Razorpay UPI QR will open after the order is created. Scan it with your UPI app; payment is marked successful only after Razorpay confirms it on the server.</p>
+                      {paymentSettings?.upiId && <p className="text-[11px] text-emerald-700 mt-2">Existing store UPI settings are retained as a fallback if Razorpay is not configured.</p>}
                     </div>
-                  ) : <p className="text-xs text-amber-700 font-semibold">This store has not configured online payment yet. Please choose Cash on Delivery.</p>}
+                  </div>
                 </div>
               )}
             </div>
@@ -5159,6 +5350,7 @@ function Checkout({
       </main>
       {showMapPicker && <MapPicker value={form} onClose={()=>setShowMapPicker(false)} onConfirm={(latitude,longitude)=>{setForm((current)=>({...current,latitude,longitude}));setShowMapPicker(false);setError("");}} />}
     </Layout>
+    </>
   );
 }
 
@@ -6637,6 +6829,7 @@ function OrderTracking({
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [paymentUpdating, setPaymentUpdating] = useState<string | null>(null);
+  const [razorpayQrSession, setRazorpayQrSession] = useState<any>(null);
   const [supportOptions, setSupportOptions] = useState<any | null>(null);
   const [requestHistory, setRequestHistory] = useState<any>({ refunds: [], replacements: [] });
   const [deliveryRating, setDeliveryRating] = useState(5);
@@ -6855,7 +7048,64 @@ function OrderTracking({
     return "";
   };
 
+  const retryOnlinePayment = async () => {
+    if (!order?._id || String(order.paymentMethod || "").toUpperCase() !== "ONLINE" || order.paymentStatus === "Paid") return;
+    try {
+      setPaymentUpdating(String(order._id));
+      const r = await axios.post(API + `/orders/${order._id}/payment/session`, {}, { headers: adminHeaders() });
+      const session = r.data?.data || {};
+       if (String(session.provider || "").toUpperCase() === "RAZORPAY_QR") {
+         setRazorpayQrSession(session);
+         setPaymentUpdating(null);
+         return;
+       }
+      if (String(session.provider || "").toUpperCase() !== "RAZORPAY") {
+        setError("Razorpay is not configured for this payment. Please contact support.");
+        return;
+      }
+      const loaded = await loadRazorpayCheckoutScript();
+      if (!loaded || !(window as any).Razorpay) throw new Error("Unable to load Razorpay Checkout.");
+      const Razorpay = (window as any).Razorpay;
+      const checkout = new Razorpay({
+        key: session.keyId, amount: Math.round(Number(session.amount || order.total || 0) * 100), currency: session.currency || "INR",
+        name: "FreshBasket", description: `Order #${String(order._id).slice(-8).toUpperCase()}`, order_id: session.razorpayOrderId,
+        prefill: { name: store.user?.name || "", email: store.user?.email || "", contact: store.user?.phone || "" },
+        notes: { freshbasket_order_id: String(order._id) },
+        config: {
+          display: {
+            blocks: {
+              freshbasket_upi: { name: "UPI", instruments: [{ method: "upi" }] }
+            },
+            sequence: ["block.freshbasket_upi"],
+            preferences: { show_default_blocks: true }
+          }
+        },
+        theme: { color: "#059669" },
+        handler: async (response: any) => {
+          try { await axios.post(API + `/orders/${order._id}/payment/verify`, response, { headers: adminHeaders() }); await load(); }
+          catch (e: any) { setError(e?.response?.data?.message || "Payment verification failed."); }
+          finally { setPaymentUpdating(null); }
+        },
+      });
+      checkout.on("payment.failed", (response: any) => { setError(response?.error?.description || "Payment failed."); setPaymentUpdating(null); });
+      checkout.open();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || "Unable to start payment.");
+      setPaymentUpdating(null);
+    }
+  };
+
   return (
+    <>
+      {razorpayQrSession && (
+        <RazorpayQrPaymentModal
+          session={razorpayQrSession}
+          orderId={String(razorpayQrSession.orderId || order?._id || "")}
+          token={getAuthToken()}
+          onPaid={() => { setRazorpayQrSession(null); load(); }}
+          onClose={() => setRazorpayQrSession(null)}
+        />
+      )}
     <Layout store={store}>
       <main className="max-w-4xl mx-auto px-4 py-10">
         <div className="mb-4"><WebsiteBackButton fallback="/orders" label="Back to orders" /></div>
@@ -6922,6 +7172,12 @@ function OrderTracking({
                   </p>
                 </div>
               </div>
+              {String(order.paymentMethod || "").toUpperCase() === "ONLINE" && order.paymentStatus !== "Paid" && (
+                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div><p className="font-bold text-amber-900">Payment pending</p><p className="text-xs text-amber-800 mt-1">This order was created, but payment has not been verified yet.</p></div>
+                  <button onClick={retryOnlinePayment} disabled={paymentUpdating===String(order._id)} className="bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold disabled:opacity-50">{paymentUpdating===String(order._id)?"Opening...":"Pay Now"}</button>
+                </div>
+              )}
             </section>
 
             <section className="bg-white border rounded-3xl p-6">
@@ -7257,6 +7513,7 @@ function OrderTracking({
         ) : null}
       </main>
     </Layout>
+    </>
   );
 }
 
@@ -10662,11 +10919,33 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
     try {
       const r=await axios.post(API+`/orders/${id}/payment/session`,{}, {headers:adminHeaders()});
       const session=r.data?.data;
+      if(String(session?.provider||"").toUpperCase()==="RAZORPAY") {
+        const loaded=await loadRazorpayCheckoutScript();
+        if(!loaded || !(window as any).Razorpay) throw new Error("Unable to load Razorpay Checkout.");
+        const Razorpay=(window as any).Razorpay;
+        const checkout=new Razorpay({
+          key:session.keyId, amount:Math.round(Number(session.amount||0)*100), currency:session.currency||"INR",
+          name:"FreshBasket", description:`Order #${String(id).slice(-8).toUpperCase()}`, order_id:session.razorpayOrderId,
+          notes:{freshbasket_order_id:String(id)},
+          config:{
+            display:{
+              blocks:{freshbasket_upi:{name:"UPI",instruments:[{method:"upi"}]}},
+              sequence:["block.freshbasket_upi"],
+              preferences:{show_default_blocks:true}
+            }
+          },
+          theme:{color:"#059669"},
+          handler:async(response:any)=>{ try{await axios.post(API+`/orders/${id}/payment/verify`,response,{headers:adminHeaders()});await load();}catch(e:any){alert(e?.response?.data?.message||"Payment verification failed.");} },
+        });
+        checkout.on("payment.failed",(response:any)=>alert(response?.error?.description||"Payment failed."));
+        checkout.open();
+        return;
+      }
       if(!session?.uri) throw new Error("Payment session was not created.");
       setPaymentSessionByOrder(v=>({...v,[id]:session}));
       const qrUrl="https://quickchart.io/qr?text="+encodeURIComponent(session.uri)+"&size=320";
       window.open(qrUrl,"_blank","noopener,noreferrer");
-    } catch(e:any){alert(e?.response?.data?.message||e?.message||"Unable to create payment QR.");}
+    } catch(e:any){alert(e?.response?.data?.message||e?.message||"Unable to start payment.");}
   };
 
   const markPaymentReceived = async (id: string) => {
