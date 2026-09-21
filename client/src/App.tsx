@@ -12252,6 +12252,26 @@ function IdentityQr({ value }: { value: string }) {
   </div>;
 }
 
+function ProfessionalIdCard({ card, printId = "fb-id-card-print" }: { card: any; printId?: string }) {
+  const status = String(card?.currentStatus || card?.status || "ACTIVE").toUpperCase();
+  const type = String(card?.holderType || "");
+  return <div id={printId} className="w-[420px] min-h-[690px] bg-white rounded-[30px] border border-slate-200 shadow-xl overflow-hidden shrink-0">
+    <div className="bg-emerald-600 text-white p-6 flex items-center gap-3">
+      <div className="w-12 h-12 rounded-2xl bg-white text-emerald-700 grid place-items-center"><Leaf size={27} /></div>
+      <div><div className="text-2xl font-black">FreshBasket</div><div className="text-xs font-bold tracking-widest uppercase">Official Employee Identity Card</div></div>
+    </div>
+    <div className="p-6">
+      <div className="flex gap-5 items-start">
+        {card?.photo ? <img src={card.photo} alt={card.name || "Employee"} className="w-32 h-36 rounded-2xl object-cover border" /> : <div className="w-32 h-36 rounded-2xl bg-slate-100 grid place-items-center"><User size={46} className="text-slate-300" /></div>}
+        <div className="min-w-0"><h1 className="text-2xl font-black break-words">{card?.name || "N/A"}</h1><p className="font-bold text-emerald-700 mt-1">{card?.designation || IDENTITY_CARD_TYPE_LABELS[type] || "Employee"}</p><p className="text-sm text-slate-500 mt-3">Employee ID: <b>{card?.employeeId || card?.cardNumber || "N/A"}</b></p></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mt-6 text-sm">{[["Department", card?.department], ["Email", card?.email], ["Mobile", card?.phone], ["Valid until", card?.expiryDate ? new Date(card.expiryDate).toLocaleDateString("en-IN") : "N/A"]].map(([label, value]) => <div key={String(label)} className="border rounded-xl p-3"><div className="text-[9px] uppercase tracking-widest text-slate-400">{label}</div><div className="font-semibold mt-1 break-words">{value || "N/A"}</div></div>)}</div>
+      <div className="mt-5 flex items-center justify-between gap-4"><IdentityQr value={card?.verificationToken || card?.cardNumber || card?._id || ""} /><div className={`rounded-full px-3 py-2 text-xs font-black ${status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{status}</div></div>
+      <p className="text-[10px] text-slate-400 text-center mt-5">Property of FreshBasket · Verify using the QR code</p>
+    </div>
+  </div>;
+}
+
 const IDENTITY_CARD_TYPE_LABELS: Record<string, string> = {
   delivery: "DELIVERY PARTNER",
   "store-admin": "STORE ADMIN",
@@ -12270,37 +12290,104 @@ const IDENTITY_CARD_TYPE_LABELS: Record<string, string> = {
   employee: "COMPANY EMPLOYEE",
 };
 
-function ProfessionalIdCard({ card, printId = "fb-id-card-print" }: { card: any; printId?: string }) {
-  const typeLabel = IDENTITY_CARD_TYPE_LABELS[String(card.holderType || "")] || "COMPANY EMPLOYEE";
-  const issue = card.issueDate ? new Date(card.issueDate).toLocaleDateString("en-IN") : "N/A";
-  const expiry = card.expiryDate ? new Date(card.expiryDate).toLocaleDateString("en-IN") : "N/A";
-  const status = String(card.currentStatus || card.status || "active").toUpperCase() === "REVOKED" ? "REVOKED" : String(card.currentStatus || card.status || "active").toUpperCase() === "EXPIRED" ? "EXPIRED" : String(card.currentStatus || card.status || "active").toUpperCase() === "INACTIVE" ? "INACTIVE" : "ACTIVE";
-  return <div id={printId} className="w-[420px] max-w-full min-h-[690px] bg-white rounded-[30px] overflow-hidden border border-emerald-100 shadow-xl text-slate-900 relative">
-    <div className="h-24 bg-emerald-600 text-white p-5 relative overflow-hidden">
-      <div className="absolute -right-10 -top-16 w-44 h-44 rounded-full bg-emerald-500/40" />
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-white text-emerald-700 grid place-items-center"><Leaf size={24}/></div><div><div className="font-black text-xl leading-none">FreshBasket</div><div className="text-[9px] font-bold uppercase tracking-[0.18em] mt-1 opacity-90">Official Employee ID Card</div></div></div>
-        <span className="bg-white/95 text-emerald-700 rounded-full px-2.5 py-1 text-[9px] font-black">EMPLOYEE</span>
-      </div>
-    </div>
-    <div className="p-5">
-      <div className="flex gap-4 items-start">
-        <div className="w-28 h-32 shrink-0 rounded-2xl bg-slate-50 border-2 border-emerald-100 overflow-hidden grid place-items-center">{card.photo ? <img src={card.photo} alt={card.name} className="w-full h-full object-cover"/> : <User size={42} className="text-slate-300"/>}</div>
-        <div className="min-w-0 flex-1"><div className="text-[9px] uppercase font-bold tracking-widest text-emerald-700">Authorized FreshBasket Team Member</div><div className="font-black text-2xl leading-tight break-words mt-1">{card.name || "N/A"}</div><div className="font-bold text-sm text-slate-600 mt-1 break-words">{card.designation || "N/A"}</div><div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-700"><BadgeCheck size={12}/> {typeLabel}</div></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 mt-5">
-        {[['Employee ID',card.employeeId||'N/A'],['Department',card.department||'N/A'],['Store / Branch',card.storeAdmin?.name||'N/A'],['Mobile',card.phone||'N/A'],['Email',card.email||'N/A'],['Emergency',card.emergencyContact||'N/A']].map(([label,value])=><div key={label as string} className="min-w-0"><div className="text-[8px] uppercase font-bold tracking-widest text-slate-400">{label}</div><div className="font-semibold text-[11px] break-words mt-0.5">{value}</div></div>)}
-      </div>
-      <div className="mt-3"><div className="text-[8px] uppercase font-bold tracking-widest text-slate-400">Residential / Official Address</div><div className="font-semibold text-[11px] leading-4 break-words mt-0.5">{card.address || "N/A"}</div></div>
-      <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-200 p-4 flex gap-4 items-center">
-        <IdentityQr value={card.verificationToken || ""}/><div className="min-w-0"><div className="font-black text-sm text-slate-900">SCAN TO VERIFY</div><p className="text-[10px] leading-4 text-slate-500 mt-1">Official FreshBasket Employee Verification</p><div className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black ${status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}><span>●</span>{status}</div></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 mt-4 text-[10px]"><div><b>Issued:</b> {issue}</div><div><b>Valid Until:</b> {expiry}</div></div>
-      <div className="mt-4 pt-3 border-t border-slate-100 text-[9px] text-slate-500 leading-4"><b className="text-slate-700">Property of FreshBasket.</b> Valid only while active in the FreshBasket system.<br/>Please verify this ID before granting access.</div>
-    </div>
-  </div>;
-}
+const printCard = async (card: any) => {
+  setSelectedCard(card);
 
+  setTimeout(async () => {
+    const source = document.getElementById("fb-id-card-print");
+
+    if (!source) {
+      alert("ID card preview is not available.");
+      return;
+    }
+
+    try {
+      /*
+       * Android:
+       * Use the existing Capacitor Printer plugin to print the
+       * rendered ID-card WebView. This keeps the existing card
+       * design/layout and avoids opening a localhost/browser URL.
+       */
+      if (IS_NATIVE_APP) {
+        await CapacitorPrinter.printWebView({
+          name: `FreshBasket ID Card ${card.cardNumber || card.name || "Employee"}`,
+        });
+        return;
+      }
+
+      /*
+       * Web:
+       * Preserve the existing browser print behaviour.
+       */
+      const printWindow = window.open("", "_blank", "width=900,height=700");
+
+      if (!printWindow) {
+        alert("Please allow pop-ups to print the ID card.");
+        return;
+      }
+
+      const styles = Array.from(
+        document.querySelectorAll("style, link[rel='stylesheet']")
+      )
+        .map((node) => node.outerHTML)
+        .join("\n");
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="UTF-8" />
+            <title>FreshBasket ID Card</title>
+            ${styles}
+            <style>
+              @page {
+                size: A4;
+                margin: 0;
+              }
+
+              html,
+              body {
+                margin: 0;
+                padding: 0;
+                background: #ffffff;
+              }
+
+              body {
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+              }
+
+              #fb-id-card-print {
+                margin: 20px auto;
+              }
+            </style>
+          </head>
+          <body>
+            ${source.outerHTML}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 400);
+      };
+    } catch (error) {
+      console.error("FreshBasket ID card print failed:", error);
+
+      alert(
+        IS_NATIVE_APP
+          ? "Unable to open Android print dialog. Please try again."
+          : "Unable to print ID card."
+      );
+    }
+  }, 250);
+};
 function EmployeeVerificationPage() {
   const { token = "" } = useParams();
   const [state, setState] = useState<any>({ loading: true, data: null, error: "" });
@@ -12474,70 +12561,104 @@ function MainAdminIdCardGenerator() {
     } catch (e:any) { alert(e?.response?.data?.message || "Unable to delete identity card."); }
   };
 
-<<<<<<< HEAD
-    const printCard = (card: any) => {
-=======
-  const printCard = (card: any) => {
->>>>>>> 3a9217c4172ba79419cb0a2d2c3b81fd47ef0c0e
-    setSelectedCard(card);
+ const printCard = async (card: any) => {
+  setSelectedCard(card);
 
-    setTimeout(async () => {
-      const source = document.getElementById("fb-id-card-print");
+  setTimeout(async () => {
+    const source = document.getElementById("fb-id-card-print");
 
-      if (!source) {
-        if (IS_NATIVE_APP) {
-          try {
-            await CapacitorPrinter.printWebView({
-              name: `FreshBasket ID Card ${card.cardNumber || card.name || "Employee"}`,
-            });
-            return;
-          } catch (error) {
-            console.warn("FreshBasket native ID card print failed", error);
-          }
-        }
+    if (!source) {
+      alert("ID card preview is not available.");
+      return;
+    }
 
-        return window.print();
-      }
-
-      const printCopy = source.cloneNode(true) as HTMLElement;
-      printCopy.id = "fb-id-card-print-only";
-      document.body.appendChild(printCopy);
-
-      let cleaned = false;
-
-      const cleanup = () => {
-        if (cleaned) return;
-
-        cleaned = true;
-        printCopy.remove();
-        window.removeEventListener("afterprint", cleanup);
-      };
-
+    try {
+      /*
+       * Android:
+       * Use the existing Capacitor Printer plugin to print the
+       * rendered ID-card WebView. This keeps the existing card
+       * design/layout and avoids opening a localhost/browser URL.
+       */
       if (IS_NATIVE_APP) {
-        try {
-          // Android native printing.
-          // Opens the Android system print UI, including Save as PDF.
-          await CapacitorPrinter.printWebView({
-            name: `FreshBasket ID Card ${card.cardNumber || card.name || "Employee"}`,
-          });
-
-          setTimeout(cleanup, 1500);
-          return;
-        } catch (error) {
-          console.warn(
-            "FreshBasket native ID card print failed, falling back to browser print",
-            error
-          );
-        }
+        await CapacitorPrinter.printWebView({
+          name: `FreshBasket ID Card ${card.cardNumber || card.name || "Employee"}`,
+        });
+        return;
       }
 
-      // Browser/web fallback.
-      window.addEventListener("afterprint", cleanup);
-      window.print();
+      /*
+       * Web:
+       * Preserve the existing browser print behaviour.
+       */
+      const printWindow = window.open("", "_blank", "width=900,height=700");
 
-      setTimeout(cleanup, 5000);
-    }, 1000);
-  };
+      if (!printWindow) {
+        alert("Please allow pop-ups to print the ID card.");
+        return;
+      }
+
+      const styles = Array.from(
+        document.querySelectorAll("style, link[rel='stylesheet']")
+      )
+        .map((node) => node.outerHTML)
+        .join("\n");
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="UTF-8" />
+            <title>FreshBasket ID Card</title>
+            ${styles}
+            <style>
+              @page {
+                size: A4;
+                margin: 0;
+              }
+
+              html,
+              body {
+                margin: 0;
+                padding: 0;
+                background: #ffffff;
+              }
+
+              body {
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+              }
+
+              #fb-id-card-print {
+                margin: 20px auto;
+              }
+            </style>
+          </head>
+          <body>
+            ${source.outerHTML}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 400);
+      };
+    } catch (error) {
+      console.error("FreshBasket ID card print failed:", error);
+
+      alert(
+        IS_NATIVE_APP
+          ? "Unable to open Android print dialog. Please try again."
+          : "Unable to print ID card."
+      );
+    }
+  }, 250);
+};
 
   return <div className="space-y-5">
     <style>{`@media print { html, body { margin:0 !important; padding:0 !important; width:100% !important; height:100% !important; overflow:hidden !important; background:#fff !important; } body * { visibility:hidden !important; } #fb-id-card-print-only, #fb-id-card-print-only * { visibility:visible !important; } #fb-id-card-print-only { position:fixed !important; left:50% !important; top:50% !important; transform:translate(-50%,-50%) !important; width:420px !important; min-width:420px !important; max-width:420px !important; min-height:690px !important; height:auto !important; margin:0 !important; box-shadow:none !important; border-radius:30px !important; } @page { size:A4 portrait; margin:0; } }`}</style>
@@ -15099,5 +15220,10 @@ export default function App() {
       </Routes>
     </>
   );
+}
+
+
+function setSelectedCard(card: any) {
+  throw new Error("Function not implemented.");
 }
 
