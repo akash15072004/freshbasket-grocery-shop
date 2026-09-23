@@ -1236,13 +1236,36 @@ const notifyRestockSubscribers = async ({ productId, variantId = "", previousSto
 
 const firebaseMessaging = (() => {
   try {
-    const projectId = String(process.env.FIREBASE_PROJECT_ID || "").trim();
-    const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || "").trim();
-    const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n").trim();
-    if (!projectId || !clientEmail || !privateKey) return null;
+    // Prefer a complete Firebase service-account JSON when the deployment
+    // platform supports one secret. Fall back to the individual variables
+    // already supported by FreshBasket.
+    const rawServiceAccount = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+    let serviceAccount: any = null;
+
+    if (rawServiceAccount) {
+      try {
+        serviceAccount = JSON.parse(rawServiceAccount);
+      } catch (jsonError) {
+        console.error("FCM SERVICE ACCOUNT JSON ERROR: invalid FIREBASE_SERVICE_ACCOUNT_JSON");
+        return null;
+      }
+    }
+
+    if (!serviceAccount) {
+      const projectId = String(process.env.FIREBASE_PROJECT_ID || "").trim();
+      const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || "").trim();
+      const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n").trim();
+      if (!projectId || !clientEmail || !privateKey) {
+        console.warn("FCM NOT CONFIGURED: set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY");
+        return null;
+      }
+      serviceAccount = { projectId, clientEmail, privateKey };
+    }
+
     const app = getApps().length
       ? getApps()[0]
-      : initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+      : initializeApp({ credential: cert(serviceAccount) });
+    console.log("FCM initialized for FreshBasket Android notifications");
     return getMessaging(app);
   } catch (error) {
     console.error("FCM INITIALIZATION ERROR:", error);

@@ -250,6 +250,7 @@ const getAuthUser = () => {
 };
 
 const persistAuthSession = (user:any, token:string) => {
+  try { sessionStorage.removeItem("fb-last-safe-route"); } catch {}
   try {
     sessionStorage.setItem("fb-user", JSON.stringify(user));
     sessionStorage.setItem("fb-token", String(token || ""));
@@ -836,8 +837,170 @@ function AccessibilityStyles() {
   return (
     <>
     <style>{`
-      html { scroll-behavior: smooth; }
-      body { overflow-x: hidden; }
+      html {
+        scroll-behavior: smooth; width:100%; min-width:0; max-width:100%;
+        scroll-padding-top:calc(env(safe-area-inset-top, 0px) + 76px);
+      }
+      body { width:100%; min-width:0; max-width:100%; margin:0; overflow-wrap:anywhere; }
+      #root { width:100%; min-width:0; max-width:100%; min-height:100dvh; box-sizing:border-box; }
+      *, *::before, *::after { box-sizing:border-box; }
+      img, video, canvas, iframe { max-width:100%; }
+      button, a, input, select, textarea { -webkit-tap-highlight-color:transparent; }
+      input:focus, select:focus, textarea:focus {
+        scroll-margin-top:calc(env(safe-area-inset-top, 0px) + 88px);
+        scroll-margin-bottom:calc(env(safe-area-inset-bottom, 0px) + 120px);
+      }
+      @supports (padding: env(safe-area-inset-top)) {
+        body { padding-left:env(safe-area-inset-left, 0px); padding-right:env(safe-area-inset-right, 0px); }
+      }
+
+      /* Category management: targeted Android responsive containment.
+         This is intentionally scoped to CategoryAdmin so other dashboard
+         screens keep their existing desktop/tablet layout. */
+      .fb-category-admin,
+      .fb-category-admin * { box-sizing: border-box; }
+      .fb-category-admin { min-width: 0; width: 100%; }
+      .fb-category-header,
+      .fb-category-form,
+      .fb-category-list,
+      .fb-category-list-item,
+      .fb-category-list-main,
+      .fb-category-list-copy,
+      .fb-category-actions { min-width: 0; }
+      .fb-category-form input { width: 100%; max-width: 100%; min-width: 0; }
+      .fb-category-option {
+        display: flex; align-items: flex-start; gap: .65rem; width: 100%;
+        min-width: 0; min-height: 44px; padding: .45rem 0;
+      }
+      .fb-category-option input {
+        flex: 0 0 auto; width: 20px; height: 20px; margin: 1px 0 0;
+      }
+      .fb-category-option span {
+        flex: 1 1 auto; min-width: 0; white-space: normal;
+        overflow-wrap: anywhere; word-break: normal; line-height: 1.35;
+      }
+      .fb-category-name {
+        min-width: 0; max-width: 100%; white-space: normal;
+        overflow-wrap: break-word; word-break: normal;
+      }
+      .fb-category-url {
+        min-width: 0; max-width: 100%; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap;
+      }
+      .fb-category-actions button { min-height: 44px; }
+      .fb-category-image { max-width: 100%; height: auto; }
+
+      @media screen and (orientation: portrait) and (max-width: 900px) {
+        /* Capacitor Android/WebView can report a wider logical viewport than
+           the physical device. Orientation is therefore used as a second
+           guard in addition to the normal width breakpoint. */
+        .fb-category-admin { width: 100%; max-width: 100%; }
+        .fb-category-header {
+          display: block !important; width: 100%; max-width: 100%;
+        }
+        .fb-category-header > div:first-child {
+          width: 100%; min-width: 0; margin-bottom: .85rem;
+        }
+        .fb-category-form {
+          width: 100% !important; max-width: none !important;
+          padding: 1rem !important; height: auto !important;
+          min-height: 0 !important; overflow: visible !important;
+        }
+        .fb-category-form > .fb-category-form-fields {
+          display: grid !important; grid-template-columns: minmax(0, 1fr) !important;
+          width: 100%; min-width: 0; gap: .7rem !important;
+        }
+        .fb-category-form > .fb-category-options {
+          display: grid !important; grid-template-columns: minmax(0, 1fr) !important;
+          width: 100%; min-width: 0; gap: .1rem !important;
+        }
+        .fb-category-form input {
+          width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+        }
+        .fb-category-option {
+          width: 100% !important; min-width: 0 !important;
+          display: flex !important; flex-direction: row !important;
+          align-items: flex-start !important; gap: .65rem !important;
+          white-space: normal !important;
+        }
+        .fb-category-option input {
+          flex: 0 0 20px !important; width: 20px !important;
+          min-width: 20px !important; max-width: 20px !important;
+          height: 20px !important; margin-top: 2px !important;
+        }
+        .fb-category-option span {
+          display: block !important; flex: 1 1 auto !important;
+          min-width: 0 !important; max-width: 100% !important;
+          white-space: normal !important; overflow-wrap: anywhere !important;
+          word-break: normal !important;
+        }
+        .fb-category-form-actions {
+          display: flex !important; flex-wrap: wrap !important;
+          width: 100%; min-width: 0; gap: .5rem !important;
+          justify-content: stretch !important;
+        }
+        .fb-category-form-actions > button {
+          flex: 1 1 9rem !important; min-width: 0 !important;
+          min-height: 44px !important; max-width: 100% !important;
+          white-space: normal !important;
+        }
+        .fb-category-list { width: 100%; max-width: 100%; overflow: visible; }
+        .fb-category-list-item {
+          width: 100%; max-width: 100%; min-width: 0;
+          display: flex !important; flex-direction: column !important;
+          align-items: stretch !important; gap: .75rem !important;
+          padding: 1rem !important;
+          overflow: visible !important;
+        }
+        .fb-category-list-main {
+          width: 100%; max-width: 100%; min-width: 0;
+          display: flex !important; align-items: flex-start !important;
+        }
+        .fb-category-list-copy {
+          flex: 1 1 auto !important; min-width: 0 !important;
+          max-width: calc(100% - 4.25rem);
+        }
+        .fb-category-name {
+          display: block !important; width: 100%; max-width: 100%;
+          white-space: normal !important; overflow-wrap: break-word !important;
+          word-break: normal !important;
+        }
+        .fb-category-list-item > .fb-category-status {
+          align-self: flex-start !important; max-width: 100%;
+        }
+        .fb-category-actions {
+          display: flex !important; flex-wrap: wrap !important;
+          width: 100% !important; max-width: 100% !important;
+          gap: .5rem !important;
+        }
+        .fb-category-actions button {
+          flex: 1 1 7rem !important; min-width: 0 !important;
+          min-height: 44px !important; max-width: 100% !important;
+          white-space: normal !important;
+        }
+        .fb-category-image { width: 3.5rem !important; height: 3.5rem !important;
+          min-width: 3.5rem !important; flex: 0 0 3.5rem !important; }
+      }
+
+      @media screen and (max-width: 420px) {
+        .fb-category-form-actions > button { flex-basis: 100% !important; }
+        .fb-category-actions button { flex-basis: calc(50% - .25rem) !important; }
+      }
+
+      /* Android status-bar safe area for the shared Store/Admin header.
+         Keep the existing sticky header and navigation; only reserve the
+         native inset so page titles never render underneath the status bar. */
+      @media screen and (orientation: portrait) and (max-width: 900px) {
+        .fb-dashboard-shell #admin-main > header {
+          padding-top: max(.5rem, env(safe-area-inset-top, 0px)) !important;
+          min-height: calc(4rem + env(safe-area-inset-top, 0px)) !important;
+        }
+        .fb-dashboard-shell #admin-main > header > div { min-width: 0; }
+        .fb-dashboard-shell #admin-main > header h1,
+        .fb-dashboard-shell #admin-main > header p {
+          overflow-wrap: anywhere; word-break: normal;
+        }
+      }
 
       /* Global role-dashboard visual layer: presentation only. Existing
          layout, cards, data, APIs and interactions remain unchanged. */
@@ -936,6 +1099,15 @@ function AccessibilityStyles() {
         0% { transform: translate3d(0, 0, 0) scale(1); }
         100% { transform: translate3d(0, -18px, 0) scale(1.06); }
       }
+      @media screen and (max-width:767px) {
+        header.sticky { padding-top:env(safe-area-inset-top, 0px); }
+        .fixed.bottom-0, .fixed.inset-x-0.bottom-0, .fixed.left-0.right-0.bottom-0 { padding-bottom:env(safe-area-inset-bottom, 0px); }
+        .fixed.bottom-4, .fixed.bottom-5, .fixed.bottom-6 { margin-bottom:env(safe-area-inset-bottom, 0px); }
+        .sticky { scroll-margin-top:calc(env(safe-area-inset-top, 0px) + 76px); }
+      }
+      @media screen and (orientation:landscape) and (max-height:520px) { header.sticky { padding-top:env(safe-area-inset-top, 0px); } }
+      @media (pointer:coarse) { button, [role="button"], a { touch-action:manipulation; } }
+
       @media (prefers-reduced-motion: reduce) {
         .fb-dashboard-shell::before,
         .fb-dashboard-shell::after { animation: none !important; }
@@ -2009,6 +2181,33 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
   try {
     console.log("[FreshBasket Push] setup started");
 
+    // Android 8+ requires notification channels before FCM notifications can
+    // reliably appear in the system notification tray. These IDs intentionally
+    // match the backend getPushChannelId() mapping.
+    if (Capacitor.getPlatform() === "android") {
+      const channels = [
+        ["orders", "Orders", "Order and payment updates"],
+        ["delivery", "Delivery", "Delivery assignments and tracking updates"],
+        ["refunds", "Refunds", "Refund and replacement updates"],
+        ["support", "Customer Care", "Customer support updates"],
+        ["chat", "Chat", "Chat messages"],
+        ["finance", "Finance", "Finance and payout updates"],
+        ["payments", "Payments", "Payment updates"],
+        ["security", "Security", "Security alerts"],
+        ["system", "FreshBasket", "General FreshBasket notifications"],
+      ];
+      for (const [id, name, description] of channels) {
+        try {
+          await PushNotifications.createChannel({
+            id, name, description, importance: 4, visibility: 1,
+            sound: "default", vibration: true,
+          });
+        } catch (channelError) {
+          console.warn("[FreshBasket Push] channel setup failed:", id, channelError);
+        }
+      }
+    }
+
     const permission = await PushNotifications.checkPermissions();
     console.log("[FreshBasket Push] permission:", permission);
 
@@ -2110,6 +2309,15 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
 
             window.dispatchEvent(
               new CustomEvent("freshbasket:native-push-voice", {
+                detail: voiceNotification,
+              })
+            );
+
+            // The backend has already persisted this notification. Tell the
+            // active dashboard to refresh its bell immediately instead of
+            // waiting for the 12-second polling interval.
+            window.dispatchEvent(
+              new CustomEvent("freshbasket:native-push-received", {
                 detail: voiceNotification,
               })
             );
@@ -2345,6 +2553,12 @@ function useStore() {
     if (token && loginHistoryId) axios.post(API + "/auth/logout", { loginHistoryId }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     setUser(null);
     clearAuthSession(token);
+    try {
+      localStorage.removeItem("fb-cart");
+      localStorage.removeItem("fb-wishlist");
+      localStorage.removeItem("fb-store-admin-id");
+      sessionStorage.removeItem("fb-last-safe-route");
+    } catch {}
   };
 
   return {
@@ -2864,6 +3078,9 @@ function Layout({
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState<any>(null);
+  const [profileAvatarBroken, setProfileAvatarBroken] = useState(false);
+
+  useEffect(() => { setProfileAvatarBroken(false); }, [store.user?.id, store.user?.profilePhoto]);
   const [showLocationSelector, setShowLocationSelector] = useState(false);
   const { voiceAlertsEnabled, setVoiceAlertsEnabled, flushVoiceQueue } = useRoleNotificationVoiceAlerts(store, notifications);
   useEffect(() => {
@@ -2916,8 +3133,13 @@ function Layout({
     loadNotifications();
     if (!store.user) return;
     const timer = window.setInterval(loadNotifications, 12000);
-    return () => window.clearInterval(timer);
-  }, [store.user]);
+    const onNativePush = () => { void loadNotifications(); };
+    window.addEventListener("freshbasket:native-push-received", onNativePush);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("freshbasket:native-push-received", onNativePush);
+    };
+  }, [store.user?.id]);
 
   useEffect(() => { void flushVoiceQueue(); }, [voiceAlertsEnabled]);
 
@@ -2951,6 +3173,14 @@ function Layout({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [showNotifications, showLocationSelector]);
+
+  useEffect(() => {
+    if (!store.user) return;
+    const path = String(location.pathname || "");
+    const unsafe = path === "/login" || path === "/order-success" || path.startsWith("/verify/") || path.startsWith("/payment/") || path.includes("payment-callback");
+    if (unsafe || path === "/") return;
+    try { sessionStorage.setItem("fb-last-safe-route", JSON.stringify({ path, search:location.search||"", hash:location.hash||"", role:String(store.user.role||""), savedAt:Date.now() })); } catch {}
+  }, [store.user?.id, store.user?.role, location.pathname, location.search, location.hash]);
 
   // Never carry an open notification popover across route changes.
   useEffect(() => {
@@ -3125,9 +3355,15 @@ function Layout({
                 ? "/finance"
                 : "/account"
             }
-            className="p-2 text-slate-600"
+            className="w-11 h-11 min-w-11 rounded-full p-1.5 text-slate-600 grid place-items-center hover:bg-slate-100 active:scale-95 transition-transform"
+            aria-label="Profile"
+            title="Profile"
           >
-            <User />
+            {store.user?.profilePhoto && !profileAvatarBroken ? (
+              <img src={String(store.user.profilePhoto)} alt="Profile" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover block border border-slate-200 bg-slate-100" onError={() => setProfileAvatarBroken(true)} />
+            ) : (
+              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full grid place-items-center bg-slate-100 text-slate-600"><User size={20} /></span>
+            )}
           </Link>
 
           {store.user?.role === "customer" && (
@@ -4457,6 +4693,7 @@ function Cart({ store }: { store: ReturnType<typeof useStore> }) {
 
 function Login({ store }: { store: ReturnType<typeof useStore> }) {
   const nav = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("customer@grocery.com");
   const [password, setPassword] = useState("Customer@123");
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -4465,7 +4702,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
   const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => new URLSearchParams(location.search).get("session") === "expired" ? "Your session has expired. Please log in again." : "");
   const [loginLanguage, setLoginLanguage] = useState<FBLanguage>(() => { try { const x=localStorage.getItem("fb-login-language"); return x === "hi" || x === "hinglish" ? x : "en"; } catch { return "en"; } });
   const [clockNow, setClockNow] = useState(new Date());
   const [notices, setNotices] = useState<any[]>([]);
@@ -4560,7 +4797,7 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
             <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':'Already have an account? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
             {notices.length>0 && <div className="mt-6 border-t pt-5"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">{L("FreshBasket Updates")}</p>{(() => { const n=notices[noticeIndex%notices.length]; return <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3 mt-2">{n.image||n.imageUrl?<img src={n.image||n.imageUrl} alt={n.title} className="w-full h-24 object-cover rounded-xl mb-2"/>:null}<b className="text-sm">{n.title}</b><p className="text-xs text-slate-600 mt-1">{n.shortDescription||n.description}</p>{n.ctaLink&&<a href={n.ctaLink} className="inline-block mt-2 text-xs font-bold text-emerald-700">{n.ctaText||"Learn more"} →</a>}</div> })()} {notices.length>1&&<div className="flex justify-center gap-1.5 mt-3">{notices.map((_,i)=><button type="button" key={i} aria-label={`Show notice ${i+1}`} onClick={()=>setNoticeIndex(i)} className={`w-2 h-2 rounded-full ${i===noticeIndex?"bg-emerald-600":"bg-slate-300"}`}/>)}</div>}</div>}
             {(publicContact.phone||publicContact.email||publicContact.storeOnboardingContact||publicContact.deliveryHiringContact) && <div className="mt-5 pt-4 border-t text-xs text-slate-500"><b className="text-slate-700">{L("Need help?")}</b>{publicContact.phone&&<span className="ml-2">{publicContact.phone}</span>}{publicContact.email&&<span className="ml-2">{publicContact.email}</span>}</div>}
-            {mode === "login" && loginRole === "customer" && !store.user && <div className="mt-5 pt-5 border-t"><p className="text-sm font-black text-slate-800">Want to grow with FreshBasket?</p><div className="grid sm:grid-cols-2 gap-2 mt-3"><Link to="/apply/store" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 text-white px-3 py-3 text-sm font-bold"><Store size={16}/>Take Your Local Store Online</Link><Link to="/apply/delivery" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-sm font-bold"><Truck size={16}/>Become a Delivery Partner</Link></div></div>}
+            {mode === "login" && loginRole === "customer" && !store.user && <div className="mt-5 pt-5 border-t"><p className="text-sm font-black text-slate-800">Want to grow with FreshBasket?</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><Link to="/apply/store" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 text-white px-3 py-3 text-sm font-bold"><Store size={16}/>Take Your Local Store Online</Link><Link to="/apply/delivery" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-sm font-bold"><Truck size={16}/>Become a Delivery Partner</Link></div></div>}
           </div>
         </section>
       </div>
@@ -5586,7 +5823,7 @@ function ProfilePage({
       setProfile({ name: u.name || "", phone: u.phone || "", email: u.email || "", profilePhoto: u.profilePhoto || "" });
       setAccountEmail(u.email || "");
       setAddresses(Array.isArray(ar.data.data) ? ar.data.data : []);
-      store.setUser({ ...store.user, name: u.name || store.user.name, phone: u.phone || store.user.phone, email: u.email || store.user.email });
+      store.setUser({ ...store.user, name: u.name || store.user.name, phone: u.phone || store.user.phone, email: u.email || store.user.email, profilePhoto: u.profilePhoto || store.user.profilePhoto || "" });
     } catch (e: any) {
       setError(e?.response?.data?.message || "Unable to load profile.");
     } finally { setLoading(false); }
@@ -12158,23 +12395,29 @@ function CategoryAdmin() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+    <div className="space-y-5 fb-category-admin">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 fb-category-header">
         <div>
           <p className="text-emerald-600 text-sm font-bold">STORE CATALOG</p>
           <h2 className="text-2xl font-bold">Categories</h2>
           <p className="text-slate-500 text-sm mt-1">Manage the categories shown in the customer store.</p>
         </div>
-        <div className="bg-white border rounded-2xl p-4 w-full lg:w-[520px]">
-          <div className="grid sm:grid-cols-2 gap-2">
+        <div className="bg-white border rounded-2xl p-4 w-full lg:w-[520px] fb-category-form">
+          <div className="grid sm:grid-cols-2 gap-2 fb-category-form-fields">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name *" className="border rounded-xl p-3" />
             <input value={image} onChange={(e) => setImage(e.target.value)} placeholder="Image URL (optional)" className="border rounded-xl p-3" />
-          </div>          
-          <div className="grid sm:grid-cols-2 gap-2 mt-3">
-            <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={defaultRefundAvailable} onChange={e=>setDefaultRefundAvailable(e.target.checked)}/> Default refund available</label>
-            <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={defaultReplacementAvailable} onChange={e=>setDefaultReplacementAvailable(e.target.checked)}/> Default replacement available</label>
           </div>
-          <div className="flex justify-end gap-2 mt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 fb-category-options">
+            <label className="fb-category-option text-sm font-semibold leading-5">
+              <input type="checkbox" checked={defaultRefundAvailable} onChange={e=>setDefaultRefundAvailable(e.target.checked)} />
+              <span>Default refund available</span>
+            </label>
+            <label className="fb-category-option text-sm font-semibold leading-5">
+              <input type="checkbox" checked={defaultReplacementAvailable} onChange={e=>setDefaultReplacementAvailable(e.target.checked)} />
+              <span>Default replacement available</span>
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 mt-3 fb-category-form-actions">
             {editing && <button onClick={reset} className="border px-4 py-2 rounded-xl">Cancel</button>}
             <button disabled={saving} onClick={save} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold disabled:opacity-50">
               {saving ? "Saving..." : editing ? "Update category" : "Add category"}
@@ -12183,27 +12426,45 @@ function CategoryAdmin() {
         </div>
       </div>
 
-      <div className="bg-white border rounded-3xl overflow-hidden">
-        <div className="px-5 py-4 border-b flex justify-between">
+      <div className="bg-white border rounded-3xl overflow-hidden fb-category-list">
+        <div className="px-5 py-4 border-b flex items-center justify-between gap-3">
           <b>{categories.length} categories</b>
-          <button onClick={load} className="text-sm text-emerald-700 font-semibold">Refresh</button>
+          <button onClick={load} className="text-sm text-emerald-700 font-semibold min-h-[44px] px-2">Refresh</button>
         </div>
         {loading ? <div className="p-10 text-center text-slate-500">Loading categories...</div> : categories.length ? (
           <div className="divide-y">
             {categories.map((c) => (
-              <div key={c._id} className="p-4 flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-50 overflow-hidden shrink-0">
-                  {c.image ? <img src={c.image} alt={c.name} loading="lazy" className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-emerald-600 font-bold">{c.name.slice(0, 1).toUpperCase()}</div>}
+              <div key={c._id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 fb-category-list-item">
+                <div className="flex items-start gap-3 min-w-0 flex-1 fb-category-list-main">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 overflow-hidden shrink-0 fb-category-image">
+                    {c.image ? (
+                      <img src={c.image} alt={c.name} loading="lazy" className="w-full h-full object-cover fb-category-image" />
+                    ) : (
+                      <div className="w-full h-full grid place-items-center text-emerald-600 font-bold">{c.name.slice(0, 1).toUpperCase()}</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 fb-category-list-copy">
+                    <b className="block text-base fb-category-name">{c.name}</b>
+                    <p className="text-xs text-slate-400 mt-1 break-words">{c.isActive ? "Visible in store" : "Hidden from store"} · {canEdit(c) ? "Created by you" : "Created by another admin"}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <b>{c.name}</b>
-                  <p className="text-xs text-slate-400 mt-1">{c.isActive ? "Visible in store" : "Hidden from store"} · {canEdit(c) ? "Created by you" : "Created by another admin"}</p>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${c.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{c.isActive ? "Active" : "Inactive"}</span>
-                <div className="flex gap-2">
-                  <button disabled={!canEdit(c)} onClick={() => { if (canEdit(c)) { setEditing(c); setName(c.name || ""); setImage(c.image || ""); setDefaultRefundAvailable(c.defaultRefundAvailable !== false); setDefaultReplacementAvailable(c.defaultReplacementAvailable !== false); } }} className="border px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Edit</button>
-                  <button disabled={!canEdit(c)} onClick={() => toggle(c)} className="border px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed">{c.isActive ? "Disable" : "Enable"}</button>
-                  <button disabled={!canEdit(c)} onClick={() => remove(c)} className="border border-red-200 text-red-600 px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
+
+                <span className={`self-start sm:self-auto px-2.5 py-1 rounded-full text-xs font-bold shrink-0 fb-category-status ${c.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                  {c.isActive ? "Active" : "Inactive"}
+                </span>
+
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto fb-category-actions">
+                  <button disabled={!canEdit(c)} onClick={() => {
+                    if (canEdit(c)) {
+                      setEditing(c);
+                      setName(c.name || "");
+                      setImage(c.image || "");
+                      setDefaultRefundAvailable(c.defaultRefundAvailable !== false);
+                      setDefaultReplacementAvailable(c.defaultReplacementAvailable !== false);
+                    }
+                  }} className="border px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-none min-w-[80px]">Edit</button>
+                  <button disabled={!canEdit(c)} onClick={() => toggle(c)} className="border px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-none min-w-[90px]">{c.isActive ? "Disable" : "Enable"}</button>
+                  <button disabled={!canEdit(c)} onClick={() => remove(c)} className="border border-red-200 text-red-600 px-3 py-2 rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-none min-w-[80px]">Delete</button>
                 </div>
               </div>
             ))}
@@ -12357,7 +12618,7 @@ function BannerAdmin() {
           <label className="text-sm font-semibold">Start date<input type="datetime-local" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
           <label className="text-sm font-semibold">End date<input type="datetime-local" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
           <label className="text-sm font-semibold">Display order<input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} className="mt-2 w-full border rounded-xl px-3 py-2.5" /></label>
-          <label className="flex items-center gap-3 text-sm font-semibold mt-7"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4" /> Active</label>
+          <label className="flex items-center gap-3 text-sm font-semibold min-h-[44px]"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4" /> Active</label>
         </div>
 
         {form.image && <img src={form.image} alt="Banner preview" className="mt-5 w-full h-44 md:h-56 object-cover rounded-2xl border" />}
@@ -15305,6 +15566,25 @@ function getFreshBasketBackFallback(pathname: string, role: string) {
   return getFreshBasketRoleRoot(role);
 }
 
+function SafeAuthenticatedRouteRestorer({ store }: { store: ReturnType<typeof useStore> }) {
+  const nav = useNavigate();
+  const location = useLocation();
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !store.user || location.pathname !== "/") return;
+    let saved: any = null;
+    try { saved = JSON.parse(sessionStorage.getItem("fb-last-safe-route") || "null"); } catch {}
+    const path = String(saved?.path || "");
+    const savedRole = String(saved?.role || "");
+    const currentRole = String(store.user?.role || "");
+    const safePath = path && path !== "/login" && path !== "/order-success" && !path.startsWith("/verify/") && !path.startsWith("/payment/") && !path.includes("payment-callback");
+    if (!safePath || savedRole !== currentRole || path === "/") { restoredRef.current = true; return; }
+    restoredRef.current = true;
+    nav(path + String(saved?.search || "") + String(saved?.hash || ""), { replace: true });
+  }, [store.user?.id, store.user?.role, location.pathname, nav]);
+  return null;
+}
+
 function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
   const nav = useNavigate();
   const location = useLocation();
@@ -15324,38 +15604,24 @@ function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
       window.dispatchEvent(new CustomEvent("fb-global-back", { detail }));
       if (detail.handled) return;
 
-      const historyState = (window.history.state || {}) as any;
-      const historyIndex = Number(historyState?.idx);
-      if (Number.isFinite(historyIndex) && historyIndex > 0) {
-        nav(-1);
-        return;
-      }
-
-      // React Router normally supplies `idx`. If an embedded Android/WebView
-      // state does not expose it, an Admin sidebar page still has a concrete
-      // route (`/admin?tab=...` or an application route). In that no-index
-      // case, return to the Admin root instead of doing nothing. This is only
-      // a fallback; real router history always takes priority above.
-      if (location.pathname === "/admin" && new URLSearchParams(location.search).has("tab")) {
-        nav("/admin", { replace: true });
-        return;
-      }
-
       const role = String(store.user?.role || "");
-      const fallback = getFreshBasketBackFallback(location.pathname, role);
       const root = getFreshBasketRoleRoot(role);
 
-      if (location.pathname !== fallback) {
-        nav(fallback, { replace: true });
+      // At the authenticated Home/Dashboard root, Android Back should exit the
+      // native app. Do this before React Router history handling so an old
+      // WebView history entry cannot trap the user on the same screen.
+      if (location.pathname === root) {
+        try { void CapacitorApp.exitApp(); } catch {}
         return;
       }
 
-      // At the role root there is no valid previous application screen.
-      // Preserve the existing Android exit behavior instead of inventing
-      // another navigation destination.
-      if (location.pathname === root) {
-        return;
-      }
+      const historyState = (window.history.state || {}) as any;
+      const historyIndex = Number(historyState?.idx);
+      if (Number.isFinite(historyIndex) && historyIndex > 0) { nav(-1); return; }
+      if (!Number.isFinite(historyIndex) && window.history.length > 1) { nav(-1); return; }
+
+      const fallback = getFreshBasketBackFallback(location.pathname, role);
+      if (location.pathname !== fallback) { nav(fallback, { replace: true }); return; }
     };
 
     void CapacitorApp.addListener("backButton", handleBack).then((handle) => {
@@ -15381,6 +15647,7 @@ export default function App() {
       <AccessibilityStyles />
       <GlobalPreferences store={store} />
       <LocalizedUI store={store} />
+      <SafeAuthenticatedRouteRestorer store={store} />
       <GlobalBackHandler store={store} />
       <Routes>
       <Route
