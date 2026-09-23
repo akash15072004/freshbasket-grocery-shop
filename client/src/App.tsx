@@ -3523,6 +3523,7 @@ function ProductCard({
 }
 
 function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typeof useStore>; favoriteOnly?: boolean }) {
+  const nav = useNavigate();
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -3560,7 +3561,10 @@ function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typ
       localStorage.setItem("fb-cart", "[]");
     }
     localStorage.setItem("fb-store-admin-id", id);
-    window.location.href = "/?storeAdminId=" + encodeURIComponent(id);
+    // Use React Router navigation instead of a full document reload. This
+    // keeps Vercel SPA deployments on the app shell and lets Home react to
+    // the selected store query immediately.
+    nav("/?storeAdminId=" + encodeURIComponent(id));
   };
 
   if (!store.user || store.user.role !== "customer") {
@@ -3634,6 +3638,7 @@ function StoreDirectory({ store, favoriteOnly = false }: { store: ReturnType<typ
 }
 
 function Home({ store }: { store: ReturnType<typeof useStore> }) {
+  const location = useLocation();
   const [banners, setBanners] = useState<any[]>([]);
   const [publicContact, setPublicContact] = useState<any>({});
   const [selectedStore, setSelectedStore] = useState<any>(null);
@@ -3642,12 +3647,31 @@ function Home({ store }: { store: ReturnType<typeof useStore> }) {
   }, []);
 
   useEffect(() => {
-    const storeAdminId = localStorage.getItem("fb-store-admin-id") || "";
-    if(storeAdminId) axios.get(API+"/stores").then(r=>{const list=Array.isArray(r.data.data)?r.data.data:[];setSelectedStore(list.find((x:any)=>String(x.id)===String(storeAdminId))||null)}).catch(()=>setSelectedStore(null)); else setSelectedStore(null);
-    axios.get(API + "/banners" + (storeAdminId ? "?storeAdminId=" + encodeURIComponent(storeAdminId) : ""))
+    const params = new URLSearchParams(location.search);
+    const requestedStore = params.get("storeAdminId");
+    const storedStore = localStorage.getItem("fb-store-admin-id") || "";
+    const storeAdminId = requestedStore !== null ? requestedStore : storedStore;
+
+    if (requestedStore !== null) {
+      if (requestedStore) localStorage.setItem("fb-store-admin-id", requestedStore);
+      else localStorage.removeItem("fb-store-admin-id");
+    }
+
+    if (storeAdminId) {
+      axios.get(API + "/stores", { headers: adminHeaders() })
+        .then(r => {
+          const list = Array.isArray(r.data.data) ? r.data.data : [];
+          setSelectedStore(list.find((x:any) => String(x.id) === String(storeAdminId)) || null);
+        })
+        .catch(() => setSelectedStore(null));
+    } else {
+      setSelectedStore(null);
+    }
+
+    axios.get(API + "/banners" + (storeAdminId ? "?storeAdminId=" + encodeURIComponent(storeAdminId) : ""), { headers: adminHeaders() })
       .then((r) => setBanners(Array.isArray(r.data.data) ? r.data.data : []))
       .catch(() => setBanners([]));
-  }, []);
+  }, [location.search]);
 
   return (
     <Layout store={store}>
