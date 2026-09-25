@@ -350,6 +350,10 @@ if (orderItemsSchemaPath?.schema?.add) {
   defaultReplacementAvailable: { type: Boolean, default: true },
 });
 (Order as any).schema.add({
+  // Production hardening: client-generated order idempotency keys prevent
+  // browser/Android/network retries from creating a second business order.
+  orderIdempotencyKey: { type: String, default: null, sparse: true, index: true },
+  orderIdempotencyHash: { type: String, default: null },
   // Delivery batching never replaces the original order ID.
   deliveryBatchId: { type: String, default: null, index: true },
   deliveryAssignmentType: { type: String, enum: ["MANUAL", "AUTO", "BATCH"], default: "MANUAL", index: true },
@@ -419,6 +423,10 @@ if (orderItemsSchemaPath?.schema?.add) {
   deliveryRejectionDetails: { type: String, default: "", maxlength: 2000 },
   deliveryAssignmentExpiresAt: { type: Date, default: null },
   deliveryAssignmentHistory: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  // Optimistic transition lock. It is only held during one backend status
+  // mutation and prevents two admins/delivery partners from processing the
+  // same transition concurrently. Legacy orders remain compatible.
+  statusTransitionLock: { type: mongoose.Schema.Types.Mixed, default: null },
 });
 (User as any).schema.add({
   ratingAverage: { type: Number, default: 0, min: 0, max: 5 },
@@ -1034,6 +1042,10 @@ app.post(
 
       if (eventId && String(order.paymentSession?.lastWebhookEventId || "") === eventId) {
         return res.json({ success: true, duplicate: true });
+      }
+      if (event === "payment.captured" && String(order.paymentStatus || "") === "Paid" && String(order.paymentSession?.razorpayPaymentId || "") === razorpayPaymentId) {
+        if (eventId) await Order.collection.updateOne({ _id: order._id }, { $set: { "paymentSession.lastWebhookEventId": eventId } });
+        return res.json({ success: true, duplicate: true, idempotent: true });
       }
 
       const status = event === "payment.captured" ? "Paid" : event === "payment.failed" ? "Failed" : String(paymentEntity?.status || "").toLowerCase() === "captured" ? "Paid" : order.paymentStatus || "";
@@ -4167,6 +4179,21 @@ app.post(
         rewardPoints,
       } = req.body;
 
+      const idempotencyKey = String(req.headers["idempotency-key"] || req.body?.idempotencyKey || "").trim().slice(0, 160);
+      const requestHash = idempotencyKey ? orderIdempotencyHash(req.body) : "";
+      if (idempotencyKey) {
+       const existing:any = await Order.findOne({
+  user: req.user!.id,
+  orderIdempotencyKey: idempotencyKey
+}).lean();
+        if (existing) {
+          if (String(existing.orderIdempotencyHash || "") !== requestHash) {
+            return res.status(409).json({ success:false, code:"IDEMPOTENCY_KEY_REUSED", message:"This request key was already used for a different order." });
+          }
+          return res.status(200).json({ success:true, idempotent:true, message:"Order request already processed", data:existing });
+        }
+      }
+
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           success: false,
@@ -4380,6 +4407,7 @@ app.post(
         deliverySlot,
         deliveryLocation,
         deliveryAssignmentStatus: "UNASSIGNED",
+        ...(idempotencyKey ? { orderIdempotencyKey: idempotencyKey, orderIdempotencyHash: requestHash } : {}),
         sourceType: (orderStoreAdmin && mainAdminId && String(orderStoreAdmin) !== String(mainAdminId)) ? "STORE" : "FRESHBASKET_DIRECT",
         status: "Pending",
       });
@@ -4448,9 +4476,21 @@ app.post(
       // If anything after reservation fails, return only this request's
       // reserved quantities. $inc is safe even if another order changed stock.
       for (const r of reservedStock) {
-        try { await Product.updateOne({ _id: r.productId }, { $inc: { stock: r.quantity } }); } catch (rollbackError) { console.error("STOCK ROLLBACK ERROR:", rollbackError); }
+        try {
+          if (r.variantId) await Product.updateOne({ _id: r.productId, "variants._id": r.variantId }, { $inc: { "variants.$.stock": r.quantity, stock: r.quantity } });
+          else await Product.updateOne({ _id: r.productId }, { $inc: { stock: r.quantity } });
+        } catch (rollbackError) { console.error("STOCK ROLLBACK ERROR:", rollbackError); }
       }
       reservedStock.length = 0;
+      if (idempotencyKey && Number((error as any)?.code) === 11000) {
+        const existing:any = await Order.findOne({
+  user: req.user!.id,
+  orderIdempotencyKey: idempotencyKey
+}).lean();
+        if (existing && String(existing.orderIdempotencyHash||"") === requestHash) {
+          return res.status(200).json({success:true,idempotent:true,message:"Order request already processed",data:existing});
+        }
+      }
       console.error("CREATE ORDER ERROR:", error);
 
       return res.status(500).json({
@@ -6897,17 +6937,13 @@ app.patch("/api/admin/orders/:id/assign",auth,role("admin"),async(req:AuthReques
     }
 
     if(!deliveryPartnerId){
-      const existing=await DeliveryAssignment.findOne({order:order._id,status:"PENDING_ACCEPTANCE"}).sort({createdAt:-1});
-      if(existing){ existing.status="CANCELLED"; await existing.save(); }
-      order.deliveryPartner=null as any;
-      order.deliveryAssignmentStatus="UNASSIGNED";
-      order.deliveryAssignmentExpiresAt=null;
-      order.deliveryPayout=0;
-      order.deliveryPayoutStatus="CANCELLED";
-      order.deliveryAssignmentType=null;
-      order.deliveryBatchId=null;
-      await order.save();
-      return res.json({success:true,message:"Delivery partner unassigned successfully",data:order});
+      const expectedUpdatedAt = order.updatedAt ? new Date(order.updatedAt) : null;
+      const filter:any={_id:order._id,status:{$nin:["Delivered","Cancelled"]}};
+      if(expectedUpdatedAt) filter.updatedAt=expectedUpdatedAt;
+      const unassigned:any=await Order.findOneAndUpdate(filter,{$set:{deliveryPartner:null,deliveryAssignmentStatus:"UNASSIGNED",deliveryAssignmentExpiresAt:null,deliveryPayout:0,deliveryPayoutStatus:"CANCELLED",deliveryAssignmentType:null,deliveryBatchId:null}},{new:true});
+      if(!unassigned)return res.status(409).json({success:false,code:"ASSIGNMENT_CONFLICT",message:"The order changed while unassigning. Refresh and try again."});
+      await DeliveryAssignment.updateMany({order:order._id,status:"PENDING_ACCEPTANCE"},{$set:{status:"CANCELLED"}});
+      return res.json({success:true,message:"Delivery partner unassigned successfully",data:unassigned});
     }
 
     if(!mongoose.Types.ObjectId.isValid(deliveryPartnerId))return res.status(400).json({success:false,message:"Invalid delivery partner"});
@@ -6951,27 +6987,21 @@ app.patch("/api/admin/orders/:id/assign",auth,role("admin"),async(req:AuthReques
       await recordCustomerCareAudit({req,action:"DELIVERY_ASSIGNMENT_CHANGED",targetType:"ORDER",targetId:order._id,order:order._id,metadata:{previousPartnerId,newPartnerId:deliveryPartnerId,previousPayout:existingPayout,newPayout:requestedPayout,reason}});
     }
 
+    const expectedUpdatedAt = order.updatedAt ? new Date(order.updatedAt) : null;
     await DeliveryAssignment.updateMany({order:order._id,status:"PENDING_ACCEPTANCE"},{$set:{status:"CANCELLED"}});
     const expiresAt=new Date(Date.now()+DELIVERY_ASSIGNMENT_TTL_MS);
     const assignment:any=await DeliveryAssignment.create({order:order._id,deliveryPartner:partner._id,assignedBy:req.user!.id,assignedAt:new Date(),status:"PENDING_ACCEPTANCE",expiresAt,storeAdmin:order.storeAdmin||null,assignmentType:"MANUAL",deliveryBatchId:null});
 
-    if(!Array.isArray((order as any).deliveryAssignmentHistory))(order as any).deliveryAssignmentHistory=[];
-    (order as any).deliveryAssignmentHistory.push({
-      assignmentId:assignment._id,deliveryPartner:partner._id,assignedBy:req.user!.id,assignedAt:new Date(),status:"PENDING_ACCEPTANCE",expiresAt
-    });
-    order.deliveryPartner=partner._id as any;
-    order.deliveryAssignmentStatus="PENDING_ACCEPTANCE";
-    order.deliveryAssignmentType="MANUAL";
-    order.deliveryBatchId=null;
-    order.deliveryAssignmentExpiresAt=expiresAt;
-    order.deliveryAcceptedAt=null;
-    order.deliveryRejectedAt=null;
-    order.deliveryRejectionReason="";
-    order.deliveryRejectionDetails="";
-    if(!(order as any).deliveryAssignedAt)(order as any).deliveryAssignedAt=new Date();
-    order.deliveryPayout=requestedPayout;
-    order.deliveryPayoutStatus="PENDING";
-    await order.save();
+    const historyEntry={assignmentId:assignment._id,deliveryPartner:partner._id,assignedBy:req.user!.id,assignedAt:new Date(),status:"PENDING_ACCEPTANCE",expiresAt};
+    const claimFilter:any={_id:order._id,status:{$nin:["Delivered","Cancelled"]}};
+    if(expectedUpdatedAt) claimFilter.updatedAt=expectedUpdatedAt;
+    const claimUpdate:any={$set:{deliveryPartner:partner._id,deliveryAssignmentStatus:"PENDING_ACCEPTANCE",deliveryAssignmentType:"MANUAL",deliveryBatchId:null,deliveryAssignmentExpiresAt:expiresAt,deliveryAcceptedAt:null,deliveryRejectedAt:null,deliveryRejectionReason:"",deliveryRejectionDetails:"",deliveryAssignedAt:(order as any).deliveryAssignedAt||new Date(),deliveryPayout:requestedPayout,deliveryPayoutStatus:"PENDING"},$push:{deliveryAssignmentHistory:historyEntry}};
+    const claimedOrder:any=await Order.findOneAndUpdate(claimFilter,claimUpdate,{new:true});
+    if(!claimedOrder){
+      await DeliveryAssignment.deleteOne({_id:assignment._id,status:"PENDING_ACCEPTANCE"});
+      return res.status(409).json({success:false,code:"ASSIGNMENT_CONFLICT",message:"Order has already been updated or assigned by another process. Refresh and try again."});
+    }
+    Object.assign(order,claimedOrder.toObject ? claimedOrder.toObject() : claimedOrder);
 
     await notifyUser({user:partner._id,title:"New Delivery Assignment",message:`Order #${String(order._id).slice(-8).toUpperCase()} is waiting for your acceptance.`,type:"assignment",order:order._id,relatedEntity:"DELIVERY_ASSIGNMENT",relatedEntityId:assignment._id});
     await notifyUser({user:order.user,title:"Delivery partner assigned",message:`A Delivery Partner has been assigned and is awaiting acceptance for order #${String(order._id).slice(-8).toUpperCase()}.`,type:"delivery_assignment",order:order._id});
@@ -7383,6 +7413,11 @@ app.post("/api/orders/:id/payment/session",auth,roleAny("customer","delivery"),a
       if(existingRazorpayOrder&&existingAmount===amount&&String(existing.currency||"INR")==="INR"&&String(existing.provider||"").toUpperCase()==="RAZORPAY"){
         return res.json({success:true,data:{provider:"RAZORPAY",keyId,orderId:order._id,razorpayOrderId:existingRazorpayOrder,amount,currency:"INR",reference:existing.reference||`RZP-${String(order._id).slice(-10).toUpperCase()}`,expiresAt:existing.expiresAt||null}});
       }
+      const existingQrId=String(existing.qrCodeId||"");
+      const existingQrExpires=existing.expiresAt ? new Date(existing.expiresAt).getTime() : 0;
+      if(existingQrId&&Number(existing.amount||0)===amount&&String(existing.currency||"INR")==="INR"&&String(existing.provider||"").toUpperCase()==="RAZORPAY_QR"&&(!existingQrExpires||existingQrExpires>Date.now())){
+        return res.json({success:true,data:{provider:"RAZORPAY_QR",keyId,orderId:order._id,qrCodeId:existingQrId,qrImageUrl:String(existing.qrImageUrl||""),qrImageContent:String(existing.qrImageContent||""),amount,currency:"INR",reference:existing.reference||`RZP-QR-${String(order._id).slice(-10).toUpperCase()}`,expiresAt:existing.expiresAt||null}});
+      }
       // Prefer a one-time Razorpay UPI QR for desktop/web checkout.
       // The QR is generated server-side with the exact FreshBasket order amount.
       try {
@@ -7514,6 +7549,9 @@ app.post("/api/orders/:id/payment/verify",auth,roleAny("customer","delivery"),as
     const razorpaySignature=String(req.body.razorpay_signature||"").trim();
     const storedOrderId=String(order.paymentSession?.razorpayOrderId||"");
     if(!razorpayPaymentId||!razorpayOrderId||!razorpaySignature||!storedOrderId||storedOrderId!==razorpayOrderId)return res.status(400).json({success:false,message:"Invalid Razorpay payment details"});
+    if(String(order.paymentStatus||"") === "Paid" && String(order.paymentSession?.razorpayPaymentId||"") === razorpayPaymentId){
+      return res.json({success:true,idempotent:true,message:"Payment was already verified",data:{orderId:order._id,paymentStatus:"Paid",paymentId:razorpayPaymentId}});
+    }
     const secret=String(process.env.RAZORPAY_KEY_SECRET||process.env.PAYMENT_PROVIDER_KEY_SECRET||"").trim();
     if(!secret)return res.status(503).json({success:false,message:"Razorpay server secret is not configured"});
     const expected=crypto.createHmac("sha256",secret).update(`${storedOrderId}|${razorpayPaymentId}`).digest("hex");
@@ -7529,7 +7567,18 @@ app.post("/api/orders/:id/payment/verify",auth,roleAny("customer","delivery"),as
       return res.status(202).json({success:false,pending:true,message:`Payment is ${String(payment.status||"pending")}. We will update the order when Razorpay confirms capture.`});
     }
     const now=new Date();
-    await Order.collection.updateOne({_id:order._id},{$set:{paymentStatus:"Paid",paymentMode:String(payment.method||"RAZORPAY").toUpperCase(),paymentPaidAt:now,"paymentSession.razorpayPaymentId":razorpayPaymentId,"paymentSession.razorpaySignature":razorpaySignature,"paymentSession.provider":"RAZORPAY","paymentSession.providerStatus":"captured","paymentSession.verifiedAt":now,"paymentSession.verifiedBy":String(req.user!.id)}});
+    const claimedPayment:any = await Order.findOneAndUpdate(
+      { _id: order._id, paymentStatus: { $ne: "Paid" } },
+      { $set:{paymentStatus:"Paid",paymentMode:String(payment.method||"RAZORPAY").toUpperCase(),paymentPaidAt:now,"paymentSession.razorpayPaymentId":razorpayPaymentId,"paymentSession.razorpaySignature":razorpaySignature,"paymentSession.provider":"RAZORPAY","paymentSession.providerStatus":"captured","paymentSession.verifiedAt":now,"paymentSession.verifiedBy":String(req.user!.id)} },
+      { new:true }
+    );
+    if(!claimedPayment){
+      const latest:any=await Order.findById(order._id).select("paymentStatus paymentSession.razorpayPaymentId").lean();
+      if(String(latest?.paymentStatus||"")==="Paid" && String(latest?.paymentSession?.razorpayPaymentId||"")===razorpayPaymentId){
+        return res.json({success:true,idempotent:true,message:"Payment was already verified",data:{orderId:order._id,paymentStatus:"Paid",paymentId:razorpayPaymentId}});
+      }
+      return res.status(409).json({success:false,message:"Payment state changed while verification was processing. Please refresh the order."});
+    }
     await createFinancialTransaction({type:"ORDER_PAYMENT",referenceId:`RAZORPAY_PAYMENT:${razorpayPaymentId}`,order:order._id,customer:order.user||null,storeAdmin:order.storeAdmin||null,amount:Number(payment.amount||0)/100,direction:"INFLOW",paymentMethod:String(payment.method||"RAZORPAY").toUpperCase(),status:"COMPLETED",completedAt:now,paymentReference:razorpayPaymentId,metadata:{provider:"RAZORPAY",razorpayOrderId:storedOrderId,source:"checkout_verify"}});
     await notifyUser({user:order.user,title:"Payment successful",message:`Payment for order #${String(order._id).slice(-8).toUpperCase()} was received successfully.`,type:"payment",order:order._id});
     return res.json({success:true,message:"Payment verified successfully",data:{orderId:order._id,paymentStatus:"Paid",paymentId:razorpayPaymentId}});
@@ -8836,6 +8885,33 @@ const createFinancialTransaction=async(args:any)=>{
   if(existing)return existing;
   return await FinancialTransaction.create({transactionId:makeFinancialId("TXN"),...args,referenceId:String(args.referenceId),createdAt:new Date()});
 };
+
+const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
+  Pending: ["Confirmed", "Cancelled"],
+  Confirmed: ["Processing", "Cancelled"],
+  Processing: ["Packed", "Cancelled"],
+  Packed: ["Out for Delivery", "Cancelled"],
+  "Out for Delivery": ["Delivered", "Cancelled"],
+  Delivered: [],
+  Cancelled: [],
+};
+
+const canTransitionOrderStatus = (current: string, next: string) =>
+  current === next || (ORDER_STATUS_TRANSITIONS[current] || []).includes(next);
+
+const orderIdempotencyHash = (payload: any) => crypto
+  .createHash("sha256")
+  .update(JSON.stringify({
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    address: payload?.address || null,
+    paymentMethod: payload?.paymentMethod || "",
+    deliverySlot: payload?.deliverySlot || "",
+    couponCode: payload?.couponCode || "",
+    rewardPoints: payload?.rewardPoints || 0,
+    storeAdminId: payload?.storeAdminId || "",
+  }))
+  .digest("hex");
+
 
 // Finalize an order's immutable store-finance snapshot exactly once. The rate is
 // read from the existing Finance Settings collection; the default is 0%, so the
@@ -10355,7 +10431,11 @@ app.post("/api/orders/:id/delivery-chat/messages", auth, roleAny("customer", "de
       if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(attachment)) return res.status(400).json({success:false,message:"Delivery chat photo must be a JPEG, PNG or WebP image."});
       const base64Payload = attachment.split(",",2)[1] || "";
       const decodedBytes = Math.floor((base64Payload.replace(/\s/g, "").length * 3) / 4) - (base64Payload.endsWith("==") ? 2 : base64Payload.endsWith("=") ? 1 : 0);
-      if (decodedBytes <= 0 || decodedBytes > 700 * 1024) return res.status(400).json({success:false,message:"Delivery chat photo must be 700 KB or smaller."});
+     if (decodedBytes <= 0 || decodedBytes > 1024 * 1024)
+  return res.status(400).json({
+    success: false,
+    message: "Delivery chat photo must be 1 MB or smaller."
+  });
     }
     const messageType = hasAttachment ? "PHOTO" : requestedType === "QUICK_REPLY" ? "QUICK_REPLY" : "TEXT";
     const clientMessageId = String(req.body?.clientMessageId || "").trim().slice(0,120);
@@ -10564,7 +10644,21 @@ app.patch(
         });
       }
 
-      const previousStatus = order.status;
+      const previousStatus = String(order.status || "");
+      if (previousStatus === nextStatus) {
+        return res.json({ success:true, idempotent:true, message:"Order is already in this status", data:order });
+      }
+      if (!canTransitionOrderStatus(previousStatus, nextStatus)) {
+        return res.status(409).json({ success:false, code:"INVALID_ORDER_TRANSITION", message:`Order cannot move from ${previousStatus} to ${nextStatus}.` });
+      }
+      const transitionToken = crypto.randomBytes(16).toString("hex");
+      const transitionClaim = await Order.collection.updateOne(
+        { _id: order._id, status: previousStatus, $or:[{statusTransitionLock:null},{statusTransitionLock:{$exists:false}}] },
+        { $set:{ statusTransitionLock:{token:transitionToken,from:previousStatus,to:nextStatus,actor:String(req.user!.id),at:new Date()} } }
+      );
+      if(Number(transitionClaim?.modifiedCount||0)!==1){
+        return res.status(409).json({ success:false, code:"ORDER_UPDATE_CONFLICT", message:"Someone else updated this order. Please refresh and try again." });
+      }
 
       if (nextStatus === "Out for Delivery" && (!order.deliveryPartner || ((order as any).deliveryAssignmentStatus && String((order as any).deliveryAssignmentStatus) !== "ACCEPTED"))) {
         return res.status(409).json({success:false,message:"A Delivery Partner must accept the assignment before the order can go Out for Delivery."});
@@ -10614,26 +10708,21 @@ app.patch(
          Restore stock if order is cancelled
       --------------------------------------------- */
 
-      if (
-        previousStatus !== "Cancelled" &&
-        nextStatus === "Cancelled"
-      ) {
+      if (nextStatus === "Cancelled") {
         for (const item of order.items) {
-          const product = await Product.findById(item.product);
+          const quantity = Math.max(0, Math.floor(Number(item.quantity || 0)));
+          if (!quantity) continue;
+          const variantId = String((item as any).variantId || "").trim();
+          const product:any = await Product.findById(item.product).select("stock variants").lean();
           if (!product) continue;
           const previousStock = Number(product.stock || 0);
-          const quantity = Number(item.quantity);
-          product.stock = previousStock + quantity;
-          await product.save();
-          await recordStockHistory({
-            product: product._id,
-            change: quantity,
-            previousStock,
-            newStock: previousStock + quantity,
-            reason: "Order cancelled",
-            order: order._id,
-            adjustedBy: (req as any).user?.id,
-          });
+          const update:any = variantId
+            ? { $inc:{ "variants.$.stock":quantity, stock:quantity } }
+            : { $inc:{ stock:quantity } };
+          const filter:any = variantId ? { _id:item.product, "variants._id":variantId } : { _id:item.product };
+          const changed = await Product.updateOne(filter, update);
+          if(Number(changed.modifiedCount||0)!==1) throw new Error(`Unable to restore stock for ${item.name || "product"}`);
+          await recordStockHistory({product:product._id,change:quantity,previousStock,newStock:previousStock+quantity,reason:"Order cancelled",order:order._id,adjustedBy:(req as any).user?.id,variantId:variantId||undefined});
         }
       }
 
@@ -10748,6 +10837,7 @@ app.patch(
         });
       }
 
+      (order as any).statusTransitionLock = null;
       await order.save();
 
       // Auto-assignment is additive: the order remains Packed if no eligible
@@ -10819,7 +10909,11 @@ app.patch(
       });
     } catch (error) {
       console.error("ORDER STATUS ERROR:", error);
-
+      try {
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+          await Order.collection.updateOne({ _id:req.params.id, "statusTransitionLock.actor":String(req.user!.id) }, { $set:{ statusTransitionLock:null } });
+        }
+      } catch {}
       return res.status(500).json({
         success: false,
         message: "Unable to update order status",
@@ -11880,6 +11974,17 @@ app.get(
   }
 );
 
+const ensureProductionIndexes = async () => {
+  try {
+    await Order.collection.createIndex({ orderIdempotencyKey: 1 }, { unique: true, sparse: true, name: "order_idempotency_key_unique" });
+    await Order.collection.createIndex({ status: 1, createdAt: -1 }, { name: "order_status_createdAt" });
+    await Order.collection.createIndex({ deliveryPartner: 1, deliveryAssignmentStatus: 1, status: 1 }, { name: "order_delivery_assignment_state" });
+    await FinancialTransaction.collection.createIndex({ type: 1, referenceId: 1 }, { unique: true, name: "financial_type_reference_unique" });
+  } catch (error) {
+    console.error("PRODUCTION INDEX SETUP ERROR:", error);
+  }
+};
+
 /* =========================================================
    SERVER START
 ========================================================= */
@@ -11903,6 +12008,7 @@ mongoose
     console.log(
       "MongoDB connected successfully"
     );
+    await ensureProductionIndexes();
     void checkDeliverySlaBreaches();
     setInterval(() => { void checkDeliverySlaBreaches(); }, 60000);
     try { await backfillUserIdentifiers(); } catch (error) { console.error("IDENTIFIER BACKFILL ERROR:", error); }
