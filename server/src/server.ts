@@ -4169,6 +4169,14 @@ app.post(
   auth,
   async (req: AuthRequest, res) => {
     const reservedStock: Array<{ productId: mongoose.Types.ObjectId; quantity: number; variantId?: string }> = [];
+    const idempotencyKey = String(
+      req.headers["idempotency-key"] ||
+      req.body?.idempotencyKey ||
+      ""
+    ).trim().slice(0, 160);
+    const requestHash = idempotencyKey
+      ? orderIdempotencyHash(req.body)
+      : "";
     try {
       const {
         items,
@@ -4179,8 +4187,7 @@ app.post(
         rewardPoints,
       } = req.body;
 
-      const idempotencyKey = String(req.headers["idempotency-key"] || req.body?.idempotencyKey || "").trim().slice(0, 160);
-      const requestHash = idempotencyKey ? orderIdempotencyHash(req.body) : "";
+      
       if (idempotencyKey) {
        const existing:any = await Order.findOne({
   user: req.user!.id,
@@ -10911,7 +10918,7 @@ app.patch(
       console.error("ORDER STATUS ERROR:", error);
       try {
         if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-          await Order.collection.updateOne({ _id:req.params.id, "statusTransitionLock.actor":String(req.user!.id) }, { $set:{ statusTransitionLock:null } });
+          await Order.collection.updateOne({ _id:new mongoose.Types.ObjectId(req.params.id), "statusTransitionLock.actor":String(req.user!.id) }, { $set:{ statusTransitionLock:null } });
         }
       } catch {}
       return res.status(500).json({
