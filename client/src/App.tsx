@@ -47,7 +47,6 @@ import {
   ArrowRight,
   ShieldCheck,
   Truck,
-  Leaf,
   BarChart3,
   Boxes,
   Users,
@@ -94,11 +93,11 @@ const IS_NATIVE_APP = Capacitor.isNativePlatform();
 const IS_ANDROID_APP = Capacitor.getPlatform() === "android";
 
 const API_BASE = IS_NATIVE_APP
-  ? "https://freshbasket-grocery-shop.onrender.com"
+  ? "https://DUKAANGRID-grocery-shop.onrender.com"
   : import.meta.env.VITE_API_URL ||
     (window.location.hostname === "localhost"
       ? "http://localhost:5000"
-      : "https://freshbasket-grocery-shop.onrender.com");
+      : "https://DUKAANGRID-grocery-shop.onrender.com");
 
 const API = `${API_BASE}/api`;
 
@@ -290,8 +289,8 @@ const adminHeaders = () => {
 
 // POINT 43 — additive offline-safe Delivery Partner queue.
 type DeliveryOfflineAction={id:string;key:string;method:"post"|"patch"|"put";url:string;data?:any;createdAt:number;attempts:number};
-const DELIVERY_OFFLINE_QUEUE_KEY="freshbasket_delivery_offline_queue_v1";
-const DELIVERY_OFFLINE_ORDERS_KEY="freshbasket_delivery_offline_orders_v1";
+const DELIVERY_OFFLINE_QUEUE_KEY="DUKAANGRID_delivery_offline_queue_v1";
+const DELIVERY_OFFLINE_ORDERS_KEY="DUKAANGRID_delivery_offline_orders_v1";
 const deliveryOfflineRead=():DeliveryOfflineAction[]=>{try{const x=JSON.parse(localStorage.getItem(DELIVERY_OFFLINE_QUEUE_KEY)||"[]");return Array.isArray(x)?x:[]}catch{return[]}};
 const deliveryOfflineWrite=(q:DeliveryOfflineAction[])=>{try{localStorage.setItem(DELIVERY_OFFLINE_QUEUE_KEY,JSON.stringify(q))}catch{}};
 const deliveryOfflineIsNetworkError=(e:any)=>!e?.response&&(!navigator.onLine||/network|timeout|failed|offline/i.test(String(e?.message||"")));
@@ -399,16 +398,16 @@ const FB_TRANSLATIONS: Record<string, { hi: string; hinglish: string }> = {
   "Shop now": {hi:"अभी खरीदें",hinglish:"Abhi shop karein"}, "Fresh produce": {hi:"ताज़ी उपज",hinglish:"Fresh produce"},
   "All Products": {hi:"सभी उत्पाद",hinglish:"Saare products"}, "Fresh Produce": {hi:"ताज़ी उपज",hinglish:"Fresh produce"}, "Daily Essentials": {hi:"रोज़मर्रा की ज़रूरतें",hinglish:"Daily essentials"},
   "Help": {hi:"मदद",hinglish:"Help"}, "Delivery Information": {hi:"डिलीवरी जानकारी",hinglish:"Delivery information"}, "Returns & Refunds": {hi:"रिटर्न और रिफंड",hinglish:"Returns aur refunds"}, "Contact Support": {hi:"सपोर्ट से संपर्क करें",hinglish:"Support se contact karein"},
-  "Why FreshBasket?": {hi:"FreshBasket क्यों?",hinglish:"FreshBasket kyun?"}, "Secure payments": {hi:"सुरक्षित भुगतान",hinglish:"Secure payments"},
+  "Why DUKAANGRID?": {hi:"DUKAANGRID क्यों?",hinglish:"DUKAANGRID kyun?"}, "Secure payments": {hi:"सुरक्षित भुगतान",hinglish:"Secure payments"},
   "Add": {hi:"जोड़ें",hinglish:"Add karein"}, "Unavailable": {hi:"उपलब्ध नहीं",hinglish:"Available nahi"}, "Saved": {hi:"सहेजा गया",hinglish:"Saved"}, "View cart": {hi:"कार्ट देखें",hinglish:"Cart dekhein"},
   "Your daily groceries.": {hi:"आपका रोज़मर्रा का सामान।",hinglish:"Aapka daily grocery samaan."}, "Fresh & simple.": {hi:"ताज़ा और आसान।",hinglish:"Fresh aur simple."},
   "Everything your kitchen needs, delivered from your local store with care.": {hi:"आपकी रसोई की हर ज़रूरत, आपके स्थानीय स्टोर से सावधानी के साथ डिलीवर।",hinglish:"Aapki kitchen ki har zaroorat, local store se care ke saath delivered."},
   "Your Local Market, Right at Your Doorstep": {hi:"आपका स्थानीय बाज़ार, आपके दरवाज़े तक",hinglish:"Aapka local market, seedha aapke doorstep par"},
-  "FreshBasket helps local stores sell online while making everyday shopping easier for nearby customers.": {hi:"FreshBasket स्थानीय स्टोर को ऑनलाइन बेचने में मदद करता है और आसपास के ग्राहकों की रोज़मर्रा की खरीदारी आसान बनाता है।",hinglish:"FreshBasket local stores ko online sell karne mein help karta hai aur nearby customers ki shopping easy banata hai."},
-  "How FreshBasket Works": {hi:"FreshBasket कैसे काम करता है",hinglish:"FreshBasket kaise kaam karta hai"}, "Choose your location": {hi:"अपना स्थान चुनें",hinglish:"Apni location choose karein"}, "Choose a local store": {hi:"स्थानीय स्टोर चुनें",hinglish:"Local store choose karein"}, "Browse products": {hi:"उत्पाद देखें",hinglish:"Products browse karein"}, "Add products to cart": {hi:"उत्पाद कार्ट में जोड़ें",hinglish:"Products cart mein add karein"}, "Confirm address": {hi:"पता पक्का करें",hinglish:"Address confirm karein"}, "Place order": {hi:"ऑर्डर करें",hinglish:"Order place karein"}, "Track delivery": {hi:"डिलीवरी ट्रैक करें",hinglish:"Delivery track karein"}, "Receive your order": {hi:"अपना ऑर्डर प्राप्त करें",hinglish:"Apna order receive karein"}, "Rate your experience": {hi:"अपने अनुभव को रेट करें",hinglish:"Apna experience rate karein"},
+  "DUKAANGRID helps local stores sell online while making everyday shopping easier for nearby customers.": {hi:"DUKAANGRID स्थानीय स्टोर को ऑनलाइन बेचने में मदद करता है और आसपास के ग्राहकों की रोज़मर्रा की खरीदारी आसान बनाता है।",hinglish:"DUKAANGRID local stores ko online sell karne mein help karta hai aur nearby customers ki shopping easy banata hai."},
+  "How DUKAANGRID Works": {hi:"DUKAANGRID कैसे काम करता है",hinglish:"DUKAANGRID kaise kaam karta hai"}, "Choose your location": {hi:"अपना स्थान चुनें",hinglish:"Apni location choose karein"}, "Choose a local store": {hi:"स्थानीय स्टोर चुनें",hinglish:"Local store choose karein"}, "Browse products": {hi:"उत्पाद देखें",hinglish:"Products browse karein"}, "Add products to cart": {hi:"उत्पाद कार्ट में जोड़ें",hinglish:"Products cart mein add karein"}, "Confirm address": {hi:"पता पक्का करें",hinglish:"Address confirm karein"}, "Place order": {hi:"ऑर्डर करें",hinglish:"Order place karein"}, "Track delivery": {hi:"डिलीवरी ट्रैक करें",hinglish:"Delivery track karein"}, "Receive your order": {hi:"अपना ऑर्डर प्राप्त करें",hinglish:"Apna order receive karein"}, "Rate your experience": {hi:"अपने अनुभव को रेट करें",hinglish:"Apna experience rate karein"},
   "Your Local Market, Online": {hi:"आपका स्थानीय बाज़ार, ऑनलाइन",hinglish:"Aapka local market, online"}, "Own a Store?": {hi:"क्या आपका स्टोर है?",hinglish:"Apna store hai?"}, "Contact Us": {hi:"संपर्क करें",hinglish:"Contact karein"}, "Become a Delivery Partner": {hi:"डिलीवरी पार्टनर बनें",hinglish:"Delivery Partner banein"},
   "Shop from nearby stores": {hi:"पास के स्टोर से खरीदारी करें",hinglish:"Nearby stores se shop karein"}, "Support local businesses": {hi:"स्थानीय व्यवसायों का समर्थन करें",hinglish:"Local businesses ko support karein"}, "Easy order tracking": {hi:"आसान ऑर्डर ट्रैकिंग",hinglish:"Easy order tracking"}, "Simple refunds and replacements": {hi:"आसान रिफंड और रिप्लेसमेंट",hinglish:"Simple refunds aur replacements"},
-  "Local marketplace": {hi:"स्थानीय मार्केटप्लेस",hinglish:"Local marketplace"}, "LOCAL MARKETPLACE": {hi:"स्थानीय मार्केटप्लेस",hinglish:"LOCAL MARKETPLACE"}, "FreshBasket Updates": {hi:"FreshBasket अपडेट्स",hinglish:"FreshBasket updates"}, "Need help?": {hi:"मदद चाहिए?",hinglish:"Help chahiye?"}, "Secure Staff Access": {hi:"सुरक्षित स्टाफ एक्सेस",hinglish:"Secure staff access"}, "Welcome back": {hi:"वापसी पर स्वागत है",hinglish:"Welcome back"}, "Create your account": {hi:"अपना अकाउंट बनाएँ",hinglish:"Apna account banayein"}, "Login as": {hi:"इस रूप में लॉगिन करें",hinglish:"Login as"}, "Customer": {hi:"ग्राहक",hinglish:"Customer"}, "Delivery Partner": {hi:"डिलीवरी पार्टनर",hinglish:"Delivery Partner"}, "Sign in": {hi:"साइन इन",hinglish:"Sign in"}, "New here?": {hi:"नए हैं?",hinglish:"Yahan naye hain?"}, "Already have an account?": {hi:"पहले से अकाउंट है?",hinglish:"Account pehle se hai?"},
+  "Local marketplace": {hi:"स्थानीय मार्केटप्लेस",hinglish:"Local marketplace"}, "LOCAL MARKETPLACE": {hi:"स्थानीय मार्केटप्लेस",hinglish:"LOCAL MARKETPLACE"}, "DUKAANGRID Updates": {hi:"DUKAANGRID अपडेट्स",hinglish:"DUKAANGRID updates"}, "Need help?": {hi:"मदद चाहिए?",hinglish:"Help chahiye?"}, "Secure Staff Access": {hi:"सुरक्षित स्टाफ एक्सेस",hinglish:"Secure staff access"}, "Welcome back": {hi:"वापसी पर स्वागत है",hinglish:"Welcome back"}, "Create your account": {hi:"अपना अकाउंट बनाएँ",hinglish:"Apna account banayein"}, "Login as": {hi:"इस रूप में लॉगिन करें",hinglish:"Login as"}, "Customer": {hi:"ग्राहक",hinglish:"Customer"}, "Delivery Partner": {hi:"डिलीवरी पार्टनर",hinglish:"Delivery Partner"}, "Sign in": {hi:"साइन इन",hinglish:"Sign in"}, "New here?": {hi:"नए हैं?",hinglish:"Yahan naye hain?"}, "Already have an account?": {hi:"पहले से अकाउंट है?",hinglish:"Account pehle se hai?"},
   "Email": {hi:"ईमेल",hinglish:"Email"}, "Password": {hi:"पासवर्ड",hinglish:"Password"}, "Full name": {hi:"पूरा नाम",hinglish:"Full name"}, "Confirm password": {hi:"पासवर्ड की पुष्टि करें",hinglish:"Password confirm karein"},
   "My Earnings & Performance": {hi:"मेरी कमाई और प्रदर्शन",hinglish:"Meri earnings aur performance"}, "Back to deliveries": {hi:"डिलीवरी पर वापस जाएँ",hinglish:"Deliveries par wapas jayein"}, "Recent ratings": {hi:"हाल की रेटिंग",hinglish:"Recent ratings"}, "Earnings history": {hi:"कमाई का इतिहास",hinglish:"Earnings history"},
 };
@@ -467,7 +466,7 @@ const DELIVERY_ANDROID_CSS = "      /* Delivery Android dashboard: compact heade
 
 
 const CUSTOMER_ANDROID_CSS = `
-  /* FreshBasket customer Android/mobile responsive layer. Existing customer functionality is unchanged. */
+  /* DUKAANGRID customer Android/mobile responsive layer. Existing customer functionality is unchanged. */
   .fb-customer-shell,
   .fb-customer-shell #main-content,
   .fb-customer-shell main {
@@ -1182,7 +1181,7 @@ function AccessibilityStyles() {
 
       /* Customer post-login visual refresh: keep the existing layout and
          functionality intact while replacing the plain white canvas with a
-         soft, colorful FreshBasket background. Employee/admin screens are not
+         soft, colorful DUKAANGRID background. Employee/admin screens are not
          affected because the shell is applied only to customer Layout pages. */
       /* Customer Stores entry: keep the store-directory button available at every
          Android width. The previous hidden-md rule made it disappear in portrait.
@@ -1476,7 +1475,7 @@ function AccessibilityStyles() {
         background: rgba(248,250,252,.90) !important; border-color: #dbe4ee !important;
       }
 
-      /* Global FreshBasket typography polish: visual-only styling.  It does not
+      /* Global DUKAANGRID typography polish: visual-only styling.  It does not
          change copy, layout, routing, state, APIs, or interaction behaviour. */
       :root {
         --fb-font-ui: Inter, "Plus Jakarta Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -1607,7 +1606,7 @@ const fbGetCurrentPosition = async (
 
     if (permissions.location !== "granted") {
       throw new Error(
-        "Location permission was denied. Please allow Location permission for FreshBasket in Android Settings and try again."
+        "Location permission was denied. Please allow Location permission for DUKAANGRID in Android Settings and try again."
       );
     }
 
@@ -1634,7 +1633,7 @@ const fbGetCurrentPosition = async (
       code: e?.code || 2,
       message: String(
         e?.message ||
-        "Unable to access your location. Please turn on Location/GPS and allow FreshBasket location permission."
+        "Unable to access your location. Please turn on Location/GPS and allow DUKAANGRID location permission."
       ),
     });
   }
@@ -1691,7 +1690,7 @@ function ImagePickerButtons({
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       setWebCameraError(
-        "Camera is unavailable here. Open FreshBasket using HTTPS (or localhost) and allow camera permission in your browser."
+        "Camera is unavailable here. Open DUKAANGRID using HTTPS (or localhost) and allow camera permission in your browser."
       );
       setWebCameraOpen(true);
       return;
@@ -1717,7 +1716,7 @@ function ImagePickerButtons({
       let message = "Unable to open camera. Please allow camera permission and try again.";
 
       if (name === "NotAllowedError" || name === "SecurityError") {
-        message = "Camera permission is blocked. Allow Camera permission for this FreshBasket site in browser settings, then try again.";
+        message = "Camera permission is blocked. Allow Camera permission for this DUKAANGRID site in browser settings, then try again.";
       } else if (name === "NotFoundError") {
         message = "No camera was found on this device.";
       } else if (name === "NotReadableError") {
@@ -1765,7 +1764,7 @@ function ImagePickerButtons({
       const extension = blob.type.includes("png") ? "png" : "jpg";
       const file = new File(
         [blob],
-        `freshbasket-camera-${Date.now()}.${extension}`,
+        `DUKAANGRID-camera-${Date.now()}.${extension}`,
         { type: blob.type || "image/jpeg" },
       );
 
@@ -1788,7 +1787,7 @@ function ImagePickerButtons({
 
         if (permissions.camera !== "granted") {
           throw new Error(
-            "Camera permission was denied. Go to Android Settings → Apps → FreshBasket → Permissions → Camera → Allow."
+            "Camera permission was denied. Go to Android Settings → Apps → DUKAANGRID → Permissions → Camera → Allow."
           );
         }
 
@@ -1812,7 +1811,7 @@ function ImagePickerButtons({
         onFile(
           new File(
             [bytes],
-            `freshbasket-camera-${Date.now()}.${photo.format === "png" ? "png" : "jpg"}`,
+            `DUKAANGRID-camera-${Date.now()}.${photo.format === "png" ? "png" : "jpg"}`,
             { type: mime },
           )
         );
@@ -2152,7 +2151,7 @@ function DeliveryRouteMap({
   );
 }
 
-function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
+function useNativeDUKAANGRIDPush(store: ReturnType<typeof useStore>) {
   const nav = useNavigate();
   const userId = String(store.user?.id || "");
 
@@ -2168,7 +2167,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
       try {
         const target = raw.startsWith("http://") || raw.startsWith("https://")
           ? new URL(raw).pathname + new URL(raw).search + new URL(raw).hash
-          : raw.startsWith("freshbasket://")
+          : raw.startsWith("DUKAANGRID://")
             ? (() => { const u = new URL(raw); return u.pathname || "/notifications"; })()
             : raw;
         if (target.startsWith("/")) nav(target);
@@ -2179,7 +2178,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
 
    const setup = async () => {
   try {
-    console.log("[FreshBasket Push] setup started");
+    console.log("[DUKAANGRID Push] setup started");
 
     // Android 8+ requires notification channels before FCM notifications can
     // reliably appear in the system notification tray. These IDs intentionally
@@ -2194,7 +2193,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
         ["finance", "Finance", "Finance and payout updates"],
         ["payments", "Payments", "Payment updates"],
         ["security", "Security", "Security alerts"],
-        ["system", "FreshBasket", "General FreshBasket notifications"],
+        ["system", "DUKAANGRID", "General DUKAANGRID notifications"],
       ];
       for (const [id, name, description] of channels) {
         try {
@@ -2203,45 +2202,45 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
             sound: "default", vibration: true,
           });
         } catch (channelError) {
-          console.warn("[FreshBasket Push] channel setup failed:", id, channelError);
+          console.warn("[DUKAANGRID Push] channel setup failed:", id, channelError);
         }
       }
     }
 
     const permission = await PushNotifications.checkPermissions();
-    console.log("[FreshBasket Push] permission:", permission);
+    console.log("[DUKAANGRID Push] permission:", permission);
 
     let receive = permission.receive;
 
     if (receive !== "granted") {
       const requested = await PushNotifications.requestPermissions();
       receive = requested.receive;
-      console.log("[FreshBasket Push] requested permission:", requested);
+      console.log("[DUKAANGRID Push] requested permission:", requested);
     }
 
     if (receive !== "granted") {
-      console.warn("[FreshBasket Push] notification permission not granted");
+      console.warn("[DUKAANGRID Push] notification permission not granted");
       return;
     }
 
     handles.push(
       await PushNotifications.addListener("registration", async (token) => {
-       console.log("[FreshBasket Push] FCM TOKEN:", token?.value);
+       console.log("[DUKAANGRID Push] FCM TOKEN:", token?.value);
 
         const value = String(token?.value || "").trim();
 
         if (!value) {
-          console.warn("[FreshBasket Push] registration event returned empty token");
+          console.warn("[DUKAANGRID Push] registration event returned empty token");
           return;
         }
 
         if (!active) {
-          console.warn("[FreshBasket Push] registration received after cleanup");
+          console.warn("[DUKAANGRID Push] registration received after cleanup");
           return;
         }
 
         localStorage.setItem("fb-fcm-token", value);
-        console.log("[FreshBasket Push] FCM token saved");
+        console.log("[DUKAANGRID Push] FCM token saved");
 
         try {
           const response = await axios.post(
@@ -2249,18 +2248,18 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
             {
               token: value,
               platform: "android",
-              appId: "com.freshbasket.grocery",
+              appId: "com.DUKAANGRID.grocery",
             },
             { headers: adminHeaders() }
           );
 
           console.log(
-            "[FreshBasket Push] token registered with server:",
+            "[DUKAANGRID Push] token registered with server:",
             response?.status
           );
         } catch (error: any) {
           console.error(
-            "[FreshBasket Push] server token registration failed:",
+            "[DUKAANGRID Push] server token registration failed:",
             error?.response?.status,
             error?.response?.data || error?.message || error
           );
@@ -2271,7 +2270,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
     handles.push(
       await PushNotifications.addListener("registrationError", (error) => {
         console.error(
-          "[FreshBasket Push] REGISTRATION ERROR:",
+          "[DUKAANGRID Push] REGISTRATION ERROR:",
           error
         );
       })
@@ -2282,7 +2281,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
         "pushNotificationReceived",
         (notification) => {
           console.log(
-            "[FreshBasket Push] notification received:",
+            "[DUKAANGRID Push] notification received:",
             notification
           );
 
@@ -2303,12 +2302,12 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
             };
 
             console.log(
-              "[FreshBasket Voice] native push bridge:",
+              "[DUKAANGRID Voice] native push bridge:",
               JSON.stringify(voiceNotification)
             );
 
             window.dispatchEvent(
-              new CustomEvent("freshbasket:native-push-voice", {
+              new CustomEvent("DUKAANGRID:native-push-voice", {
                 detail: voiceNotification,
               })
             );
@@ -2317,7 +2316,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
             // active dashboard to refresh its bell immediately instead of
             // waiting for the 12-second polling interval.
             window.dispatchEvent(
-              new CustomEvent("freshbasket:native-push-received", {
+              new CustomEvent("DUKAANGRID:native-push-received", {
                 detail: voiceNotification,
               })
             );
@@ -2331,7 +2330,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
         "pushNotificationActionPerformed",
         (event: any) => {
           console.log(
-            "[FreshBasket Push] notification action:",
+            "[DUKAANGRID Push] notification action:",
             event
           );
 
@@ -2350,7 +2349,7 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
     handles.push(
       await CapacitorApp.addListener("appUrlOpen", (event) => {
         console.log(
-          "[FreshBasket Push] app URL opened:",
+          "[DUKAANGRID Push] app URL opened:",
           event?.url
         );
 
@@ -2358,14 +2357,14 @@ function useNativeFreshBasketPush(store: ReturnType<typeof useStore>) {
       })
     );
 
-    console.log("[FreshBasket Push] calling PushNotifications.register()");
+    console.log("[DUKAANGRID Push] calling PushNotifications.register()");
 
     await PushNotifications.register();
 
-    console.log("[FreshBasket Push] register() completed");
+    console.log("[DUKAANGRID Push] register() completed");
   } catch (error: any) {
     console.error(
-      "[FreshBasket Push] setup failed:",
+      "[DUKAANGRID Push] setup failed:",
       error?.message || error,
       error
     );
@@ -2481,8 +2480,8 @@ function useStore() {
       const detail = (event as CustomEvent).detail;
       if (Array.isArray(detail)) setCart(detail);
     };
-    window.addEventListener("freshbasket-reorder", onReorder);
-    return () => window.removeEventListener("freshbasket-reorder", onReorder);
+    window.addEventListener("DUKAANGRID-reorder", onReorder);
+    return () => window.removeEventListener("DUKAANGRID-reorder", onReorder);
   }, []);
 
   useEffect(() => {
@@ -2885,7 +2884,7 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
     if (IS_NATIVE_APP) {
       try {
         speakingVoice.current = true;
-        console.log("[FreshBasket Voice] native TTS speaking:", text);
+        console.log("[DUKAANGRID Voice] native TTS speaking:", text);
 
         await TextToSpeech.speak({
           text,
@@ -2899,9 +2898,9 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
         seenVoiceEventKeys.current.add(key);
         voiceSpokenKeys.current.add(key);
         persistSpokenKey(key);
-        console.log("[FreshBasket Voice] native TTS started:", key);
+        console.log("[DUKAANGRID Voice] native TTS started:", key);
       } catch (error) {
-        console.error("[FreshBasket Voice] native TTS failed:", error);
+        console.error("[DUKAANGRID Voice] native TTS failed:", error);
         pendingVoiceEvents.current.set(key, n);
       } finally {
         speakingVoice.current = false;
@@ -2993,7 +2992,7 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
 
       if (!relevant) {
         console.log(
-          "[FreshBasket Voice] native push ignored for role/type:",
+          "[DUKAANGRID Voice] native push ignored for role/type:",
           role,
           type
         );
@@ -3006,23 +3005,23 @@ function useRoleNotificationVoiceAlerts(store: ReturnType<typeof useStore>, noti
         voiceSpokenKeys.current.has(key) ||
         pendingVoiceEvents.current.has(key)
       ) {
-        console.log("[FreshBasket Voice] duplicate push ignored:", key);
+        console.log("[DUKAANGRID Voice] duplicate push ignored:", key);
         return;
       }
 
       pendingVoiceEvents.current.set(key, n);
-      console.log("[FreshBasket Voice] native push queued:", key);
+      console.log("[DUKAANGRID Voice] native push queued:", key);
       void flushVoiceQueue();
     };
 
     window.addEventListener(
-      "freshbasket:native-push-voice",
+      "DUKAANGRID:native-push-voice",
       handleNativePushVoice
     );
 
     return () => {
       window.removeEventListener(
-        "freshbasket:native-push-voice",
+        "DUKAANGRID:native-push-voice",
         handleNativePushVoice
       );
     };
@@ -3134,10 +3133,10 @@ function Layout({
     if (!store.user) return;
     const timer = window.setInterval(loadNotifications, 12000);
     const onNativePush = () => { void loadNotifications(); };
-    window.addEventListener("freshbasket:native-push-received", onNativePush);
+    window.addEventListener("DUKAANGRID:native-push-received", onNativePush);
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener("freshbasket:native-push-received", onNativePush);
+      window.removeEventListener("DUKAANGRID:native-push-received", onNativePush);
     };
   }, [store.user?.id]);
 
@@ -3211,10 +3210,10 @@ function Layout({
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-5">
           <Link to="/" className="flex items-center gap-2 min-w-fit">
             <span className="w-10 h-10 rounded-2xl bg-emerald-600 text-white grid place-items-center">
-              <Leaf size={21} />
+              <Boxes size={21} />
             </span>
-            <span className="font-bold text-xl tracking-tight">
-              Fresh<span className="text-emerald-600">Basket</span>
+            <span className="font-bold text-xl tracking-tight text-slate-900">
+              DUKAANGRID
             </span>
           </Link>
 
@@ -3398,41 +3397,117 @@ function Layout({
         />
       )}
 
-      <footer className="mt-20 bg-slate-950 text-slate-300">
-        <div className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-4 gap-8">
-          <div>
-            <div className="text-white font-bold text-xl mb-3">
-              FreshBasket
-            </div>
-            <p className="text-sm leading-6">
-              Your neighborhood grocery store, now at your
-              fingertips. Fresh products, fair prices and fast
-              delivery.
-            </p>
-          </div>
-          <div>
-            <b className="text-white">Shop</b>
-            <p className="mt-3 text-sm">All Products</p>
-            <p className="text-sm">Fresh Produce</p>
-            <p className="text-sm">Daily Essentials</p>
-          </div>
-          <div>
-            <b className="text-white">Help</b>
-            <p className="mt-3 text-sm">Delivery Information</p>
-            <p className="text-sm">Returns & Refunds</p>
-            <p className="text-sm">Contact Support</p>
-          </div>
-          <div>
-            <b className="text-white">Why FreshBasket?</b>
-            <p className="mt-3 text-sm">✓ Quality checked products</p>
-            <p className="text-sm">✓ Same-day local delivery</p>
-            <p className="text-sm">✓ Secure payments</p>
-          </div>
-        </div>
-        <div className="border-t border-white/10 text-center text-xs py-5">
-          © 2026 FreshBasket. Built for local grocery businesses.
-        </div>
-      </footer>
+     <footer className="mt-20 bg-slate-950 text-slate-300">
+  <div className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-4 gap-8">
+
+    <div>
+      <div className="text-white font-bold text-xl mb-3">
+        DUKAANGRID
+      </div>
+
+      <p className="text-sm leading-6">
+        Your local marketplace, connecting customers with trusted
+        stores and businesses in their neighborhood. Discover
+        products, compare options and shop locally with ease.
+      </p>
+    </div>
+
+    <div>
+      <b className="text-white">Explore</b>
+
+      <p className="mt-3 text-sm">All Products</p>
+      <p className="text-sm">Local Stores</p>
+      <p className="text-sm">Offers & Deals</p>
+      <p className="text-sm">Nearby Businesses</p>
+    </div>
+
+    <div>
+      <b className="text-white">Help & Legal</b>
+
+      <Link
+        to="/legal/delivery"
+        className="block mt-3 text-sm hover:text-white"
+      >
+        Delivery Information
+      </Link>
+
+      <Link
+        to="/legal/refund"
+        className="block text-sm hover:text-white"
+      >
+        Refund Policy
+      </Link>
+
+      <Link
+        to="/legal/replacement"
+        className="block text-sm hover:text-white"
+      >
+        Replacement Policy
+      </Link>
+
+      <Link
+        to="/legal/cancellation"
+        className="block text-sm hover:text-white"
+      >
+        Cancellation Policy
+      </Link>
+
+      <Link
+        to="/legal/grievance"
+        className="block text-sm hover:text-white"
+      >
+        Grievance / Contact
+      </Link>
+    </div>
+
+    <div>
+      <b className="text-white">Legal</b>
+
+      <Link
+        to="/legal/terms"
+        className="block mt-3 text-sm hover:text-white"
+      >
+        Terms & Conditions
+      </Link>
+
+      <Link
+        to="/legal/privacy"
+        className="block text-sm hover:text-white"
+      >
+        Privacy Policy
+      </Link>
+
+      <p className="text-sm mt-3">
+        ✓ Secure payments
+      </p>
+    </div>
+
+    <div>
+      <b className="text-white">Why DUKAANGRID?</b>
+
+      <p className="mt-3 text-sm">
+        ✓ Discover trusted local businesses
+      </p>
+
+      <p className="text-sm">
+        ✓ Shop from nearby stores
+      </p>
+
+      <p className="text-sm">
+        ✓ Local offers and competitive prices
+      </p>
+
+      <p className="text-sm">
+        ✓ Convenient local delivery
+      </p>
+    </div>
+
+  </div>
+
+  <div className="border-t border-white/10 text-center text-xs py-5">
+    © 2026 DUKAANGRID. Connecting local businesses with local customers.
+  </div>
+</footer>
     </div>
   );
 }
@@ -3705,7 +3780,7 @@ function Home({ store }: { store: ReturnType<typeof useStore> }) {
             <div className="rounded-[2rem] border border-emerald-100 bg-white/70 backdrop-blur p-6 md:p-10 shadow-sm hover:shadow-md transition duration-300">
               <p className="text-emerald-600 text-sm font-black uppercase tracking-[.16em]">LOCAL MARKETPLACE</p>
               <h2 className="text-3xl md:text-5xl font-black mt-2">Your Local Market, Online</h2>
-              <p className="text-slate-600 mt-4 max-w-3xl text-base md:text-lg leading-7">FreshBasket brings your neighbourhood stores online. Discover products from local sellers, compare what is available, place your order and get it delivered to your doorstep.</p>
+              <p className="text-slate-600 mt-4 max-w-3xl text-base md:text-lg leading-7">DUKAANGRID brings your neighbourhood stores online. Discover products from local sellers, compare what is available, place your order and get it delivered to your doorstep.</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-7">{[[Store,"LOCAL STORES"],[ShoppingBag,"LOCAL SELLERS"],[Boxes,"LOCAL PRODUCTS"],[Truck,"LOCAL DELIVERY"]].map(([Icon,label]:any)=><div key={label} className="rounded-2xl bg-white border p-4 hover:-translate-y-1 transition duration-200"><Icon className="text-emerald-600" size={22}/><p className="font-bold text-sm mt-2">{label}</p></div>)}</div>
             </div>
           </div>
@@ -3869,12 +3944,12 @@ function Home({ store }: { store: ReturnType<typeof useStore> }) {
           </div>
         </section>
         <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
-          <div className="text-center"><p className="text-emerald-600 text-sm font-bold">FIRST-TIME SHOPPER</p><h2 className="text-3xl md:text-4xl font-black mt-2">How FreshBasket Works</h2><p className="text-slate-500 mt-2">A simple local-shopping journey from store selection to doorstep delivery.</p></div>
+          <div className="text-center"><p className="text-emerald-600 text-sm font-bold">FIRST-TIME SHOPPER</p><h2 className="text-3xl md:text-4xl font-black mt-2">How DUKAANGRID Works</h2><p className="text-slate-500 mt-2">A simple local-shopping journey from store selection to doorstep delivery.</p></div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-7">{[[MapPin,"1. Choose your location"],[Store,"2. Choose a local store"],[Boxes,"3. Browse products"],[ShoppingCart,"4. Add products to cart"],[Package,"5. Confirm address"],[CheckCircle2,"6. Place order"],[Truck,"7. Track delivery"],[Package,"8. Receive your order"],[Award,"9. Rate your experience"]].map(([Icon,label]:any)=><div key={label} className="bg-white border rounded-2xl p-4 shadow-sm hover:-translate-y-1 transition duration-200"><Icon className="text-emerald-600" size={22}/><p className="font-bold text-sm mt-3">{label}</p></div>)}</div>
         </section>
         {!store.user && <section className="max-w-7xl mx-auto px-4 pb-12">
           <div className="rounded-3xl bg-white border border-slate-200 p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-sm">
-            <div><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-700">Grow with FreshBasket</p><h2 className="text-xl md:text-2xl font-black mt-1">Join our local store & delivery network</h2><p className="text-sm text-slate-500 mt-1">Public onboarding is available without customer login.</p></div>
+            <div><p className="text-xs font-black uppercase tracking-[.16em] text-emerald-700">Grow with DUKAANGRID</p><h2 className="text-xl md:text-2xl font-black mt-1">Join our local store & delivery network</h2><p className="text-sm text-slate-500 mt-1">Public onboarding is available without customer login.</p></div>
             <div className="flex flex-col sm:flex-row gap-2 shrink-0"><Link to="/apply/store" className="inline-flex items-center justify-center gap-2 bg-slate-950 text-white rounded-xl px-4 py-3 font-bold text-sm"><Store size={17}/> Take Your Local Store Online <ArrowRight size={16}/></Link><Link to="/apply/delivery" className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-xl px-4 py-3 font-bold text-sm"><Truck size={17}/> Become a Delivery Partner <ArrowRight size={16}/></Link></div>
           </div>
         </section>}
@@ -3910,7 +3985,7 @@ function AIOrderAssistant({ store }: { store: ReturnType<typeof useStore> }) {
         <div>
           <div className="flex items-center gap-2"><Sparkles size={18} className="text-emerald-600"/><p className="text-emerald-600 text-xs font-black tracking-wide">AI ORDER ASSISTANT</p></div>
           <h2 className="text-xl md:text-2xl font-bold mt-1">Tell me what you need</h2>
-          <p className="text-sm text-slate-500 mt-1">Ask naturally. Suggestions use only currently in-stock FreshBasket catalogue products and real prices.</p>
+          <p className="text-sm text-slate-500 mt-1">Ask naturally. Suggestions use only currently in-stock DUKAANGRID catalogue products and real prices.</p>
         </div>
         <div className="w-full lg:max-w-2xl flex gap-2">
           <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void ask();}} placeholder="e.g. breakfast items under ₹500" className="flex-1 min-w-0 border rounded-xl px-4 py-3 outline-none focus:ring-2 ring-emerald-100"/>
@@ -4805,23 +4880,23 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(16,185,129,.28),transparent_35%),radial-gradient(circle_at_85%_80%,rgba(34,197,94,.18),transparent_35%)]" />
       <div className="relative min-h-screen max-w-7xl mx-auto px-4 py-8 lg:py-10 grid lg:grid-cols-[1.15fr_.85fr] gap-8 items-center">
         <section className="fb-login-hero text-white hidden lg:block">
-          <div className="flex items-center gap-3"><span className="w-14 h-14 rounded-3xl bg-emerald-500 grid place-items-center shadow-2xl"><Leaf size={30}/></span><div><div className="text-2xl font-black">FreshBasket</div><div className="text-emerald-200 text-sm">{L("Local marketplace")}</div></div></div>
-          <p className="mt-10 text-emerald-300 text-sm font-bold uppercase tracking-[.2em]">{employeeLogin ? "FreshBasket Operations" : L("Shop Local. Delivered Simply.")}</p>
+          <div className="flex items-center gap-3"><span className="w-14 h-14 rounded-3xl bg-emerald-500 grid place-items-center shadow-2xl"><Boxes size={30}/></span><div><div className="text-2xl font-black">DUKAANGRID</div><div className="text-emerald-200 text-sm">{L("Local marketplace")}</div></div></div>
+          <p className="mt-10 text-emerald-300 text-sm font-bold uppercase tracking-[.2em]">{employeeLogin ? "DUKAANGRID Operations" : L("Shop Local. Delivered Simply.")}</p>
           <h1 className="text-5xl xl:text-6xl font-black leading-tight mt-3">{employeeLogin ? L("Secure Staff Access") : L("Your Local Market, Right at Your Doorstep")}</h1>
-          <p className="text-slate-300 text-lg mt-5 max-w-2xl leading-8">{employeeLogin ? "A professional workspace for store operations, customer care, finance and local delivery." : L("FreshBasket connects customers with trusted local stores, local sellers and delivery partners — bringing everyday shopping closer to home.")}</p>
+          <p className="text-slate-300 text-lg mt-5 max-w-2xl leading-8">{employeeLogin ? "A professional workspace for store operations, customer care, finance and local delivery." : L("DUKAANGRID connects customers with trusted local stores, local sellers and delivery partners — bringing everyday shopping closer to home.")}</p>
           <div className="fb-login-hero-grid grid grid-cols-2 gap-3 mt-8 max-w-xl">{[L("Local Stores"),L("Local Sellers"),L("Local Products"),L("Local Delivery")].map((x,i)=><div key={x} className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur p-4 hover:-translate-y-1 transition duration-200"><span className="text-emerald-300 text-xs font-bold">0{i+1}</span><p className="font-bold mt-1">{x}</p></div>)}</div>
         </section>
         <section className="w-full max-w-xl lg:justify-self-end">
           <div className="fb-login-card rounded-[2rem] bg-white/95 backdrop-blur border border-white/20 shadow-2xl p-6 md:p-8">
-            <div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 font-black text-xl"><span className="w-9 h-9 rounded-xl bg-emerald-600 text-white grid place-items-center"><Leaf size={19}/></span>FreshBasket</div><p className="text-xs text-emerald-700 font-bold mt-2">{employeeLogin ? "FRESHBASKET OPERATIONS" : L("LOCAL MARKETPLACE")}</p></div><div className="text-right text-slate-500"><div className="text-[11px] font-semibold">{clockNow.toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short",year:"numeric"})}</div><div className="font-black text-slate-800">{clockNow.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})}</div></div></div>
+            <div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 font-black text-xl"><span className="w-9 h-9 rounded-xl bg-emerald-600 text-white grid place-items-center"><Boxes size={19}/></span>DUKAANGRID</div><p className="text-xs text-emerald-700 font-bold mt-2">{employeeLogin ? "DUKAANGRID OPERATIONS" : L("LOCAL MARKETPLACE")}</p></div><div className="text-right text-slate-500"><div className="text-[11px] font-semibold">{clockNow.toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short",year:"numeric"})}</div><div className="font-black text-slate-800">{clockNow.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})}</div></div></div>
             <h1 className="text-2xl font-bold mt-7">{mode === "login" ? (employeeLogin ? L("Secure Staff Access") : L("Welcome back")) : L("Create your account")}</h1>
             {mode === "login" && <div className="mt-5"><p className="text-sm font-semibold text-slate-700 mb-2">{L("Login as")}</p><select value={loginRole} onChange={e=>setLoginRole(e.target.value as any)} className="w-full border rounded-xl px-3 py-3 bg-white font-semibold"><option value="customer">Customer</option><option value="admin">Main Admin / Store Admin / Sub Admin</option><option value="delivery">Delivery Partner</option><option value="customer_care">Customer Care</option><option value="finance_manager">Finance Manager</option><option value="finance_executive">Finance Executive</option></select></div>}
             {mode === "login" && (loginRole === "customer" || loginRole === "delivery") && <div className="mt-4"><p className="text-xs font-bold text-slate-500 mb-2">Language / भाषा</p><div className="grid grid-cols-3 gap-2">{([['en','English'],['hi','हिन्दी'],['hinglish','Hinglish']] as [FBLanguage,string][]).map(([v,l])=><button key={v} type="button" onClick={()=>chooseLoginLanguage(v)} className={`border rounded-xl py-2.5 text-sm font-bold ${loginLanguage===v?'bg-emerald-600 text-white border-emerald-600':''}`}>{l}</button>)}</div></div>}
             <form onSubmit={submit} className="space-y-4 mt-6">{mode === "register" && <><input required value={name} onChange={e=>setName(e.target.value)} placeholder={L("Full name")} className="w-full border rounded-xl p-3 outline-none"/><input required value={phone} onChange={e=>setPhone(e.target.value)} placeholder="10-digit mobile number" className="w-full border rounded-xl p-3 outline-none"/></>}<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={L("Email")} className="w-full border rounded-xl p-3 outline-none"/><input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={L("Password")} className="w-full border rounded-xl p-3 outline-none"/>{mode === "register" && <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder={L("Confirm password")} className="w-full border rounded-xl p-3 outline-none"/>}{message&&<p className="text-emerald-700 text-sm font-semibold">{message}</p>}{error&&<p className="text-red-600 text-sm">{error}</p>}<button className="fb-tactile w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3.5 font-bold transition">{mode === "login" ? L("Sign in") : L("Create account")}</button></form>
             <div className="text-center text-sm mt-5 text-slate-500">{mode==='login'?'New here? ':'Already have an account? '}<button type="button" onClick={()=>switchMode(mode==='login'?'register':'login')} className="text-emerald-700 font-bold">{mode==='login'?'Create account':'Sign in'}</button></div>
-            {notices.length>0 && <div className="mt-6 border-t pt-5"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">{L("FreshBasket Updates")}</p>{(() => { const n=notices[noticeIndex%notices.length]; return <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3 mt-2">{n.image||n.imageUrl?<img src={n.image||n.imageUrl} alt={n.title} className="w-full h-24 object-cover rounded-xl mb-2"/>:null}<b className="text-sm">{n.title}</b><p className="text-xs text-slate-600 mt-1">{n.shortDescription||n.description}</p>{n.ctaLink&&<a href={n.ctaLink} className="inline-block mt-2 text-xs font-bold text-emerald-700">{n.ctaText||"Learn more"} →</a>}</div> })()} {notices.length>1&&<div className="flex justify-center gap-1.5 mt-3">{notices.map((_,i)=><button type="button" key={i} aria-label={`Show notice ${i+1}`} onClick={()=>setNoticeIndex(i)} className={`w-2 h-2 rounded-full ${i===noticeIndex?"bg-emerald-600":"bg-slate-300"}`}/>)}</div>}</div>}
+            {notices.length>0 && <div className="mt-6 border-t pt-5"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">{L("DUKAANGRID Updates")}</p>{(() => { const n=notices[noticeIndex%notices.length]; return <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3 mt-2">{n.image||n.imageUrl?<img src={n.image||n.imageUrl} alt={n.title} className="w-full h-24 object-cover rounded-xl mb-2"/>:null}<b className="text-sm">{n.title}</b><p className="text-xs text-slate-600 mt-1">{n.shortDescription||n.description}</p>{n.ctaLink&&<a href={n.ctaLink} className="inline-block mt-2 text-xs font-bold text-emerald-700">{n.ctaText||"Learn more"} →</a>}</div> })()} {notices.length>1&&<div className="flex justify-center gap-1.5 mt-3">{notices.map((_,i)=><button type="button" key={i} aria-label={`Show notice ${i+1}`} onClick={()=>setNoticeIndex(i)} className={`w-2 h-2 rounded-full ${i===noticeIndex?"bg-emerald-600":"bg-slate-300"}`}/>)}</div>}</div>}
             {(publicContact.phone||publicContact.email||publicContact.storeOnboardingContact||publicContact.deliveryHiringContact) && <div className="mt-5 pt-4 border-t text-xs text-slate-500"><b className="text-slate-700">{L("Need help?")}</b>{publicContact.phone&&<span className="ml-2">{publicContact.phone}</span>}{publicContact.email&&<span className="ml-2">{publicContact.email}</span>}</div>}
-            {mode === "login" && loginRole === "customer" && !store.user && <div className="mt-5 pt-5 border-t"><p className="text-sm font-black text-slate-800">Want to grow with FreshBasket?</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><Link to="/apply/store" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 text-white px-3 py-3 text-sm font-bold"><Store size={16}/>Take Your Local Store Online</Link><Link to="/apply/delivery" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-sm font-bold"><Truck size={16}/>Become a Delivery Partner</Link></div></div>}
+            {mode === "login" && loginRole === "customer" && !store.user && <div className="mt-5 pt-5 border-t"><p className="text-sm font-black text-slate-800">Want to grow with DUKAANGRID?</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><Link to="/apply/store" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 text-white px-3 py-3 text-sm font-bold"><Store size={16}/>Take Your Local Store Online</Link><Link to="/apply/delivery" className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-sm font-bold"><Truck size={16}/>Become a Delivery Partner</Link></div></div>}
           </div>
         </section>
       </div>
@@ -4914,7 +4989,7 @@ function RazorpayQrPaymentModal({
           <p className="text-3xl font-black text-slate-900 mt-1">{money(Number(session?.amount || 0))}</p>
           {qrSrc ? (
             <div className="mt-5 mx-auto w-[280px] h-[280px] rounded-2xl border-2 border-slate-200 bg-white p-3 grid place-items-center">
-              <img src={qrSrc} alt="FreshBasket Razorpay UPI QR code" className="w-full h-full object-contain" />
+              <img src={qrSrc} alt="DUKAANGRID Razorpay UPI QR code" className="w-full h-full object-contain" />
             </div>
           ) : (
             <div className="mt-5 rounded-2xl bg-red-50 border border-red-200 p-5 text-sm text-red-700">QR image could not be loaded. Please retry payment.</div>
@@ -5292,20 +5367,20 @@ function Checkout({
               key: session.keyId,
               amount: Math.round(Number(session.amount || createdOrder.total || 0) * 100),
               currency: session.currency || "INR",
-              name: "FreshBasket",
+              name: "DUKAANGRID",
               description: `Order #${createdOrderId.slice(-8).toUpperCase()}`,
               order_id: session.razorpayOrderId,
               prefill: { name: form.name.trim(), email: store.user?.email || "", contact: form.phone.replace(/\D/g, "") },
-              notes: { freshbasket_order_id: createdOrderId },
+              notes: { DUKAANGRID_order_id: createdOrderId },
               config: {
                 display: {
                   blocks: {
-                    freshbasket_upi: {
+                    DUKAANGRID_upi: {
                       name: "UPI",
                       instruments: [{ method: "upi" }]
                     }
                   },
-                  sequence: ["block.freshbasket_upi"],
+                  sequence: ["block.DUKAANGRID_upi"],
                   preferences: { show_default_blocks: true }
                 }
               },
@@ -5459,7 +5534,7 @@ function Checkout({
                 <span className="text-xs text-slate-500">
                   {isValidCoordinate(form.latitude, form.longitude)
                     ? "Delivery location captured successfully."
-                    : "Use your current location only when you are ordering for where you are. Otherwise enter the delivery address + pincode; FreshBasket will locate that destination automatically."}
+                    : "Use your current location only when you are ordering for where you are. Otherwise enter the delivery address + pincode; DUKAANGRID will locate that destination automatically."}
                 </span>
               </div>
             </div>
@@ -6407,7 +6482,7 @@ function Orders({
       }
 
       // Update the existing cart without changing the store's other cart actions.
-      const cartEvent = new CustomEvent("freshbasket-reorder", {
+      const cartEvent = new CustomEvent("DUKAANGRID-reorder", {
         detail: merged,
       });
       window.dispatchEvent(cartEvent);
@@ -6647,7 +6722,7 @@ function Orders({
 function AISupportAssistant({ store, onOpenOrder }: { store: ReturnType<typeof useStore>; onOpenOrder?: (id:string)=>void }) {
   const [query,setQuery]=useState(""); const [loading,setLoading]=useState(false); const [result,setResult]=useState<any>(null); const [error,setError]=useState("");
   const ask=async()=>{const text=query.trim();if(!text||loading)return;setLoading(true);setError("");try{const r=await axios.post(API+"/customer/ai-support-assistant",{query:text,storeAdminId:localStorage.getItem("fb-store-admin-id")||""},{headers:adminHeaders()});setResult(r.data?.data||null);}catch(e:any){setError(e?.response?.data?.message||"Unable to get support guidance.");setResult(null);}finally{setLoading(false);}};
-  return <section className="mb-6 bg-white border border-emerald-100 rounded-3xl p-5 shadow-soft"><div className="flex items-center gap-2"><Sparkles size={18} className="text-emerald-600"/><p className="text-emerald-600 text-xs font-black tracking-wide">AI CUSTOMER SUPPORT ASSISTANT</p></div><h2 className="text-xl font-bold mt-1">How can I help?</h2><p className="text-sm text-slate-500 mt-1">Ask about your order, cancellation, replacement, refund, COD, or Customer Care. Account/order answers use your actual FreshBasket data.</p><div className="flex gap-2 mt-4"><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void ask();}} placeholder="e.g. Where is my order?" className="flex-1 border rounded-xl px-4 py-3 outline-none focus:ring-2 ring-emerald-100"/><button disabled={!query.trim()||loading} onClick={()=>void ask()} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{loading?"Checking...":"Ask"}</button></div>{error&&<p className="mt-3 text-sm text-red-700 font-semibold">{error}</p>}{result&&<div className="mt-4 rounded-2xl bg-slate-50 border p-4"><p className="text-sm text-slate-700">{result.answer}</p>{result.cod&&<div className="mt-3 text-xs bg-white border rounded-xl p-3"><b>COD status: {result.cod.label}</b>{result.cod.reason&&<p className="text-slate-500 mt-1">{result.cod.reason}</p>}</div>}{result.orders?.length>0&&<div className="mt-3 space-y-2">{result.orders.map((o:any)=><button key={String(o._id)} type="button" onClick={()=>onOpenOrder?.(String(o._id))} className="w-full text-left bg-white border rounded-xl p-3 hover:bg-emerald-50"><div className="flex justify-between gap-2 text-sm"><b>Order #{String(o._id).slice(-8)}</b><span className="font-semibold">{o.status}</span></div><p className="text-xs text-slate-500 mt-1">{money(Number(o.total||0))} · {o.createdAt?new Date(o.createdAt).toLocaleString("en-IN"):""}</p></button>)}</div>}{result.handoffRequired&&<Link to="/support" className="inline-flex mt-3 bg-slate-900 text-white rounded-xl px-4 py-2.5 text-sm font-bold">Open Customer Support</Link>}</div>}</section>;
+  return <section className="mb-6 bg-white border border-emerald-100 rounded-3xl p-5 shadow-soft"><div className="flex items-center gap-2"><Sparkles size={18} className="text-emerald-600"/><p className="text-emerald-600 text-xs font-black tracking-wide">AI CUSTOMER SUPPORT ASSISTANT</p></div><h2 className="text-xl font-bold mt-1">How can I help?</h2><p className="text-sm text-slate-500 mt-1">Ask about your order, cancellation, replacement, refund, COD, or Customer Care. Account/order answers use your actual DUKAANGRID data.</p><div className="flex gap-2 mt-4"><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void ask();}} placeholder="e.g. Where is my order?" className="flex-1 border rounded-xl px-4 py-3 outline-none focus:ring-2 ring-emerald-100"/><button disabled={!query.trim()||loading} onClick={()=>void ask()} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">{loading?"Checking...":"Ask"}</button></div>{error&&<p className="mt-3 text-sm text-red-700 font-semibold">{error}</p>}{result&&<div className="mt-4 rounded-2xl bg-slate-50 border p-4"><p className="text-sm text-slate-700">{result.answer}</p>{result.cod&&<div className="mt-3 text-xs bg-white border rounded-xl p-3"><b>COD status: {result.cod.label}</b>{result.cod.reason&&<p className="text-slate-500 mt-1">{result.cod.reason}</p>}</div>}{result.orders?.length>0&&<div className="mt-3 space-y-2">{result.orders.map((o:any)=><button key={String(o._id)} type="button" onClick={()=>onOpenOrder?.(String(o._id))} className="w-full text-left bg-white border rounded-xl p-3 hover:bg-emerald-50"><div className="flex justify-between gap-2 text-sm"><b>Order #{String(o._id).slice(-8)}</b><span className="font-semibold">{o.status}</span></div><p className="text-xs text-slate-500 mt-1">{money(Number(o.total||0))} · {o.createdAt?new Date(o.createdAt).toLocaleString("en-IN"):""}</p></button>)}</div>}{result.handoffRequired&&<Link to="/support" className="inline-flex mt-3 bg-slate-900 text-white rounded-xl px-4 py-2.5 text-sm font-bold">Open Customer Support</Link>}</div>}</section>;
 }
 
 function CustomerSupport({ store }: { store: ReturnType<typeof useStore> }) {
@@ -6671,7 +6746,7 @@ function CustomerSupport({ store }: { store: ReturnType<typeof useStore> }) {
         <AISupportAssistant store={store} onOpenOrder={openAIAssistantOrder}/>
         <div className="mb-4"><WebsiteBackButton fallback="/orders" label="Back to orders" /></div><div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><p className="text-emerald-600 text-sm font-bold">CUSTOMER SUPPORT</p><h1 className="text-3xl font-bold">Help & Support</h1><p className="text-slate-500 mt-1">Create an issue, request item-level refund/replacement and chat with Customer Care.</p><div className="flex flex-wrap gap-2 mt-3 text-xs"><span className="bg-emerald-50 text-emerald-700 rounded-full px-3 py-1.5 font-bold">Customer ID: {store.user?.customerId || "—"}</span><span className="bg-slate-100 text-slate-600 rounded-full px-3 py-1.5 font-semibold">Open tickets: {tickets.filter((t:any)=>!["RESOLVED","CLOSED"].includes(t.status)).length}</span><span className="bg-slate-100 text-slate-600 rounded-full px-3 py-1.5 font-semibold">Resolved: {tickets.filter((t:any)=>["RESOLVED","CLOSED"].includes(t.status)).length}</span></div></div><Link to="/orders" className="border rounded-xl px-4 py-2 font-semibold">My Orders</Link></div>
     <div className="grid lg:grid-cols-2 gap-5"><section className="bg-white border rounded-3xl p-6"><h2 className="font-bold text-xl">Create Support Ticket</h2><div className="grid md:grid-cols-2 gap-3 mt-4"><label className="text-sm font-semibold">Order<select value={form.orderId} onChange={e=>openOrder(e.target.value)} className="mt-2 w-full border rounded-xl p-3"><option value="">Select order</option>{orders.map(o=><option key={o._id} value={o._id}>#{String(o._id).slice(-8)} · {o.status}</option>)}</select></label><label className="text-sm font-semibold">Product/item<select value={form.orderItemId} onChange={e=>setForm({...form,orderItemId:e.target.value})} className="mt-2 w-full border rounded-xl p-3"><option value="">Select item</option>{(options?.items||[]).map((i:any)=><option key={i.key} value={i.key}>{i.name} × {i.quantity}</option>)}</select></label><label className="text-sm font-semibold">Issue<select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} className="mt-2 w-full border rounded-xl p-3">{["Order Issue","Missing Item","Wrong Item","Damaged Item","Damaged Product","Quality Issue","Delivery Issue","Payment Issue","Refund","Replacement","Account","Technical","Expired Product","Late Delivery","Delivery Partner Issue","Wrong Delivery Location","Order Not Received","Payment Failed","Payment Deducted but Order Failed","Refund Issue","Cancellation Request","Replacement Request","Coupon Issue","Product Quality Issue","Account/Login Issue","Other"].map(x=><option key={x}>{x}</option>)}</select></label><label className="text-sm font-semibold">Priority<select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})} className="mt-2 w-full border rounded-xl p-3"><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>URGENT</option></select></label></div><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Describe your issue" className="mt-3 w-full border rounded-xl p-3 min-h-28"/><label className="block mt-3 text-sm font-semibold">Evidence image<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const f=e.target.files?.[0];if(f)fileToData(f,x=>setForm(v=>({...v,evidence:[...v.evidence,x].slice(0,3)})))}} className="mt-2 w-full"/><div className="mt-2"><ImagePickerButtons compact onFile={(f)=>fileToData(f,x=>setForm(v=>({...v,evidence:[...v.evidence,x].slice(0,3)})))}/></div><span className="text-xs text-slate-400">Up to 3 images, 700 KB each.</span></label>{form.evidence.length>0&&<p className="text-xs text-emerald-700 mt-2">{form.evidence.length} evidence image(s) ready.</p>}<button disabled={busy} onClick={create} className="mt-4 bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold disabled:opacity-50">Create Ticket</button></section>
-    <section className="bg-white border rounded-3xl p-6"><h2 className="font-bold text-xl">Refund / Replacement</h2><p className="text-sm text-slate-500 mt-1">Requests are always tied to a specific delivered item.</p>{selectedRefundItem?<div className="mt-4 border rounded-2xl p-3"><div className="flex justify-between gap-3"><div><b>{selectedRefundItem.name}</b><p className="text-xs text-slate-500">{selectedRefundItem.quantity} × {money(selectedRefundItem.price)}</p></div><div className="text-right text-xs">{selectedRefundItem.policy?.refundEligible?<span className="text-emerald-700">✓ Refund</span>:<span className="text-red-600">✕ Refund</span>}<br/>{selectedRefundItem.policy?.replacementEligible?<span className="text-emerald-700">✓ Replacement</span>:<span className="text-red-600">✕ Replacement</span>}</div></div><button type="button" onClick={()=>{setRefund((r:any)=>({...r,itemId:"",amount:""}));setAgreeTerms(false);}} className="mt-2 border rounded-xl px-3 py-2 text-sm font-bold">Change item</button></div>:options?.items?.length?<div className="mt-4 space-y-2">{options.items.map((i:any)=><div key={i.key} className="border rounded-2xl p-3"><div className="flex justify-between gap-3"><div><b>{i.name}</b><p className="text-xs text-slate-500">{i.quantity} × {money(i.price)}</p></div><div className="text-right text-xs">{i.policy?.refundEligible?<span className="text-emerald-700">✓ Refund</span>:<span className="text-red-600">✕ Refund</span>}<br/>{i.policy?.replacementEligible?<span className="text-emerald-700">✓ Replacement</span>:<span className="text-red-600">✕ Replacement</span>}</div></div><button type="button" onClick={()=>setRefund((r:any)=>({...r,itemId:i.key,amount:String(Number(i.refundableAmount??Number(i.price||0)*Number(i.quantity||0)))}))} className="mt-2 border rounded-xl px-3 py-2 text-sm font-bold">Select item</button></div>)}</div>:<div className="mt-5 p-5 rounded-2xl bg-slate-50 text-sm text-slate-500">Select an order above to see eligible items.</div>}{refund.itemId&&selectedRefundItem&&<div className="mt-4 border-t pt-4"><textarea value={refund.reason} onChange={e=>setRefund({...refund,reason:e.target.value})} placeholder="Reason" className="w-full border rounded-xl p-3 min-h-20"/><label className="block mt-2 text-sm font-semibold">Refund amount<input type="number" min="0.01" step="0.01" max={Number(selectedRefundItem.refundableAmount??0)} value={refund.amount} onChange={e=>setRefund({...refund,amount:e.target.value})} placeholder={`Amount (max ${money(Number(selectedRefundItem.refundableAmount??0))})`} className="mt-2 w-full border rounded-xl p-3"/><span className="text-xs text-slate-500 mt-1 block">You can request a full or partial refund for this item.</span></label><select value={refund.method} onChange={e=>setRefund({...refund,method:e.target.value})} className="mt-2 w-full border rounded-xl p-3"><option value="ORIGINAL">Original Payment Method</option><option value="BANK">Bank Account</option><option value="UPI">UPI</option></select>{refund.method==="BANK"&&<div className="grid md:grid-cols-2 gap-2 mt-2"><input value={refund.accountHolderName} onChange={e=>setRefund({...refund,accountHolderName:e.target.value})} placeholder="Account Holder Name" className="border rounded-xl p-3"/><select value={refund.bankName} onChange={e=>setRefund({...refund,bankName:e.target.value})} className="border rounded-xl p-3"><option value="">Select bank</option>{["State Bank of India","HDFC Bank","ICICI Bank","Axis Bank","Punjab National Bank","Bank of Baroda","Canara Bank","Union Bank of India","Bank of India","Indian Bank","Kotak Mahindra Bank","IndusInd Bank","IDBI Bank","Yes Bank","Federal Bank","AU Small Finance Bank","Bandhan Bank","IDFC FIRST Bank","South Indian Bank","RBL Bank","UCO Bank","Central Bank of India","Indian Overseas Bank","Bank of Maharashtra","Other Bank"].map(x=><option key={x}>{x}</option>)}</select>{refund.bankName==="Other Bank"&&<input value={refund.otherBankName||""} onChange={e=>setRefund({...refund,otherBankName:e.target.value})} placeholder="Other bank name" className="border rounded-xl p-3"/>}<input value={refund.accountNumber} onChange={e=>setRefund({...refund,accountNumber:e.target.value})} placeholder="Account Number" className="border rounded-xl p-3"/><input value={refund.confirmAccountNumber} onChange={e=>setRefund({...refund,confirmAccountNumber:e.target.value})} placeholder="Confirm Account Number" className="border rounded-xl p-3"/><input value={refund.ifsc} onChange={e=>setRefund({...refund,ifsc:e.target.value.toUpperCase()})} placeholder="IFSC" className="border rounded-xl p-3"/></div>}{refund.method==="UPI"&&<div className="grid md:grid-cols-2 gap-2 mt-2"><input value={refund.upiId} onChange={e=>setRefund({...refund,upiId:e.target.value})} placeholder="UPI ID" className="border rounded-xl p-3"/><input value={refund.confirmUpiId} onChange={e=>setRefund({...refund,confirmUpiId:e.target.value})} placeholder="Confirm UPI ID" className="border rounded-xl p-3"/></div>}<div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm"><b>Applicable terms</b><p className="text-xs text-slate-600 mt-1">{(selectedRefundItem.policy?.refundTerms || selectedRefundItem.policy?.replacementTerms || "Standard FreshBasket policy applies. Eligibility is subject to the configured window and order status.")}</p></div><label className="flex items-center gap-2 mt-3 text-sm font-semibold"><input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)}/> I have read and agree to the applicable refund/replacement terms.</label><label className="block mt-2 text-sm font-semibold">Evidence<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const f=e.target.files?.[0];if(f)fileToData(f,x=>setRefund((v:any)=>({...v,evidence:[...v.evidence,x].slice(0,3)})))}} className="mt-2 w-full"/><div className="mt-2"><ImagePickerButtons compact onFile={(f)=>fileToData(f,x=>setRefund((v:any)=>({...v,evidence:[...v.evidence,x].slice(0,3)})))}/></div></label><div className="flex flex-wrap gap-2 mt-3">{(typeof selectedRefundItem.canRequestRefund==="boolean"?selectedRefundItem.canRequestRefund:selectedRefundItem.policy?.refundEligible) && <button disabled={busy} onClick={()=>request("refund")} className="bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold">Request Refund</button>}{(typeof selectedRefundItem.canRequestReplacement==="boolean"?selectedRefundItem.canRequestReplacement:selectedRefundItem.policy?.replacementEligible) && <button disabled={busy} onClick={()=>request("replacement")} className="bg-blue-600 text-white rounded-xl px-4 py-2.5 font-bold">Request Replacement</button>}</div></div>}</section></div>
+    <section className="bg-white border rounded-3xl p-6"><h2 className="font-bold text-xl">Refund / Replacement</h2><p className="text-sm text-slate-500 mt-1">Requests are always tied to a specific delivered item.</p>{selectedRefundItem?<div className="mt-4 border rounded-2xl p-3"><div className="flex justify-between gap-3"><div><b>{selectedRefundItem.name}</b><p className="text-xs text-slate-500">{selectedRefundItem.quantity} × {money(selectedRefundItem.price)}</p></div><div className="text-right text-xs">{selectedRefundItem.policy?.refundEligible?<span className="text-emerald-700">✓ Refund</span>:<span className="text-red-600">✕ Refund</span>}<br/>{selectedRefundItem.policy?.replacementEligible?<span className="text-emerald-700">✓ Replacement</span>:<span className="text-red-600">✕ Replacement</span>}</div></div><button type="button" onClick={()=>{setRefund((r:any)=>({...r,itemId:"",amount:""}));setAgreeTerms(false);}} className="mt-2 border rounded-xl px-3 py-2 text-sm font-bold">Change item</button></div>:options?.items?.length?<div className="mt-4 space-y-2">{options.items.map((i:any)=><div key={i.key} className="border rounded-2xl p-3"><div className="flex justify-between gap-3"><div><b>{i.name}</b><p className="text-xs text-slate-500">{i.quantity} × {money(i.price)}</p></div><div className="text-right text-xs">{i.policy?.refundEligible?<span className="text-emerald-700">✓ Refund</span>:<span className="text-red-600">✕ Refund</span>}<br/>{i.policy?.replacementEligible?<span className="text-emerald-700">✓ Replacement</span>:<span className="text-red-600">✕ Replacement</span>}</div></div><button type="button" onClick={()=>setRefund((r:any)=>({...r,itemId:i.key,amount:String(Number(i.refundableAmount??Number(i.price||0)*Number(i.quantity||0)))}))} className="mt-2 border rounded-xl px-3 py-2 text-sm font-bold">Select item</button></div>)}</div>:<div className="mt-5 p-5 rounded-2xl bg-slate-50 text-sm text-slate-500">Select an order above to see eligible items.</div>}{refund.itemId&&selectedRefundItem&&<div className="mt-4 border-t pt-4"><textarea value={refund.reason} onChange={e=>setRefund({...refund,reason:e.target.value})} placeholder="Reason" className="w-full border rounded-xl p-3 min-h-20"/><label className="block mt-2 text-sm font-semibold">Refund amount<input type="number" min="0.01" step="0.01" max={Number(selectedRefundItem.refundableAmount??0)} value={refund.amount} onChange={e=>setRefund({...refund,amount:e.target.value})} placeholder={`Amount (max ${money(Number(selectedRefundItem.refundableAmount??0))})`} className="mt-2 w-full border rounded-xl p-3"/><span className="text-xs text-slate-500 mt-1 block">You can request a full or partial refund for this item.</span></label><select value={refund.method} onChange={e=>setRefund({...refund,method:e.target.value})} className="mt-2 w-full border rounded-xl p-3"><option value="ORIGINAL">Original Payment Method</option><option value="BANK">Bank Account</option><option value="UPI">UPI</option></select>{refund.method==="BANK"&&<div className="grid md:grid-cols-2 gap-2 mt-2"><input value={refund.accountHolderName} onChange={e=>setRefund({...refund,accountHolderName:e.target.value})} placeholder="Account Holder Name" className="border rounded-xl p-3"/><select value={refund.bankName} onChange={e=>setRefund({...refund,bankName:e.target.value})} className="border rounded-xl p-3"><option value="">Select bank</option>{["State Bank of India","HDFC Bank","ICICI Bank","Axis Bank","Punjab National Bank","Bank of Baroda","Canara Bank","Union Bank of India","Bank of India","Indian Bank","Kotak Mahindra Bank","IndusInd Bank","IDBI Bank","Yes Bank","Federal Bank","AU Small Finance Bank","Bandhan Bank","IDFC FIRST Bank","South Indian Bank","RBL Bank","UCO Bank","Central Bank of India","Indian Overseas Bank","Bank of Maharashtra","Other Bank"].map(x=><option key={x}>{x}</option>)}</select>{refund.bankName==="Other Bank"&&<input value={refund.otherBankName||""} onChange={e=>setRefund({...refund,otherBankName:e.target.value})} placeholder="Other bank name" className="border rounded-xl p-3"/>}<input value={refund.accountNumber} onChange={e=>setRefund({...refund,accountNumber:e.target.value})} placeholder="Account Number" className="border rounded-xl p-3"/><input value={refund.confirmAccountNumber} onChange={e=>setRefund({...refund,confirmAccountNumber:e.target.value})} placeholder="Confirm Account Number" className="border rounded-xl p-3"/><input value={refund.ifsc} onChange={e=>setRefund({...refund,ifsc:e.target.value.toUpperCase()})} placeholder="IFSC" className="border rounded-xl p-3"/></div>}{refund.method==="UPI"&&<div className="grid md:grid-cols-2 gap-2 mt-2"><input value={refund.upiId} onChange={e=>setRefund({...refund,upiId:e.target.value})} placeholder="UPI ID" className="border rounded-xl p-3"/><input value={refund.confirmUpiId} onChange={e=>setRefund({...refund,confirmUpiId:e.target.value})} placeholder="Confirm UPI ID" className="border rounded-xl p-3"/></div>}<div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm"><b>Applicable terms</b><p className="text-xs text-slate-600 mt-1">{(selectedRefundItem.policy?.refundTerms || selectedRefundItem.policy?.replacementTerms || "Standard DUKAANGRID policy applies. Eligibility is subject to the configured window and order status.")}</p></div><label className="flex items-center gap-2 mt-3 text-sm font-semibold"><input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)}/> I have read and agree to the applicable refund/replacement terms.</label><label className="block mt-2 text-sm font-semibold">Evidence<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const f=e.target.files?.[0];if(f)fileToData(f,x=>setRefund((v:any)=>({...v,evidence:[...v.evidence,x].slice(0,3)})))}} className="mt-2 w-full"/><div className="mt-2"><ImagePickerButtons compact onFile={(f)=>fileToData(f,x=>setRefund((v:any)=>({...v,evidence:[...v.evidence,x].slice(0,3)})))}/></div></label><div className="flex flex-wrap gap-2 mt-3">{(typeof selectedRefundItem.canRequestRefund==="boolean"?selectedRefundItem.canRequestRefund:selectedRefundItem.policy?.refundEligible) && <button disabled={busy} onClick={()=>request("refund")} className="bg-emerald-600 text-white rounded-xl px-4 py-2.5 font-bold">Request Refund</button>}{(typeof selectedRefundItem.canRequestReplacement==="boolean"?selectedRefundItem.canRequestReplacement:selectedRefundItem.policy?.replacementEligible) && <button disabled={busy} onClick={()=>request("replacement")} className="bg-blue-600 text-white rounded-xl px-4 py-2.5 font-bold">Request Replacement</button>}</div></div>}</section></div>
     <section className="bg-white border rounded-3xl p-6"><h2 className="font-bold text-xl">Refund & Replacement Status</h2><div className="grid md:grid-cols-2 gap-3 mt-4"><div><h3 className="font-semibold">Refunds</h3>{(requestHistory.refunds||[]).map((r:any)=><div key={r._id} className="border rounded-xl p-3 mt-2 text-sm">Order #{String(r.order?._id||r.order||"").slice(-8)} · {r.status} · {money(r.approvedAmount??r.requestedAmount??r.amount)}</div>)}</div><div><h3 className="font-semibold">Replacements</h3>{(requestHistory.replacements||[]).map((r:any)=><div key={r._id} className="border rounded-xl p-3 mt-2 text-sm">Order #{String(r.order?._id||r.order||"").slice(-8)} · {r.status}</div>)}</div></div></section>
     <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-6 border-b"><h2 className="font-bold text-xl">My Support Tickets</h2></div>{loading?<div className="p-10 text-center text-slate-500">Loading...</div>:tickets.length?<div className="divide-y">{tickets.map(t=><button key={t._id} onClick={()=>openTicket(t._id)} className="w-full text-left p-5 hover:bg-slate-50"><div className="flex flex-wrap items-center gap-2"><b>{t.ticketId}</b><span className="text-xs rounded-full px-2 py-1 bg-slate-100">{t.status}</span><span className="text-xs rounded-full px-2 py-1 bg-amber-50 text-amber-700">{t.priority}</span></div><p className="text-sm text-slate-600 mt-2">{t.category} · {new Date(t.createdAt).toLocaleString("en-IN")}</p></button>)}</div>:<div className="p-10 text-center text-slate-500">No support tickets yet.</div>}</section>
     {selected&&<div className="fixed inset-0 z-[90] bg-black/40 p-4 grid place-items-center"><div className="w-full max-w-2xl bg-white rounded-3xl p-6 max-h-[90vh] overflow-y-auto"><div className="flex justify-between"><div><h3 className="text-xl font-bold">{selected.ticketId}</h3><p className="text-sm text-slate-500">{selected.category} · {selected.status}</p></div><button onClick={()=>setSelected(null)}><X/></button></div><div className="mt-4 space-y-3">{(selected.messages||[]).map((m:any,i:number)=><div key={i} className={`p-3 rounded-2xl ${m.senderRole==="customer"?'bg-emerald-50':'bg-slate-100'}`}><p className="text-sm">{m.message}</p><p className="text-[11px] text-slate-400 mt-1">{new Date(m.createdAt).toLocaleString("en-IN")}</p></div>)}</div>{selected.status==="RESOLVED"&&<button onClick={async()=>{try{const r=await axios.patch(API+"/customer/support/tickets/"+selected._id+"/close",{}, {headers});setSelected(r.data.data);load();}catch(e:any){alert(e?.response?.data?.message||"Unable to close ticket")}}} className="mt-4 border rounded-xl px-4 py-2 font-bold">Close resolved ticket</button>}<div className="flex gap-2 mt-4"><input value={message} onChange={e=>setMessage(e.target.value)} placeholder="Reply to Customer Care" className="flex-1 border rounded-xl p-3"/><button disabled={busy} onClick={reply} className="bg-emerald-600 text-white rounded-xl px-4 font-bold">Send</button></div></div></div>}
@@ -6771,7 +6846,7 @@ function NotificationsPage({
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">Notifications</h1>
-            <p className="text-slate-500 mt-1">Stay updated about your FreshBasket activity.</p>
+            <p className="text-slate-500 mt-1">Stay updated about your DUKAANGRID activity.</p>
           </div>
           <button onClick={markAll} className="border rounded-xl px-4 py-2 text-sm font-bold">Mark all read</button>
         </div>
@@ -7329,15 +7404,15 @@ function OrderTracking({
       const Razorpay = (window as any).Razorpay;
       const checkout = new Razorpay({
         key: session.keyId, amount: Math.round(Number(session.amount || order.total || 0) * 100), currency: session.currency || "INR",
-        name: "FreshBasket", description: `Order #${String(order._id).slice(-8).toUpperCase()}`, order_id: session.razorpayOrderId,
+        name: "DUKAANGRID", description: `Order #${String(order._id).slice(-8).toUpperCase()}`, order_id: session.razorpayOrderId,
         prefill: { name: store.user?.name || "", email: store.user?.email || "", contact: store.user?.phone || "" },
-        notes: { freshbasket_order_id: String(order._id) },
+        notes: { DUKAANGRID_order_id: String(order._id) },
         config: {
           display: {
             blocks: {
-              freshbasket_upi: { name: "UPI", instruments: [{ method: "upi" }] }
+              DUKAANGRID_upi: { name: "UPI", instruments: [{ method: "upi" }] }
             },
-            sequence: ["block.freshbasket_upi"],
+            sequence: ["block.DUKAANGRID_upi"],
             preferences: { show_default_blocks: true }
           }
         },
@@ -8048,11 +8123,11 @@ function Invoice({
             onClick={async () => {
               try {
                 if (IS_NATIVE_APP) {
-                  await CapacitorPrinter.printWebView({ name: `FreshBasket Invoice ${invoiceNumber}` });
+                  await CapacitorPrinter.printWebView({ name: `DUKAANGRID Invoice ${invoiceNumber}` });
                   return;
                 }
               } catch (error) {
-                console.warn("FreshBasket native invoice print failed, falling back to browser print", error);
+                console.warn("DUKAANGRID native invoice print failed, falling back to browser print", error);
               }
               window.print();
             }}
@@ -8070,11 +8145,11 @@ function Invoice({
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
                   <span className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center shadow-sm">
-                    <Leaf size={22} />
+                    <Boxes size={22} />
                   </span>
                   <div>
                     <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-                      Fresh<span className="text-emerald-600">Basket</span>
+                      DUKAANGRID
                     </h1>
                     <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                       Your neighbourhood marketplace, delivered with care.
@@ -8237,9 +8312,9 @@ function Invoice({
             <div className="mx-auto w-10 h-10 rounded-full bg-emerald-600 text-white grid place-items-center mb-3">
               <Heart size={18} />
             </div>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-900">Thank You for Shopping with FreshBasket!</h3>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900">Thank You for Shopping with DUKAANGRID!</h3>
             <p className="max-w-2xl mx-auto text-sm leading-6 text-slate-600 mt-3">
-              Thank you for trusting FreshBasket with your everyday needs. We truly appreciate your order and hope we made your shopping experience simple, reliable, and convenient.
+              Thank you for trusting DUKAANGRID with your everyday needs. We truly appreciate your order and hope we made your shopping experience simple, reliable, and convenient.
             </p>
             <p className="text-sm font-semibold text-emerald-700 mt-3">
               We'd love to serve you again. See you on your next order!
@@ -8255,7 +8330,7 @@ function Invoice({
                   <h3 className="font-black">Your Trust Matters to Us</h3>
                 </div>
                 <p className="text-sm leading-6 text-slate-600 mt-3">
-                  Every order you place with FreshBasket helps us build a better local shopping experience. We are committed to reliable service, transparent pricing, quality products, and dependable delivery.
+                  Every order you place with DUKAANGRID helps us build a better local shopping experience. We are committed to reliable service, transparent pricing, quality products, and dependable delivery.
                 </p>
               </div>
 
@@ -8265,7 +8340,7 @@ function Invoice({
                   <h3 className="font-black">Shop Local. Support Local. Grow Together.</h3>
                 </div>
                 <p className="text-sm leading-6 text-slate-600 mt-3">
-                  FreshBasket connects you with trusted local stores and delivery partners, bringing the convenience of online shopping closer to your neighbourhood.
+                  DUKAANGRID connects you with trusted local stores and delivery partners, bringing the convenience of online shopping closer to your neighbourhood.
                 </p>
               </div>
             </div>
@@ -8313,15 +8388,15 @@ function Invoice({
               <div className="max-w-lg">
                 <div className="flex items-center gap-2">
                   <span className="w-8 h-8 rounded-xl bg-emerald-600 grid place-items-center">
-                    <Leaf size={16} />
+                    <Boxes size={16} />
                   </span>
-                  <span className="font-black text-lg">FreshBasket</span>
+                  <span className="font-black text-lg">DUKAANGRID</span>
                 </div>
                 <p className="text-sm font-semibold text-white mt-4">
-                  Thank you for choosing FreshBasket.
+                  Thank you for choosing DUKAANGRID.
                 </p>
                 <p className="text-xs leading-5 text-slate-300 mt-1.5">
-                  FreshBasket — Your neighbourhood marketplace, delivered with care.
+                  DUKAANGRID — Your neighbourhood marketplace, delivered with care.
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
                   Made for local shoppers. Built for local businesses.
@@ -8335,7 +8410,7 @@ function Invoice({
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-400">
-              <span>Thank you for choosing FreshBasket.</span>
+              <span>Thank you for choosing DUKAANGRID.</span>
               <span>Invoice {invoiceNumber}</span>
             </div>
           </footer>
@@ -8373,7 +8448,7 @@ function BarcodeScannerModal({
           const requested = await CapacitorBarcodeScanner.requestPermissions();
           if (requested.camera !== "granted") {
             throw new Error(
-              "Camera permission was denied. Go to Android Settings → Apps → FreshBasket → Permissions → Camera → Allow."
+              "Camera permission was denied. Go to Android Settings → Apps → DUKAANGRID → Permissions → Camera → Allow."
             );
           }
         }
@@ -9384,7 +9459,7 @@ function AdminOrders() {
 
            <select value={sourceType} onChange={e=>{setSourceType(e.target.value);setPage(1)}} className="border rounded-xl px-3 py-2.5">
              <option value="">All sources</option>
-             <option value="FRESHBASKET_DIRECT">FreshBasket Direct</option>
+             <option value="DUKAANGRID_DIRECT">DUKAANGRID Direct</option>
              <option value="STORE">Store orders</option>
            </select>
            {storeAdmins.length > 1 && <select value={storeAdminId} onChange={e=>{setStoreAdminId(e.target.value);setPage(1)}} className="border rounded-xl px-3 py-2.5"><option value="">All stores</option>{storeAdmins.map((a:any)=><option key={a._id} value={a._id}>{a.name}</option>)}</select>}
@@ -11186,12 +11261,12 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
         const Razorpay=(window as any).Razorpay;
         const checkout=new Razorpay({
           key:session.keyId, amount:Math.round(Number(session.amount||0)*100), currency:session.currency||"INR",
-          name:"FreshBasket", description:`Order #${String(id).slice(-8).toUpperCase()}`, order_id:session.razorpayOrderId,
-          notes:{freshbasket_order_id:String(id)},
+          name:"DUKAANGRID", description:`Order #${String(id).slice(-8).toUpperCase()}`, order_id:session.razorpayOrderId,
+          notes:{DUKAANGRID_order_id:String(id)},
           config:{
             display:{
-              blocks:{freshbasket_upi:{name:"UPI",instruments:[{method:"upi"}]}},
-              sequence:["block.freshbasket_upi"],
+              blocks:{DUKAANGRID_upi:{name:"UPI",instruments:[{method:"upi"}]}},
+              sequence:["block.DUKAANGRID_upi"],
               preferences:{show_default_blocks:true}
             }
           },
@@ -11280,7 +11355,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
               <Truck size={22} />
             </div>
             <div>
-              <h1 className="font-bold text-xl">FreshBasket Delivery</h1>
+              <h1 className="font-bold text-xl">DUKAANGRID Delivery</h1>
               <p className="text-xs text-slate-500">
                 Delivery Partner Dashboard
               </p>
@@ -11400,7 +11475,7 @@ function DeliveryDashboard({ store }: { store: ReturnType<typeof useStore> }) {
           <section className="bg-white border rounded-3xl p-5">
             <p className="text-xs text-emerald-600 font-black uppercase tracking-wider">Location Status</p>
             <h2 className="text-xl font-black mt-1">{myLocation ? "Live location active" : "Location unavailable"}</h2>
-            <p className="text-sm text-slate-500 mt-2">{myLocation ? "Your device GPS is being sent securely to FreshBasket for operational delivery tracking." : "Allow precise location/GPS permission to enable live tracking."}</p>
+            <p className="text-sm text-slate-500 mt-2">{myLocation ? "Your device GPS is being sent securely to DUKAANGRID for operational delivery tracking." : "Allow precise location/GPS permission to enable live tracking."}</p>
             {myLocation && <div className="mt-4 text-xs font-mono bg-slate-50 border rounded-xl p-3">Lat {myLocation.latitude.toFixed(6)}<br/>Lng {myLocation.longitude.toFixed(6)}</div>}
           </section>
         </div>
@@ -12803,7 +12878,7 @@ function IdentityQr({ value }: { value: string }) {
   const [failed, setFailed] = useState(false);
 
   const verificationOrigin = IS_NATIVE_APP
-    ? "https://freshbasket-grocery-shop.vercel.app"
+    ? "https://DUKAANGRID-grocery-shop.vercel.app"
     : window.location.origin;
 
   const verificationUrl = value
@@ -12812,7 +12887,7 @@ function IdentityQr({ value }: { value: string }) {
   const qrUrl = verificationUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=18&ecc=H&data=${encodeURIComponent(verificationUrl)}` : "";
   useEffect(() => setFailed(false), [value]);
   return <div className="w-36 h-36 bg-white p-2 rounded-xl border border-slate-200 grid place-items-center shrink-0">
-    {qrUrl && !failed ? <img src={qrUrl} alt="Scan to verify FreshBasket employee identity" className="w-full h-full object-contain" onError={() => setFailed(true)} referrerPolicy="no-referrer" /> : <div className="text-center text-[10px] font-bold text-red-600 px-2">QR unavailable</div>}
+    {qrUrl && !failed ? <img src={qrUrl} alt="Scan to verify DUKAANGRID employee identity" className="w-full h-full object-contain" onError={() => setFailed(true)} referrerPolicy="no-referrer" /> : <div className="text-center text-[10px] font-bold text-red-600 px-2">QR unavailable</div>}
   </div>;
 }
 
@@ -12821,8 +12896,8 @@ function ProfessionalIdCard({ card, printId = "fb-id-card-print" }: { card: any;
   const type = String(card?.holderType || "");
   return <div id={printId} className="w-[420px] min-h-[690px] bg-white rounded-[30px] border border-slate-200 shadow-xl overflow-hidden shrink-0">
     <div className="bg-emerald-600 text-white p-6 flex items-center gap-3">
-      <div className="w-12 h-12 rounded-2xl bg-white text-emerald-700 grid place-items-center"><Leaf size={27} /></div>
-      <div><div className="text-2xl font-black">FreshBasket</div><div className="text-xs font-bold tracking-widest uppercase">Official Employee Identity Card</div></div>
+      <div className="w-12 h-12 rounded-2xl bg-white text-emerald-700 grid place-items-center"><Boxes size={27} /></div>
+      <div><div className="text-2xl font-black">DUKAANGRID</div><div className="text-xs font-bold tracking-widest uppercase">Official Employee Identity Card</div></div>
     </div>
     <div className="p-6">
       <div className="flex gap-5 items-start">
@@ -12831,7 +12906,7 @@ function ProfessionalIdCard({ card, printId = "fb-id-card-print" }: { card: any;
       </div>
       <div className="grid grid-cols-2 gap-3 mt-6 text-sm">{[["Department", card?.department], ["Email", card?.email], ["Mobile", card?.phone], ["Valid until", card?.expiryDate ? new Date(card.expiryDate).toLocaleDateString("en-IN") : "N/A"]].map(([label, value]) => <div key={String(label)} className="border rounded-xl p-3"><div className="text-[9px] uppercase tracking-widest text-slate-400">{label}</div><div className="font-semibold mt-1 break-words">{value || "N/A"}</div></div>)}</div>
       <div className="mt-5 flex items-center justify-between gap-4"><IdentityQr value={card?.verificationToken || card?.cardNumber || card?._id || ""} /><div className={`rounded-full px-3 py-2 text-xs font-black ${status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{status}</div></div>
-      <p className="text-[10px] text-slate-400 text-center mt-5">Property of FreshBasket · Verify using the QR code</p>
+      <p className="text-[10px] text-slate-400 text-center mt-5">Property of DUKAANGRID · Verify using the QR code</p>
     </div>
   </div>;
 }
@@ -12874,7 +12949,7 @@ const printCard = async (card: any) => {
        */
       if (IS_NATIVE_APP) {
         await CapacitorPrinter.printWebView({
-          name: `FreshBasket ID Card ${card.cardNumber || card.name || "Employee"}`,
+          name: `DUKAANGRID ID Card ${card.cardNumber || card.name || "Employee"}`,
         });
         return;
       }
@@ -12902,7 +12977,7 @@ const printCard = async (card: any) => {
         <html>
           <head>
             <meta charset="UTF-8" />
-            <title>FreshBasket ID Card</title>
+            <title>DUKAANGRID ID Card</title>
             ${styles}
             <style>
               @page {
@@ -12942,7 +13017,7 @@ const printCard = async (card: any) => {
         }, 400);
       };
     } catch (error) {
-      console.error("FreshBasket ID card print failed:", error);
+      console.error("DUKAANGRID ID card print failed:", error);
 
       alert(
         IS_NATIVE_APP
@@ -12967,16 +13042,16 @@ function EmployeeVerificationPage() {
     })();
     return () => { cancelled = true; };
   }, [token]);
-  if (state.loading) return <div className="min-h-screen bg-slate-50 grid place-items-center p-5"><div className="bg-white rounded-3xl border shadow-xl p-8 text-center"><RefreshCw className="mx-auto animate-spin text-emerald-600"/><p className="font-bold mt-4">Verifying FreshBasket employee ID...</p></div></div>;
+  if (state.loading) return <div className="min-h-screen bg-slate-50 grid place-items-center p-5"><div className="bg-white rounded-3xl border shadow-xl p-8 text-center"><RefreshCw className="mx-auto animate-spin text-emerald-600"/><p className="font-bold mt-4">Verifying DUKAANGRID employee ID...</p></div></div>;
   if (state.error || !state.data) return <div className="min-h-screen bg-slate-50 grid place-items-center p-5"><div className="w-full max-w-md bg-white rounded-3xl border shadow-xl p-8 text-center"><div className="w-14 h-14 mx-auto rounded-full bg-red-50 text-red-600 grid place-items-center"><X size={28}/></div><h1 className="text-2xl font-black mt-4">✕ INVALID EMPLOYEE ID</h1><p className="text-sm text-slate-500 mt-2">{state.error || "Unable to verify this employee ID."}</p></div></div>;
   const d = state.data; const e = d.employee || {};
   const valid = d.status === "ACTIVE";
-  return <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-slate-100 p-5"><div className="max-w-2xl mx-auto"><div className="bg-white rounded-[32px] border shadow-2xl overflow-hidden"><div className="bg-emerald-600 text-white p-6 flex items-center gap-3"><div className="w-12 h-12 bg-white text-emerald-700 rounded-2xl grid place-items-center"><Leaf size={27}/></div><div><div className="font-black text-2xl">FreshBasket</div><div className="text-xs font-bold tracking-widest uppercase">Employee Verification</div></div></div><div className="p-6 sm:p-8">
-    <div className={`rounded-2xl p-4 border ${valid ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}><div className="font-black text-lg">{valid ? "✓ VERIFIED FRESHBASKET EMPLOYEE" : d.status === "EXPIRED" ? "⚠ ID CARD EXPIRED" : "✕ ID CARD INVALID / INACTIVE"}</div><div className="text-xs font-bold mt-1">Status: {d.status}</div></div>
+  return <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-slate-100 p-5"><div className="max-w-2xl mx-auto"><div className="bg-white rounded-[32px] border shadow-2xl overflow-hidden"><div className="bg-emerald-600 text-white p-6 flex items-center gap-3"><div className="w-12 h-12 bg-white text-emerald-700 rounded-2xl grid place-items-center"><Boxes size={27}/></div><div><div className="font-black text-2xl">DUKAANGRID</div><div className="text-xs font-bold tracking-widest uppercase">Employee Verification</div></div></div><div className="p-6 sm:p-8">
+    <div className={`rounded-2xl p-4 border ${valid ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}><div className="font-black text-lg">{valid ? "✓ VERIFIED DUKAANGRID EMPLOYEE" : d.status === "EXPIRED" ? "⚠ ID CARD EXPIRED" : "✕ ID CARD INVALID / INACTIVE"}</div><div className="text-xs font-bold mt-1">Status: {d.status}</div></div>
     <div className="flex gap-5 mt-7 items-start">{e.photo ? <img src={e.photo} alt={e.name} className="w-28 h-32 rounded-2xl object-cover border"/> : <div className="w-28 h-32 rounded-2xl bg-slate-100 grid place-items-center"><User className="text-slate-300" size={44}/></div>}<div><h1 className="text-2xl font-black break-words">{e.name || "N/A"}</h1><p className="font-bold text-slate-600 mt-1">{e.designation || "N/A"}</p><p className="text-sm text-slate-500 mt-2">Employee ID: <b>{e.employeeId || "N/A"}</b></p></div></div>
     <div className="grid sm:grid-cols-2 gap-4 mt-7">{[['Department',e.department],['Store / Branch',e.storeBranch],['Official Email',e.email],['Official Mobile',e.phone],['Issued Date',e.issuedDate ? new Date(e.issuedDate).toLocaleDateString("en-IN") : "N/A"],['Valid Until',e.validUntil ? new Date(e.validUntil).toLocaleDateString("en-IN") : "N/A"]].map(([label,value])=><div key={label as string} className="border rounded-2xl p-4"><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">{label}</div><div className="font-semibold text-sm mt-1 break-words">{value || "N/A"}</div></div>)}</div>
     <div className="mt-5 border rounded-2xl p-4"><div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">Verification timestamp</div><div className="font-semibold text-sm mt-1">{d.verificationTimestamp ? new Date(d.verificationTimestamp).toLocaleString("en-IN") : "N/A"}</div></div>
-    <p className="text-xs text-slate-500 mt-6 leading-5">This verification result is fetched from the FreshBasket backend. The QR code does not contain employee credentials or private account information.</p>
+    <p className="text-xs text-slate-500 mt-6 leading-5">This verification result is fetched from the DUKAANGRID backend. The QR code does not contain employee credentials or private account information.</p>
   </div></div></div></div>;
 }
 
@@ -12997,7 +13072,7 @@ function MyIdentityCard({ store }: { store: ReturnType<typeof useStore> }) {
   const status = String(card.currentStatus || card.status || "ACTIVE").toUpperCase();
   return <section className="bg-white border rounded-3xl p-5 sm:p-6 shadow-sm">
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-      <div><p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">My FreshBasket ID</p><h2 className="text-xl sm:text-2xl font-black mt-1">Your Employee Identity Card</h2><p className="text-xs sm:text-sm text-slate-500 mt-1">This card is linked to your FreshBasket account.</p></div>
+      <div><p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">My DUKAANGRID ID</p><h2 className="text-xl sm:text-2xl font-black mt-1">Your Employee Identity Card</h2><p className="text-xs sm:text-sm text-slate-500 mt-1">This card is linked to your DUKAANGRID account.</p></div>
       <div className={`self-start sm:self-auto inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}><span>●</span>{status}</div>
     </div>
     <div className="overflow-x-auto pb-1"><ProfessionalIdCard card={card} printId={`fb-my-id-card-${String(card._id || "card")}`} /></div>
@@ -13145,7 +13220,7 @@ function MainAdminIdCardGenerator() {
        */
       if (IS_NATIVE_APP) {
         await CapacitorPrinter.printWebView({
-          name: `FreshBasket ID Card ${card.cardNumber || card.name || "Employee"}`,
+          name: `DUKAANGRID ID Card ${card.cardNumber || card.name || "Employee"}`,
         });
         return;
       }
@@ -13173,7 +13248,7 @@ function MainAdminIdCardGenerator() {
         <html>
           <head>
             <meta charset="UTF-8" />
-            <title>FreshBasket ID Card</title>
+            <title>DUKAANGRID ID Card</title>
             ${styles}
             <style>
               @page {
@@ -13213,7 +13288,7 @@ function MainAdminIdCardGenerator() {
         }, 400);
       };
     } catch (error) {
-      console.error("FreshBasket ID card print failed:", error);
+      console.error("DUKAANGRID ID card print failed:", error);
 
       alert(
         IS_NATIVE_APP
@@ -13226,8 +13301,8 @@ function MainAdminIdCardGenerator() {
 
   return <div className="space-y-5">
     <style>{`@media print { html, body { margin:0 !important; padding:0 !important; width:100% !important; height:100% !important; overflow:hidden !important; background:#fff !important; } body * { visibility:hidden !important; } #fb-id-card-print-only, #fb-id-card-print-only * { visibility:visible !important; } #fb-id-card-print-only { position:fixed !important; left:50% !important; top:50% !important; transform:translate(-50%,-50%) !important; width:420px !important; min-width:420px !important; max-width:420px !important; min-height:690px !important; height:auto !important; margin:0 !important; box-shadow:none !important; border-radius:30px !important; } @page { size:A4 portrait; margin:0; } }`}</style>
-    <div><p className="text-emerald-600 text-sm font-bold">MAIN ADMIN ONLY</p><h2 className="text-2xl font-bold">Professional ID Card Generator</h2><p className="text-sm text-slate-500 mt-1">Generate official FreshBasket identity cards for Main Admins, Sub Admins, Delivery Partners, Store Admins, Customer Care team members, Finance team members, Operations, E-commerce and Marketplace, Inventory and Warehouse, Sales and Business Development, Marketing, Technology and IT, Human Resources and Administration, and other company employees. Only the main admin can create or revoke cards.</p></div>
-   <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 text-sm text-amber-900"><b>Verification:</b> Every generated card gets a unique FreshBasket ID number and a secure verification QR code. Keep the card details accurate and verify the holder's original documents before issuing it.</div>
+    <div><p className="text-emerald-600 text-sm font-bold">MAIN ADMIN ONLY</p><h2 className="text-2xl font-bold">Professional ID Card Generator</h2><p className="text-sm text-slate-500 mt-1">Generate official DUKAANGRID identity cards for Main Admins, Sub Admins, Delivery Partners, Store Admins, Customer Care team members, Finance team members, Operations, E-commerce and Marketplace, Inventory and Warehouse, Sales and Business Development, Marketing, Technology and IT, Human Resources and Administration, and other company employees. Only the main admin can create or revoke cards.</p></div>
+   <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 text-sm text-amber-900"><b>Verification:</b> Every generated card gets a unique DUKAANGRID ID number and a secure verification QR code. Keep the card details accurate and verify the holder's original documents before issuing it.</div>
     <div className="bg-white border rounded-3xl p-6">
       <h3 className="font-bold text-lg">Create new identity card</h3>
       <div className="grid md:grid-cols-3 gap-4 mt-5">
@@ -13325,7 +13400,7 @@ function AdminManagement({ store }: { store: ReturnType<typeof useStore> }) {
 }
 
 function AdminStoreLocation({ store }: { store: ReturnType<typeof useStore> }) {
-  const [form, setForm] = useState({ name: "FreshBasket Store", address: "", latitude: "", longitude: "", accuracy: "", image: "", imageUrl: "", category: "Local Store", description: "", phone: "", email: "", openingTime: "", closingTime: "", breakStart: "", breakEnd: "", weeklyOff: [] as number[], holidays: [] as string[], temporarilyClosed: false, temporaryClosureReason: "" });
+  const [form, setForm] = useState({ name: "DUKAANGRID Store", address: "", latitude: "", longitude: "", accuracy: "", image: "", imageUrl: "", category: "Local Store", description: "", phone: "", email: "", openingTime: "", closingTime: "", breakStart: "", breakEnd: "", weeklyOff: [] as number[], holidays: [] as string[], temporarilyClosed: false, temporaryClosureReason: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -13337,7 +13412,7 @@ function AdminStoreLocation({ store }: { store: ReturnType<typeof useStore> }) {
       const r = await axios.get(API + "/admin/store-location", { headers: adminHeaders() });
       const d = r.data?.data || {};
       const image = d.image || "";
-      setForm({ name: d.name || "FreshBasket Store", address: d.address || "", latitude: d.latitude != null ? String(d.latitude) : "", longitude: d.longitude != null ? String(d.longitude) : "", accuracy: d.accuracy != null ? String(d.accuracy) : "", image, imageUrl: /^https?:\/\//i.test(image) ? image : "", category: d.category || "Local Store", description: d.description || "", phone: d.phone || "", email: d.email || "", openingTime: d.operatingHours?.openingTime || "", closingTime: d.operatingHours?.closingTime || "", breakStart: d.operatingHours?.breakStart || "", breakEnd: d.operatingHours?.breakEnd || "", weeklyOff: Array.isArray(d.operatingHours?.weeklyOff) ? d.operatingHours.weeklyOff.map(Number) : [], holidays: Array.isArray(d.operatingHours?.holidays) ? d.operatingHours.holidays : [], temporarilyClosed: d.operatingHours?.temporarilyClosed === true, temporaryClosureReason: d.operatingHours?.temporaryClosureReason || "" });
+      setForm({ name: d.name || "DUKAANGRID Store", address: d.address || "", latitude: d.latitude != null ? String(d.latitude) : "", longitude: d.longitude != null ? String(d.longitude) : "", accuracy: d.accuracy != null ? String(d.accuracy) : "", image, imageUrl: /^https?:\/\//i.test(image) ? image : "", category: d.category || "Local Store", description: d.description || "", phone: d.phone || "", email: d.email || "", openingTime: d.operatingHours?.openingTime || "", closingTime: d.operatingHours?.closingTime || "", breakStart: d.operatingHours?.breakStart || "", breakEnd: d.operatingHours?.breakEnd || "", weeklyOff: Array.isArray(d.operatingHours?.weeklyOff) ? d.operatingHours.weeklyOff.map(Number) : [], holidays: Array.isArray(d.operatingHours?.holidays) ? d.operatingHours.holidays : [], temporarilyClosed: d.operatingHours?.temporarilyClosed === true, temporaryClosureReason: d.operatingHours?.temporaryClosureReason || "" });
     } catch (e: any) {
       setError(e?.response?.data?.message || "Unable to load store location.");
     } finally { setLoading(false); }
@@ -13423,7 +13498,7 @@ function AdminStoreLocation({ store }: { store: ReturnType<typeof useStore> }) {
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4 mt-6">
-          <label className="block text-sm font-semibold">Store name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="FreshBasket Store" /></label>
+          <label className="block text-sm font-semibold">Store name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="DUKAANGRID Store" /></label>
           <label className="block text-sm font-semibold sm:col-span-2">Store address<textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="mt-2 w-full border rounded-xl p-3 min-h-[90px]" placeholder="Complete pickup/store address" /></label>
           <label className="block text-sm font-semibold">Latitude<input inputMode="decimal" value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="27.2153" /></label>
           <label className="block text-sm font-semibold">Longitude<input inputMode="decimal" value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })} className="mt-2 w-full border rounded-xl p-3" placeholder="82.8640" /></label><label className="block text-sm font-semibold">Location accuracy (m)<input inputMode="decimal" value={form.accuracy} onChange={e=>setForm({...form,accuracy:e.target.value})} className="mt-2 w-full border rounded-xl p-3" placeholder="Optional"/></label>
@@ -13487,9 +13562,9 @@ function AdminStoreLocation({ store }: { store: ReturnType<typeof useStore> }) {
 }
 
 function AdminPaymentSettings() {
-  const [form, setForm] = useState({ upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: true });
+  const [form, setForm] = useState({ upiId: "", merchantName: "DUKAANGRID", qrImage: "", isEnabled: true });
   const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
-  const load = async () => { setLoading(true); try { const r = await axios.get(API + "/admin/payment-settings", { headers: adminHeaders() }); setForm({ upiId: r.data?.data?.upiId || "", merchantName: r.data?.data?.merchantName || "FreshBasket", qrImage: r.data?.data?.qrImage || "", isEnabled: r.data?.data?.isEnabled !== false }); } catch {} finally { setLoading(false); } };
+  const load = async () => { setLoading(true); try { const r = await axios.get(API + "/admin/payment-settings", { headers: adminHeaders() }); setForm({ upiId: r.data?.data?.upiId || "", merchantName: r.data?.data?.merchantName || "DUKAANGRID", qrImage: r.data?.data?.qrImage || "", isEnabled: r.data?.data?.isEnabled !== false }); } catch {} finally { setLoading(false); } };
   useEffect(() => { load(); }, []);
   const save = async () => { setSaving(true); try { await axios.put(API + "/admin/payment-settings", form, { headers: adminHeaders() }); alert("Payment settings saved successfully."); } catch (e: any) { alert(e?.response?.data?.message || "Unable to save payment settings."); } finally { setSaving(false); } };
   if (loading) return <div className="bg-white border rounded-3xl py-16 text-center text-slate-500">Loading payment settings...</div>;
@@ -14014,13 +14089,13 @@ function SafeSupportViewAs({ store }: { store: ReturnType<typeof useStore> }) {
     finally{setLoading(false);}
   };
   const loadSession=async(token:string)=>{
-    try{const r=await axios.get(API+"/admin/safe-view-as/session",{headers:{"X-FreshBasket-View-Token":token}});setPreview(r.data?.data||null);}catch(e:any){setError(e?.response?.data?.message||"Unable to load read-only preview.");}
+    try{const r=await axios.get(API+"/admin/safe-view-as/session",{headers:{"X-DUKAANGRID-View-Token":token}});setPreview(r.data?.data||null);}catch(e:any){setError(e?.response?.data?.message||"Unable to load read-only preview.");}
   };
   const endSession=async()=>{
-    if(session?.token){try{await axios.post(API+"/admin/safe-view-as/end",{}, {headers:{"X-FreshBasket-View-Token":session.token}})}catch{}}
+    if(session?.token){try{await axios.post(API+"/admin/safe-view-as/end",{}, {headers:{"X-DUKAANGRID-View-Token":session.token}})}catch{}}
     setSession(null);setPreview(null);setResults([]);setSearch("");
   };
-  useEffect(()=>()=>{if(session?.token) void axios.post(API+"/admin/safe-view-as/end",{}, {headers:{"X-FreshBasket-View-Token":session.token}}).catch(()=>{});},[session?.token]);
+  useEffect(()=>()=>{if(session?.token) void axios.post(API+"/admin/safe-view-as/end",{}, {headers:{"X-DUKAANGRID-View-Token":session.token}}).catch(()=>{});},[session?.token]);
   if(!allowed)return <NavigateToLogin/>;
   const money=(v:any)=>"₹"+Number(v||0).toLocaleString("en-IN",{maximumFractionDigits:2});
   return <div className="space-y-5">
@@ -14065,7 +14140,7 @@ function Customer360({ store }: { store: ReturnType<typeof useStore> }) {
   const statusClass=(s:string)=>{const x=String(s||"").toUpperCase();if(["COMPLETED","DELIVERED","PAID","APPROVED","REPLACED","CLOSED"].includes(x))return"bg-emerald-50 text-emerald-700 border-emerald-100";if(["REJECTED","FAILED","CANCELLED","EXPIRED"].includes(x))return"bg-red-50 text-red-700 border-red-100";return"bg-amber-50 text-amber-700 border-amber-100";};
   const cards=data?[["Total Orders",data.summary.totalOrders,Package],["Active Orders",data.summary.activeOrders,Clock3],["Completed",data.summary.completedOrders,CheckCircle2],["Total Spent",money0(data.summary.totalSpent),CircleDollarSign],["Refunds",data.summary.refunds,RefreshCw],["Replacements",data.summary.replacements,RefreshCw],["Support Tickets",data.summary.supportTickets,Ticket],["Pending Requests",data.summary.pendingRequests,AlertTriangle]]:[];
   return <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-care-shell">
-    <header className="bg-white border-b sticky top-0 z-30"><div className="max-w-7xl mx-auto px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center"><UserRoundSearch size={22}/></div><div><p className="text-xs text-emerald-600 font-black tracking-[.14em]">FRESHBASKET</p><h1 className="text-xl font-black">Customer 360 / Complete Kundali</h1><p className="text-xs text-slate-500">Read-only consolidated view · {roleName.replace(/_/g," ")}</p></div></div><div className="flex gap-2"><button onClick={()=>nav(isMain?"/admin":roleName==="customer_care"?"/customer-care":"/finance")} className="border rounded-xl px-4 py-2.5 font-semibold">Back to dashboard</button></div></div></header>
+    <header className="bg-white border-b sticky top-0 z-30"><div className="max-w-7xl mx-auto px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center"><UserRoundSearch size={22}/></div><div><p className="text-xs text-emerald-600 font-black tracking-[.14em]">DUKAANGRID</p><h1 className="text-xl font-black">Customer 360 / Complete Kundali</h1><p className="text-xs text-slate-500">Read-only consolidated view · {roleName.replace(/_/g," ")}</p></div></div><div className="flex gap-2"><button onClick={()=>nav(isMain?"/admin":roleName==="customer_care"?"/customer-care":"/finance")} className="border rounded-xl px-4 py-2.5 font-semibold">Back to dashboard</button></div></div></header>
     <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">
       <div className="bg-white border rounded-3xl p-5 md:p-6"><div className="flex flex-col lg:flex-row gap-3"><div className="relative flex-1"><Search size={18} className="absolute left-4 top-3.5 text-slate-400"/><input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")searchCustomers()}} placeholder="Search Customer ID, mobile, email, name or Order ID" className="w-full border rounded-2xl pl-11 pr-4 py-3.5 font-semibold"/><p className="text-[11px] text-slate-400 mt-2 pl-1">Customer ID is the primary exact identifier · Example: FB-CUS-000001</p></div><button disabled={searching||loading||!search.trim()} onClick={searchCustomers} className="bg-emerald-600 text-white rounded-2xl px-6 py-3.5 font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><Search size={17}/>{searching?"Searching...":"Search Customer"}</button></div></div>
       {results.length>0&&<div className="bg-white border rounded-3xl p-5"><div className="flex justify-between"><div><p className="text-xs text-emerald-600 font-black">MATCHES</p><h2 className="text-xl font-black">Select customer</h2></div><span className="text-xs font-bold text-slate-500">{results.length} result{results.length===1?"":"s"}</span></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">{results.map((c:any)=><button key={c._id} onClick={()=>loadCustomer(String(c._id))} className="text-left border rounded-2xl p-4 hover:border-emerald-300 hover:shadow-sm transition"><div className="flex justify-between gap-3"><div><b className="text-lg">{c.name||"—"}</b><p className="text-xs text-emerald-700 font-bold mt-1">{c.customerId||"No Customer ID"}</p></div><span className="px-2 py-1 rounded-full border text-[10px] font-black">{c.status}</span></div><p className="text-sm text-slate-500 mt-3">{c.phone||"—"} · {c.email||"—"}</p><p className="text-xs text-slate-400 mt-2">{c.totalOrders||0} orders · Member since {c.createdAt?new Date(c.createdAt).toLocaleDateString("en-IN"):"—"}</p></button>)}</div></div>}
@@ -14074,12 +14149,12 @@ function Customer360({ store }: { store: ReturnType<typeof useStore> }) {
         <div className="bg-white border rounded-3xl p-6"><p className="text-xs text-emerald-600 font-black tracking-[.16em]">CUSTOMER MASTER PROFILE</p><div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-1"><div><h2 className="text-3xl font-black">{data.customer?.name||"—"}</h2><p className="text-sm text-slate-500 mt-1">{data.customer?.customerId||"—"} · {data.customer?.phone||"—"} · {data.customer?.email||"—"}</p></div><span className={`px-3 py-1.5 rounded-full border text-xs font-black ${statusClass(data.customer?.status)}`}>{data.customer?.status||"—"}</span></div></div>
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">{cards.map(([l,v,I]:any)=><div key={l} className="bg-white border rounded-2xl p-4"><div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center"><I size={17}/></div><p className="text-xs text-slate-500 mt-3">{l}</p><b className="text-lg">{v}</b></div>)}</div>
         <div className="grid lg:grid-cols-3 gap-5"><section className="bg-white border rounded-3xl p-5"><h3 className="font-black text-lg">Profile</h3><div className="mt-4 space-y-3 text-sm">{[["Customer ID",data.customer?.customerId],["Name",data.customer?.name],["Mobile",data.customer?.phone],["Email",data.customer?.email],["Status",data.customer?.status],["Registered",data.customer?.createdAt?new Date(data.customer.createdAt).toLocaleString("en-IN"):"—"],["Last Login",data.customer?.lastLogin?new Date(data.customer.lastLogin).toLocaleString("en-IN"):"Not available"]].map(([l,v])=><div key={String(l)} className="border-b last:border-b-0 pb-2"><span className="text-xs text-slate-400">{l}</span><p className="font-semibold break-words">{String(v||"—")}</p></div>)}</div></section><section className="bg-white border rounded-3xl p-5 lg:col-span-2"><div className="flex justify-between"><h3 className="font-black text-lg">Saved Addresses</h3><span className="text-xs text-slate-400">{data.addresses?.length||0}</span></div>{data.addresses?.length?<div className="grid md:grid-cols-2 gap-3 mt-4">{data.addresses.map((a:any)=><div key={a._id} className="border rounded-2xl p-4"><div className="flex justify-between"><b>{a.label||"Address"}</b>{a.isDefault&&<span className="text-[10px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-1 font-black">DEFAULT</span>}</div><p className="text-sm mt-2">{a.address||"—"}</p><p className="text-xs text-slate-500 mt-1">{[a.city,a.state,a.pincode].filter(Boolean).join(", ")}</p></div>)}</div>:<p className="text-sm text-slate-400 mt-4">No saved address records available.</p>}</section></div>
-        <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between"><div><h3 className="font-black text-lg">Order History</h3><p className="text-xs text-slate-500 mt-1">Existing orders · click an Order ID to use the existing Order Details route.</p></div><span className="text-xs font-bold text-slate-500">{data.orders?.length||0}</span></div>{data.orders?.length?<div className="divide-y">{data.orders.map((o:any)=><div key={o._id} className="p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"><div><button onClick={()=>nav("/orders/"+o._id)} className="font-black text-emerald-700 hover:underline">{o.orderId}</button><p className="text-xs text-slate-500 mt-1">{o.createdAt?new Date(o.createdAt).toLocaleString("en-IN"):"—"} · {o.store?.name||"FreshBasket Direct"}</p><p className="text-xs text-slate-400 mt-1">Delivery: {o.deliveryPartner?.name||"—"} · Delivered: {o.deliveredAt?new Date(o.deliveredAt).toLocaleString("en-IN"):"—"}</p></div><div className="flex flex-wrap gap-2 items-center"><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black ${statusClass(o.status)}`}>{o.status||"—"}</span><span className="text-sm font-black">{money0(o.amount)}</span><span className="text-xs text-slate-500">{o.paymentStatus||"—"}</span></div></div>)}</div>:<div className="p-8 text-center text-slate-400">No orders found.</div>}</section>
+        <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between"><div><h3 className="font-black text-lg">Order History</h3><p className="text-xs text-slate-500 mt-1">Existing orders · click an Order ID to use the existing Order Details route.</p></div><span className="text-xs font-bold text-slate-500">{data.orders?.length||0}</span></div>{data.orders?.length?<div className="divide-y">{data.orders.map((o:any)=><div key={o._id} className="p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3"><div><button onClick={()=>nav("/orders/"+o._id)} className="font-black text-emerald-700 hover:underline">{o.orderId}</button><p className="text-xs text-slate-500 mt-1">{o.createdAt?new Date(o.createdAt).toLocaleString("en-IN"):"—"} · {o.store?.name||"DUKAANGRID Direct"}</p><p className="text-xs text-slate-400 mt-1">Delivery: {o.deliveryPartner?.name||"—"} · Delivered: {o.deliveredAt?new Date(o.deliveredAt).toLocaleString("en-IN"):"—"}</p></div><div className="flex flex-wrap gap-2 items-center"><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black ${statusClass(o.status)}`}>{o.status||"—"}</span><span className="text-sm font-black">{money0(o.amount)}</span><span className="text-xs text-slate-500">{o.paymentStatus||"—"}</span></div></div>)}</div>:<div className="p-8 text-center text-slate-400">No orders found.</div>}</section>
         <div className="grid lg:grid-cols-2 gap-5"><section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between"><h3 className="font-black text-lg">Refund History</h3><span className="text-xs font-bold text-slate-500">{data.refunds?.length||0}</span></div>{data.refunds?.length?<div className="divide-y max-h-[520px] overflow-y-auto">{data.refunds.map((r:any)=><div key={r._id} className="p-4"><div className="flex justify-between gap-3"><div><b>{r.requestId||String(r._id).slice(-8).toUpperCase()}</b><p className="text-xs text-slate-500 mt-1">Order #{String(r.order||"").slice(-8).toUpperCase()} · {r.product?.name||r.item?.name||"Item unavailable"}</p></div><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black ${statusClass(r.status)}`}>{r.status}</span></div><div className="grid grid-cols-2 gap-3 mt-3 text-xs"><div><span className="text-slate-400">Requested</span><p className="font-bold">{money0(r.requestedAmount)}</p></div><div><span className="text-slate-400">Approved / Eligible</span><p className="font-bold">{money0(r.eligibleAmount)}</p></div><div><span className="text-slate-400">Method</span><p className="font-bold">{r.refundMethod||"—"}</p></div><div><span className="text-slate-400">Transaction Ref.</span><p className="font-bold break-words">{r.transactionReference||"—"}</p></div></div><p className="text-xs text-slate-400 mt-3">Care: {r.customerCareAgent?.name||"—"} · Finance Executive: {r.financeEmployee?.name||"—"} · Manager: {r.financeManager?.name||r.approvedBy?.name||"—"}</p></div>)}</div>:<div className="p-8 text-center text-slate-400">No refund requests.</div>}</section>
         <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between"><h3 className="font-black text-lg">Replacement History</h3><span className="text-xs font-bold text-slate-500">{data.replacements?.length||0}</span></div>{data.replacements?.length?<div className="divide-y max-h-[520px] overflow-y-auto">{data.replacements.map((r:any)=><div key={r._id} className="p-4"><div className="flex justify-between gap-3"><div><b>{r.requestId||r.replacementId||String(r._id).slice(-8).toUpperCase()}</b><p className="text-xs text-slate-500 mt-1">Order #{String(r.order||"").slice(-8).toUpperCase()} · {r.product?.name||r.item?.name||"Item unavailable"}</p></div><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black ${statusClass(r.status)}`}>{r.status}</span></div><div className="grid grid-cols-2 gap-3 mt-3 text-xs"><div><span className="text-slate-400">Store</span><p className="font-bold">{r.store?.name||"—"}</p></div><div><span className="text-slate-400">Delivery Partner</span><p className="font-bold">{r.deliveryPartner?.name||"Not assigned"}</p></div><div><span className="text-slate-400">Proof</span><p className="font-bold">{r.deliveryProof?.image?"Available":"—"}</p></div><div><span className="text-slate-400">Completed</span><p className="font-bold">{r.replacementDeliveredAt?new Date(r.replacementDeliveredAt).toLocaleString("en-IN"):"—"}</p></div></div><p className="text-xs text-slate-400 mt-3">Customer Care: {r.customerCareAgent?.name||"—"} · Fulfillment: {r.storeAdmin?.name||r.mainAdmin?.name||"—"}</p></div>)}</div>:<div className="p-8 text-center text-slate-400">No replacement requests.</div>}</section></div>
         <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between"><h3 className="font-black text-lg">Customer Support History</h3><span className="text-xs font-bold text-slate-500">{data.tickets?.length||0}</span></div>{data.tickets?.length?<div className="divide-y">{data.tickets.map((t:any)=><div key={t._id} className="p-4 flex flex-col md:flex-row md:justify-between gap-2"><div><b>{t.ticketId||String(t._id).slice(-8).toUpperCase()}</b><p className="text-sm mt-1">{t.subject||t.category||"Support request"}</p><p className="text-xs text-slate-500 mt-1">Order: {t.order?`#${String(t.order._id||t.order).slice(-8).toUpperCase()}`:"—"} · Assigned: {t.assignedCustomerCare?.name||"—"} · Priority: {t.priority||"—"}</p></div><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black self-start ${statusClass(t.status)}`}>{t.status||"—"}</span></div>)}</div>:<div className="p-8 text-center text-slate-400">No support tickets.</div>}</section>
         {data.access?.financeVisible&&<><section className="grid md:grid-cols-4 gap-3">{[["Total Paid",money0(data.finance?.summary?.totalPaid),CircleDollarSign],["Total Refunded",money0(data.finance?.summary?.totalRefunded),RefreshCw],["Pending Refund",money0(data.finance?.summary?.pendingRefundAmount),Clock3],["Adjustments",money0(data.finance?.summary?.financialAdjustments),History]].map(([l,v,I]:any)=><div key={l} className="bg-white border rounded-2xl p-4"><div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center"><I size={17}/></div><p className="text-xs text-slate-500 mt-3">{l}</p><b className="text-xl">{v}</b></div>)}</section><section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h3 className="font-black text-lg">Financial Customer History</h3><p className="text-xs text-slate-500 mt-1">Existing finance transactions only; sensitive credentials are excluded.</p></div>{data.finance?.transactions?.length?<div className="divide-y">{data.finance.transactions.map((t:any)=><div key={t._id} className="p-4 flex flex-col md:flex-row md:justify-between gap-2"><div><b>{t.transactionId||String(t._id).slice(-8).toUpperCase()}</b><p className="text-xs text-slate-500 mt-1">{t.type} · {t.paymentMethod||"—"} · Ref {t.paymentReference||"—"}</p><p className="text-xs text-slate-400 mt-1">{t.createdAt?new Date(t.createdAt).toLocaleString("en-IN"):"—"}</p></div><div className="text-right"><b>{money0(t.amount)}</b><p className="text-xs text-slate-500">{t.direction||"—"} · {t.status||"—"}</p></div></div>)}</div>:<div className="p-8 text-center text-slate-400">No financial transaction records linked to this customer.</div>}</section></>}
-        <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h3 className="font-black text-lg">Delivery History</h3></div>{data.deliveryHistory?.length?<div className="divide-y">{data.deliveryHistory.map((d:any)=><div key={d.id} className="p-4"><div className="flex justify-between gap-2"><div><b>{d.orderId}</b><p className="text-xs text-slate-500 mt-1">{d.store?.name||"FreshBasket Direct"} · {d.deliveryPartner?.name||"—"}</p></div><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black ${statusClass(d.status)}`}>{d.status||"—"}</span></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs"><div><span className="text-slate-400">Assigned</span><p className="font-bold">{d.assignedAt?new Date(d.assignedAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-400">Pickup</span><p className="font-bold">{d.pickupAt?new Date(d.pickupAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-400">Out for Delivery</span><p className="font-bold">{d.outForDeliveryAt?new Date(d.outForDeliveryAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-400">Delivered</span><p className="font-bold">{d.deliveredAt?new Date(d.deliveredAt).toLocaleString("en-IN"):"—"}</p></div></div></div>)}</div>:<div className="p-8 text-center text-slate-400">No delivery history available.</div>}</section>
+        <section className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h3 className="font-black text-lg">Delivery History</h3></div>{data.deliveryHistory?.length?<div className="divide-y">{data.deliveryHistory.map((d:any)=><div key={d.id} className="p-4"><div className="flex justify-between gap-2"><div><b>{d.orderId}</b><p className="text-xs text-slate-500 mt-1">{d.store?.name||"DUKAANGRID Direct"} · {d.deliveryPartner?.name||"—"}</p></div><span className={`px-2.5 py-1 rounded-full border text-[10px] font-black ${statusClass(d.status)}`}>{d.status||"—"}</span></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-xs"><div><span className="text-slate-400">Assigned</span><p className="font-bold">{d.assignedAt?new Date(d.assignedAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-400">Pickup</span><p className="font-bold">{d.pickupAt?new Date(d.pickupAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-400">Out for Delivery</span><p className="font-bold">{d.outForDeliveryAt?new Date(d.outForDeliveryAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-400">Delivered</span><p className="font-bold">{d.deliveredAt?new Date(d.deliveredAt).toLocaleString("en-IN"):"—"}</p></div></div></div>)}</div>:<div className="p-8 text-center text-slate-400">No delivery history available.</div>}</section>
         <section className="bg-white border rounded-3xl p-5"><div className="flex items-center gap-3"><History className="text-emerald-600"/><div><h3 className="font-black text-lg">Customer Activity Timeline</h3><p className="text-xs text-slate-500 mt-1">Only persisted order, support, refund and replacement events.</p></div></div>{data.timeline?.length?<div className="mt-5 relative pl-6 space-y-4">{data.timeline.map((e:any,i:number)=><div key={`${e.type}-${e.at}-${i}`} className="relative"><span className="absolute -left-[25px] top-1.5 w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-50"/><p className="text-sm font-black">{e.title}</p><p className="text-xs text-slate-500 mt-0.5">{e.detail||"—"}</p><p className="text-[11px] text-slate-400 mt-0.5">{e.at?new Date(e.at).toLocaleString("en-IN"):"—"}</p></div>)}</div>:<p className="text-sm text-slate-400 mt-5">No persisted activity events available.</p>}</section>
       </>}
     </main>
@@ -14170,7 +14245,7 @@ function CustomerCareDashboard({ store }: { store: ReturnType<typeof useStore> }
 
   if (store.user?.role !== "customer_care") return <NavigateToLogin />;
   return <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-care-shell">
-    <header className="bg-white border-b sticky top-0 z-30"><div className="max-w-7xl mx-auto px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Headphones size={22}/></div><div><h1 className="font-bold text-xl">FreshBasket Customer Care</h1><p className="text-xs text-slate-500">{store.user.name} · {store.user.employeeId || "CUSTOMER_CARE"}</p></div></div><div className="flex gap-2"><button onClick={()=>nav("/customer-360")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><UserRoundSearch size={16}/>Customer 360</button><button onClick={()=>nav("/support-view-as")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><Eye size={16}/>View As</button><Link to="/login-history" className="border rounded-xl px-4 py-2.5 font-semibold">Login History</Link><button onClick={store.logout} className="bg-slate-950 text-white px-4 py-2.5 rounded-xl font-semibold inline-flex items-center gap-2"><LogOut size={16}/>Logout</button></div></div></header>
+    <header className="bg-white border-b sticky top-0 z-30"><div className="max-w-7xl mx-auto px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white grid place-items-center"><Headphones size={22}/></div><div><h1 className="font-bold text-xl">DUKAANGRID Customer Care</h1><p className="text-xs text-slate-500">{store.user.name} · {store.user.employeeId || "CUSTOMER_CARE"}</p></div></div><div className="flex gap-2"><button onClick={()=>nav("/customer-360")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><UserRoundSearch size={16}/>Customer 360</button><button onClick={()=>nav("/support-view-as")} className="border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2.5 font-semibold inline-flex items-center gap-2"><Eye size={16}/>View As</button><Link to="/login-history" className="border rounded-xl px-4 py-2.5 font-semibold">Login History</Link><button onClick={store.logout} className="bg-slate-950 text-white px-4 py-2.5 rounded-xl font-semibold inline-flex items-center gap-2"><LogOut size={16}/>Logout</button></div></div></header>
     <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">       <MyIdentityCard store={store} />
       <div><p className="text-emerald-600 text-sm font-bold">SUPPORT OPERATIONS</p><h2 className="text-3xl font-bold">Customer Care Dashboard</h2><p className="text-sm text-slate-500 mt-1">Search customers and orders, manage tickets and create support requests without changing the existing customer/order flows.</p></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{cards.map(([label,value,Icon]:any)=>{const clickable=label==="Replacement Requests"||label==="Refund Requests";return <button key={label} type="button" onClick={()=>label==="Replacement Requests"?nav("/customer-care/replacement-requests"):label==="Refund Requests"?document.getElementById("customer-care-refunds")?.scrollIntoView({behavior:"smooth",block:"center"}):undefined} className={`text-left bg-white border rounded-3xl p-5 ${clickable?"hover:border-emerald-300 hover:shadow-sm cursor-pointer":""}`}><div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl grid place-items-center"><Icon size={19}/></div><p className="text-sm text-slate-500 mt-4">{label}</p><b className="text-2xl">{value||0}</b>{label==="Replacement Requests"&&<span className="block text-xs text-emerald-700 font-semibold mt-2">Open replacement queue →</span>}{label==="Refund Requests"&&<span className="block text-xs text-emerald-700 font-semibold mt-2">Open verification queue →</span>}</button>})}</div>
@@ -14238,7 +14313,7 @@ function AdminReplacementRequests({ store }: { store: ReturnType<typeof useStore
   const update=async(id:string,status:string,extra:any={})=>{try{await axios.patch(API+endpoint+"/"+id,{status,...extra},{headers:adminHeaders()});await load();}catch(e:any){alert(e?.response?.data?.message||"Unable to update replacement request");}};
   const reject=async(id:string)=>{setRejectionTarget(id);setRejectionReason("");};
   const submitRejection=async()=>{if(!rejectionTarget)return;const reason=rejectionReason.trim();if(reason.length<3)return;await update(rejectionTarget,"REJECTED",{reason});setRejectionTarget(null);setRejectionReason("");};
-  return <div className="space-y-5"><div><p className="text-emerald-600 text-sm font-bold">{isMain?"MAIN ADMIN":"STORE ADMIN"}</p><h2 className="text-2xl font-bold">Replacement Requests</h2><p className="text-sm text-slate-500 mt-1">{isMain?"FreshBasket Direct fulfillment and authorized exceptions are managed here.":"Only replacement requests belonging to this Store are visible and actionable."}</p></div>{loading?<div className="bg-white border rounded-3xl p-10 text-center text-slate-500">Loading replacement requests...</div>:<div className="bg-white border rounded-3xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm min-w-[1050px]"><thead className="bg-slate-50"><tr>{["Request","Customer / Order","Source / Owner","Status","Product / Qty","Delivery","Action"].map(h=><th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r:any)=><tr key={r._id} className="border-t"><td className="p-3 font-bold">{r.requestId||String(r._id).slice(-8).toUpperCase()}<div className="text-xs text-slate-500">{r.replacementId||"Legacy"}</div></td><td className="p-3">{r.customer?.customerId||"—"} · {r.customer?.name||"—"}<div className="text-xs text-slate-500">#{String(r.order?._id||r.order||"").slice(-8).toUpperCase()} · {r.orderItemId}</div></td><td className="p-3">{r.sourceType}<div className="text-xs text-slate-500">{r.storeAdmin?.name||r.mainAdmin?.name||"—"}</div></td><td className="p-3"><span className="px-2 py-1 rounded-full bg-slate-100 text-xs font-bold">{r.status}</span></td><td className="p-3">{r.items?.[0]?.name||r.productId?.name||"—"} · {r.items?.[0]?.quantity||1}<div className="text-xs text-slate-500">Inventory: {r.inventoryReserved?"reserved":"not reserved"}</div></td><td className="p-3">{r.deliveryPartner?.name||"Not assigned"}</td><td className="p-3"><div className="flex flex-wrap gap-2">{((isMain&&r.sourceType==="FRESHBASKET_DIRECT")||(!isMain&&r.sourceType==="STORE"))&&["PENDING_STORE_ADMIN","PENDING_MAIN_ADMIN","APPROVED","REPLACEMENT_APPROVED","ESCALATED"].includes(r.status)&&<button onClick={()=>update(r._id,"REPLACEMENT_APPROVED")} className="bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 font-semibold">Approve Replacement</button>}{((isMain&&r.sourceType==="FRESHBASKET_DIRECT")||(!isMain&&r.sourceType==="STORE"))&&["REPLACEMENT_APPROVED","APPROVED","STORE_PREPARATION","REPLACEMENT_PROCESSING"].includes(r.status)&&<button onClick={()=>update(r._id,"REPLACEMENT_PROCESSING")} className="border rounded-lg px-2.5 py-1.5 font-semibold">Prepare Replacement</button>}{((isMain&&r.sourceType==="FRESHBASKET_DIRECT")||(!isMain&&r.sourceType==="STORE"))&&["REPLACEMENT_PROCESSING","STORE_PREPARATION","REPLACEMENT_APPROVED","APPROVED"].includes(r.status)&&<div className="flex items-center gap-2"><select defaultValue={r.deliveryPartner?._id||r.deliveryPartner||""} onChange={e=>{if(e.target.value)update(r._id,"DELIVERY_ASSIGNED",{deliveryPartnerId:e.target.value})}} className="border rounded-lg px-2.5 py-1.5 font-semibold"><option value="">Assign Delivery Partner</option>{partners.map((p:any)=><option key={p._id} value={p._id}>{p.name} · {p.employeeId||p.email}</option>)}</select>{!partners.length&&<span className="text-xs text-red-600">No eligible delivery partner</span>}</div>}{!replacementTerminalStatusesForUi.includes(r.status)&&<button onClick={()=>reject(r._id)} className="border border-red-200 text-red-700 rounded-lg px-2.5 py-1.5 font-semibold">Reject</button>}</div></td></tr>)}</tbody></table>{!rows.length&&<div className="p-10 text-center text-slate-500">No replacement requests found.</div>}</div></div>}{rejectionTarget&&<div className="fixed inset-0 z-[120] bg-black/50 p-4 grid place-items-center" onClick={()=>setRejectionTarget(null)}><div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6" onClick={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-4"><div><p className="text-red-600 text-xs font-bold">REPLACEMENT REQUEST</p><h3 className="text-xl font-bold mt-1">Reject Request</h3><p className="text-sm text-slate-500 mt-1">A rejection reason is mandatory.</p></div><button type="button" onClick={()=>setRejectionTarget(null)} className="text-slate-500 hover:text-slate-900"><X size={20}/></button></div><label className="block mt-5 text-sm font-semibold">Rejection reason<textarea autoFocus value={rejectionReason} onChange={e=>setRejectionReason(e.target.value)} rows={4} placeholder="Enter at least 3 characters..." className="mt-2 w-full border rounded-2xl p-3 outline-none focus:ring-2 focus:ring-red-200"/></label><div className="flex justify-end gap-3 mt-5"><button type="button" onClick={()=>setRejectionTarget(null)} className="border rounded-xl px-4 py-2.5 font-semibold">Cancel</button><button type="button" disabled={rejectionReason.trim().length<3} onClick={submitRejection} className="bg-red-600 text-white rounded-xl px-4 py-2.5 font-bold disabled:opacity-40">Reject Request</button></div></div></div>}</div>;
+  return <div className="space-y-5"><div><p className="text-emerald-600 text-sm font-bold">{isMain?"MAIN ADMIN":"STORE ADMIN"}</p><h2 className="text-2xl font-bold">Replacement Requests</h2><p className="text-sm text-slate-500 mt-1">{isMain?"DUKAANGRID Direct fulfillment and authorized exceptions are managed here.":"Only replacement requests belonging to this Store are visible and actionable."}</p></div>{loading?<div className="bg-white border rounded-3xl p-10 text-center text-slate-500">Loading replacement requests...</div>:<div className="bg-white border rounded-3xl overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm min-w-[1050px]"><thead className="bg-slate-50"><tr>{["Request","Customer / Order","Source / Owner","Status","Product / Qty","Delivery","Action"].map(h=><th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r:any)=><tr key={r._id} className="border-t"><td className="p-3 font-bold">{r.requestId||String(r._id).slice(-8).toUpperCase()}<div className="text-xs text-slate-500">{r.replacementId||"Legacy"}</div></td><td className="p-3">{r.customer?.customerId||"—"} · {r.customer?.name||"—"}<div className="text-xs text-slate-500">#{String(r.order?._id||r.order||"").slice(-8).toUpperCase()} · {r.orderItemId}</div></td><td className="p-3">{r.sourceType}<div className="text-xs text-slate-500">{r.storeAdmin?.name||r.mainAdmin?.name||"—"}</div></td><td className="p-3"><span className="px-2 py-1 rounded-full bg-slate-100 text-xs font-bold">{r.status}</span></td><td className="p-3">{r.items?.[0]?.name||r.productId?.name||"—"} · {r.items?.[0]?.quantity||1}<div className="text-xs text-slate-500">Inventory: {r.inventoryReserved?"reserved":"not reserved"}</div></td><td className="p-3">{r.deliveryPartner?.name||"Not assigned"}</td><td className="p-3"><div className="flex flex-wrap gap-2">{((isMain&&r.sourceType==="DUKAANGRID_DIRECT")||(!isMain&&r.sourceType==="STORE"))&&["PENDING_STORE_ADMIN","PENDING_MAIN_ADMIN","APPROVED","REPLACEMENT_APPROVED","ESCALATED"].includes(r.status)&&<button onClick={()=>update(r._id,"REPLACEMENT_APPROVED")} className="bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 font-semibold">Approve Replacement</button>}{((isMain&&r.sourceType==="DUKAANGRID_DIRECT")||(!isMain&&r.sourceType==="STORE"))&&["REPLACEMENT_APPROVED","APPROVED","STORE_PREPARATION","REPLACEMENT_PROCESSING"].includes(r.status)&&<button onClick={()=>update(r._id,"REPLACEMENT_PROCESSING")} className="border rounded-lg px-2.5 py-1.5 font-semibold">Prepare Replacement</button>}{((isMain&&r.sourceType==="DUKAANGRID_DIRECT")||(!isMain&&r.sourceType==="STORE"))&&["REPLACEMENT_PROCESSING","STORE_PREPARATION","REPLACEMENT_APPROVED","APPROVED"].includes(r.status)&&<div className="flex items-center gap-2"><select defaultValue={r.deliveryPartner?._id||r.deliveryPartner||""} onChange={e=>{if(e.target.value)update(r._id,"DELIVERY_ASSIGNED",{deliveryPartnerId:e.target.value})}} className="border rounded-lg px-2.5 py-1.5 font-semibold"><option value="">Assign Delivery Partner</option>{partners.map((p:any)=><option key={p._id} value={p._id}>{p.name} · {p.employeeId||p.email}</option>)}</select>{!partners.length&&<span className="text-xs text-red-600">No eligible delivery partner</span>}</div>}{!replacementTerminalStatusesForUi.includes(r.status)&&<button onClick={()=>reject(r._id)} className="border border-red-200 text-red-700 rounded-lg px-2.5 py-1.5 font-semibold">Reject</button>}</div></td></tr>)}</tbody></table>{!rows.length&&<div className="p-10 text-center text-slate-500">No replacement requests found.</div>}</div></div>}{rejectionTarget&&<div className="fixed inset-0 z-[120] bg-black/50 p-4 grid place-items-center" onClick={()=>setRejectionTarget(null)}><div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6" onClick={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-4"><div><p className="text-red-600 text-xs font-bold">REPLACEMENT REQUEST</p><h3 className="text-xl font-bold mt-1">Reject Request</h3><p className="text-sm text-slate-500 mt-1">A rejection reason is mandatory.</p></div><button type="button" onClick={()=>setRejectionTarget(null)} className="text-slate-500 hover:text-slate-900"><X size={20}/></button></div><label className="block mt-5 text-sm font-semibold">Rejection reason<textarea autoFocus value={rejectionReason} onChange={e=>setRejectionReason(e.target.value)} rows={4} placeholder="Enter at least 3 characters..." className="mt-2 w-full border rounded-2xl p-3 outline-none focus:ring-2 focus:ring-red-200"/></label><div className="flex justify-end gap-3 mt-5"><button type="button" onClick={()=>setRejectionTarget(null)} className="border rounded-xl px-4 py-2.5 font-semibold">Cancel</button><button type="button" disabled={rejectionReason.trim().length<3} onClick={submitRejection} className="bg-red-600 text-white rounded-xl px-4 py-2.5 font-bold disabled:opacity-40">Reject Request</button></div></div></div>}</div>;
 }
 
 function AdminSupportCenter(){const [data,setData]=useState<any>({tickets:[],refunds:[],replacements:[]});const [loading,setLoading]=useState(true);const [sla,setSla]=useState<any>({urgent:30,high:60,medium:240,low:1440});const load=async()=>{setLoading(true);try{const [a,b]=await Promise.all([axios.get(API+"/admin/support-center",{headers:adminHeaders()}),axios.get(API+"/admin/support-sla",{headers:adminHeaders()})]);setData(a.data.data||data);setSla(b.data.data||sla);}catch(e:any){alert(e?.response?.data?.message||"Unable to load support center")}finally{setLoading(false)}};useEffect(()=>{load()},[]);const saveSla=async()=>{try{await axios.patch(API+"/admin/support-sla",sla,{headers:adminHeaders()});alert("SLA settings updated")}catch(e:any){alert(e?.response?.data?.message||"Unable to update SLA")}};return <div className="space-y-5"><div><p className="text-emerald-600 text-sm font-bold">MAIN ADMIN</p><h2 className="text-2xl font-bold">Customer Support</h2><p className="text-sm text-slate-500 mt-1">All tickets, refunds, replacements and escalation operations.</p></div><div className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[["Total Tickets",data.tickets?.length],["Open",data.tickets?.filter((x:any)=>!["RESOLVED","CLOSED"].includes(x.status)).length],["Resolved",data.tickets?.filter((x:any)=>["RESOLVED","CLOSED"].includes(x.status)).length],["Refund Requests",data.refunds?.length],["Replacement Requests",data.replacements?.length]].map(([l,v])=><div key={String(l)} className="bg-white border rounded-2xl p-4"><b className="text-xl">{v||0}</b><p className="text-xs text-slate-500 mt-1">{l}</p></div>)}</div><div className="bg-white border rounded-3xl p-5"><div className="flex items-center justify-between"><div><h3 className="font-bold">Support SLA</h3><p className="text-xs text-slate-500">Minutes before a ticket is considered at risk.</p></div><button onClick={saveSla} className="bg-emerald-600 text-white rounded-xl px-4 py-2 font-bold">Save SLA</button></div><div className="grid sm:grid-cols-4 gap-3 mt-4">{["urgent","high","medium","low"].map(k=><label key={k} className="text-sm font-semibold capitalize">{k}<input type="number" min="1" value={sla[k]} onChange={e=>setSla({...sla,[k]:e.target.value})} className="mt-2 w-full border rounded-xl p-3"/></label>)}</div></div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b flex justify-between"><h3 className="font-bold">Tickets</h3><button onClick={load} className="border rounded-xl px-3 py-2 text-sm font-semibold">Refresh</button></div>{loading?<div className="p-10 text-center text-slate-500">Loading...</div>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="p-3 text-left">Ticket</th><th className="p-3 text-left">Customer</th><th className="p-3 text-left">Category</th><th className="p-3 text-left">Priority</th><th className="p-3 text-left">Status</th></tr></thead><tbody>{(data.tickets||[]).map((t:any)=><tr key={t._id} className="border-t"><td className="p-3 font-bold">{t.ticketId}</td><td className="p-3">{t.customer?.name||"—"}</td><td className="p-3">{t.category}</td><td className="p-3">{t.priority}</td><td className="p-3">{t.status}</td></tr>)}</tbody></table></div>}</div></div>}
@@ -14296,14 +14371,14 @@ function CustomerCareReplacementRequests({ store }: { store: ReturnType<typeof u
       {error&&<div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">{error}</div>}
       <div className="bg-white border rounded-3xl overflow-hidden">
         <div className="p-5 border-b flex items-center justify-between gap-3"><div><h2 className="font-bold text-lg">Replacement Request List</h2><p className="text-xs text-slate-500 mt-1">{meta.total||0} record(s) · page {meta.page||1} of {meta.pages||1}</p></div><button onClick={()=>load(meta.page||1)} className="border rounded-xl px-3 py-2 font-semibold inline-flex items-center gap-2"><RefreshCw size={15}/>Refresh</button></div>
-        {loading?<div className="p-12 text-center text-slate-500">Loading replacement requests...</div>:rows.length===0?<div className="p-12 text-center text-slate-500">No replacement requests found.</div>:<div className="overflow-x-auto"><table className="w-full text-sm min-w-[1200px]"><thead className="bg-slate-50"><tr>{["Request ID","Customer ID / Customer","Order ID","Order Item","Product / Store","Reason","Request Date","Eligibility","Status","Priority","Assigned To","Action"].map(h=><th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r:any)=><tr key={r._id} className="border-t hover:bg-slate-50"><td className="p-3 font-bold">{r.requestId||"—"}<div className="text-[11px] text-slate-400">{r.replacementId||""}</div></td><td className="p-3">{r.customer?.customerId||"—"}<div>{r.customer?.name||"—"}</div><div className="text-xs text-slate-500">{r.customer?.phone||r.customer?.email||""}</div></td><td className="p-3">#{String(r.order?._id||r.order||"").slice(-8).toUpperCase()}</td><td className="p-3">{r.orderItemId||"—"}<div className="text-xs text-slate-500">Qty {r.items?.[0]?.quantity||r.orderItem?.quantity||1}</div></td><td className="p-3"><div className="font-semibold">{r.product?.name||r.items?.[0]?.name||"—"}</div><div className="text-xs text-slate-500">{r.sourceType==="STORE"?(r.storeAdmin?.name||"Store"):(r.mainAdmin?.name||"FreshBasket Direct")}</div></td><td className="p-3 max-w-[180px]"><span className="line-clamp-2">{r.reason||"—"}</span></td><td className="p-3">{r.createdAt?new Date(r.createdAt).toLocaleString("en-IN"):"—"}</td><td className="p-3">{r.eligibility?.eligibleAtRequestTime?"Eligible":"Not eligible"}<div className="text-xs text-slate-500">{r.eligibility?.expiryAt?new Date(r.eligibility.expiryAt).toLocaleString("en-IN"):"—"}</div></td><td className="p-3"><span className="px-2 py-1 rounded-full bg-slate-100 font-bold text-xs">{r.status}</span></td><td className="p-3">{r.priority||"MEDIUM"}</td><td className="p-3">{r.customerCareAgent?.name||r.storeAdmin?.name||r.mainAdmin?.name||r.deliveryPartner?.name||"Unassigned"}</td><td className="p-3"><button onClick={()=>openDetail(r._id)} className="text-emerald-700 font-bold inline-flex items-center gap-1"><Eye size={15}/>View</button></td></tr>)}</tbody></table></div>}
+        {loading?<div className="p-12 text-center text-slate-500">Loading replacement requests...</div>:rows.length===0?<div className="p-12 text-center text-slate-500">No replacement requests found.</div>:<div className="overflow-x-auto"><table className="w-full text-sm min-w-[1200px]"><thead className="bg-slate-50"><tr>{["Request ID","Customer ID / Customer","Order ID","Order Item","Product / Store","Reason","Request Date","Eligibility","Status","Priority","Assigned To","Action"].map(h=><th key={h} className="p-3 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r:any)=><tr key={r._id} className="border-t hover:bg-slate-50"><td className="p-3 font-bold">{r.requestId||"—"}<div className="text-[11px] text-slate-400">{r.replacementId||""}</div></td><td className="p-3">{r.customer?.customerId||"—"}<div>{r.customer?.name||"—"}</div><div className="text-xs text-slate-500">{r.customer?.phone||r.customer?.email||""}</div></td><td className="p-3">#{String(r.order?._id||r.order||"").slice(-8).toUpperCase()}</td><td className="p-3">{r.orderItemId||"—"}<div className="text-xs text-slate-500">Qty {r.items?.[0]?.quantity||r.orderItem?.quantity||1}</div></td><td className="p-3"><div className="font-semibold">{r.product?.name||r.items?.[0]?.name||"—"}</div><div className="text-xs text-slate-500">{r.sourceType==="STORE"?(r.storeAdmin?.name||"Store"):(r.mainAdmin?.name||"DUKAANGRID Direct")}</div></td><td className="p-3 max-w-[180px]"><span className="line-clamp-2">{r.reason||"—"}</span></td><td className="p-3">{r.createdAt?new Date(r.createdAt).toLocaleString("en-IN"):"—"}</td><td className="p-3">{r.eligibility?.eligibleAtRequestTime?"Eligible":"Not eligible"}<div className="text-xs text-slate-500">{r.eligibility?.expiryAt?new Date(r.eligibility.expiryAt).toLocaleString("en-IN"):"—"}</div></td><td className="p-3"><span className="px-2 py-1 rounded-full bg-slate-100 font-bold text-xs">{r.status}</span></td><td className="p-3">{r.priority||"MEDIUM"}</td><td className="p-3">{r.customerCareAgent?.name||r.storeAdmin?.name||r.mainAdmin?.name||r.deliveryPartner?.name||"Unassigned"}</td><td className="p-3"><button onClick={()=>openDetail(r._id)} className="text-emerald-700 font-bold inline-flex items-center gap-1"><Eye size={15}/>View</button></td></tr>)}</tbody></table></div>}
         {!loading&&rows.length>0&&<div className="p-4 border-t flex items-center justify-between text-sm"><span>Page {meta.page||1} of {meta.pages||1}</span><div className="flex gap-2"><button disabled={(meta.page||1)<=1} onClick={()=>load((meta.page||1)-1)} className="border rounded-xl px-3 py-2 disabled:opacity-40">Previous</button><button disabled={(meta.page||1)>=(meta.pages||1)} onClick={()=>load((meta.page||1)+1)} className="border rounded-xl px-3 py-2 disabled:opacity-40">Next</button></div></div>}
       </div>
     </main>
     {(selected||detailLoading)&&<div className="fixed inset-0 z-[90] bg-black/50 p-3 sm:p-6 overflow-y-auto" onClick={clearDetail}><div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>{detailLoading?<div className="p-16 text-center text-slate-500">Loading replacement request...</div>:<><div className="p-5 border-b flex items-start justify-between gap-4"><div><p className="text-emerald-600 text-xs font-bold">REPLACEMENT REQUEST</p><h2 className="text-2xl font-bold">{request.requestId||"—"}</h2><p className="text-xs text-slate-500 mt-1">Replacement ID: {request.replacementId||"Not assigned in legacy record"} · Current status: <b>{request.status}</b></p></div><button onClick={clearDetail}><X/></button></div><div className="p-5 space-y-5">
       <div className="grid md:grid-cols-4 gap-3">{[["Customer ID",customer?.customerId||"—"],["Order ID",order?._id?String(order._id):"—"],["Order Item ID",request.orderItemId||"—"],["Request Type","REPLACEMENT"]].map(([l,v])=><div key={String(l)} className="border rounded-2xl p-3"><span className="text-xs text-slate-500">{l}</span><p className="font-bold break-words">{v}</p></div>)}</div>
       <div className="grid lg:grid-cols-2 gap-4"><div className="border rounded-2xl p-4"><h3 className="font-bold">Customer</h3><p className="mt-2">{customer?.name||"—"}</p><p className="text-sm text-slate-500">{customer?.email||"—"}</p><p className="text-sm text-slate-500">{customer?.phone||"—"}</p></div><div className="border rounded-2xl p-4"><h3 className="font-bold">Order</h3><p className="mt-2">#{order?._id?String(order._id).slice(-8).toUpperCase():"—"}</p><p className="text-sm text-slate-500">Created: {order?.createdAt?new Date(order.createdAt).toLocaleString("en-IN"):"—"}</p><p className="text-sm text-slate-500">Delivered: {(selected.eligibility?.deliveredAt||order?.deliveredAt)?new Date(selected.eligibility?.deliveredAt||order.deliveredAt).toLocaleString("en-IN"):"—"}</p><p className="text-sm text-slate-500">Source: {order?.sourceType||request.sourceType||"—"}</p><p className="text-sm text-slate-500 mt-1">Address: {order?.address?.address||order?.address?.formattedAddress||order?.address?.street||"Historical order address"}</p></div></div>
-      <div className="border rounded-2xl p-4"><h3 className="font-bold">Item / Product / Store</h3><div className="grid md:grid-cols-4 gap-3 mt-3 text-sm"><div><span className="text-slate-500">Product ID</span><p className="font-semibold">{product?._id||request.productId||item?.product||"—"}</p></div><div><span className="text-slate-500">Product</span><p className="font-semibold">{product?.name||item?.name||"—"}</p></div><div><span className="text-slate-500">SKU</span><p className="font-semibold">{product?.sku||"—"}</p></div><div><span className="text-slate-500">Quantity / Price</span><p className="font-semibold">{item?.quantity||request.items?.[0]?.quantity||1} · {item?.price!==undefined?money(Number(item.price)):"—"}</p></div></div>{product?.image&&<img src={product.image} alt={product.name||"Product"} className="mt-4 w-28 h-28 object-cover rounded-xl border"/>}<p className="text-sm text-slate-500 mt-3">Store: {selected.store?.name||"FreshBasket Direct"} · Store Admin: {selected.assignment?.storeAdmin?.name||"—"}</p></div>
+      <div className="border rounded-2xl p-4"><h3 className="font-bold">Item / Product / Store</h3><div className="grid md:grid-cols-4 gap-3 mt-3 text-sm"><div><span className="text-slate-500">Product ID</span><p className="font-semibold">{product?._id||request.productId||item?.product||"—"}</p></div><div><span className="text-slate-500">Product</span><p className="font-semibold">{product?.name||item?.name||"—"}</p></div><div><span className="text-slate-500">SKU</span><p className="font-semibold">{product?.sku||"—"}</p></div><div><span className="text-slate-500">Quantity / Price</span><p className="font-semibold">{item?.quantity||request.items?.[0]?.quantity||1} · {item?.price!==undefined?money(Number(item.price)):"—"}</p></div></div>{product?.image&&<img src={product.image} alt={product.name||"Product"} className="mt-4 w-28 h-28 object-cover rounded-xl border"/>}<p className="text-sm text-slate-500 mt-3">Store: {selected.store?.name||"DUKAANGRID Direct"} · Store Admin: {selected.assignment?.storeAdmin?.name||"—"}</p></div>
       <div className="border rounded-2xl p-4"><h3 className="font-bold">Reason & Evidence</h3><p className="mt-2 text-sm text-slate-700">{request.reason||"—"}</p>{request.description&&<p className="mt-2 text-sm text-slate-600">{request.description}</p>}<div className="flex flex-wrap gap-3 mt-4">{(request.evidence||[]).map((img:string,i:number)=><img key={i} src={img} alt={`Evidence ${i+1}`} className="w-28 h-28 rounded-xl border object-cover"/>)}</div></div>
       <div className="border rounded-2xl p-4"><h3 className="font-bold">Eligibility</h3><div className="grid sm:grid-cols-3 gap-3 mt-3 text-sm"><div><span className="text-slate-500">Replacement allowed</span><p className="font-bold">{selected.eligibility?.productReplacementAllowed?"Yes":"No"}</p></div><div><span className="text-slate-500">24-hour window</span><p className="font-bold">{selected.eligibility?.expiryAt?new Date(selected.eligibility.expiryAt).toLocaleString("en-IN"):"—"}</p></div><div><span className="text-slate-500">Eligible at request</span><p className="font-bold">{selected.eligibility?.eligibleAtRequestTime?"Yes":"No"}</p></div></div></div>
       <div className="border rounded-2xl p-4"><h3 className="font-bold">Assignment</h3><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 text-sm">{[["Customer Care",selected.assignment?.customerCareAgent?.name||"—"],["Store Admin",selected.assignment?.storeAdmin?.name||"—"],["Main Admin",selected.assignment?.mainAdmin?.name||"—"],["Delivery Partner",selected.assignment?.deliveryPartner?.name||"—"]].map(([l,v])=><div key={String(l)} className="bg-slate-50 rounded-xl p-3"><span className="text-slate-500">{l}</span><p className="font-bold mt-1">{v}</p></div>)}</div></div>
@@ -14381,7 +14456,7 @@ function FinanceDashboard({store}:{store:ReturnType<typeof useStore>}){
   const updateRefund=async(id:string,status:string,extra:any={})=>{try{const path=status==="REJECTED"?"/finance/refunds/"+id+"/reject":status==="APPROVED"?"/finance/refunds/"+id+"/approve":status==="PROCESSING"||status==="COMPLETED"||status==="FAILED"?"/finance/refunds/"+id+"/process":"/finance/refunds/"+id+"/review";const body=status==="REJECTED"?{reason:extra.reason||"Rejected by Finance"}:status==="APPROVED"?{approvedAmount:extra.approvedAmount}:{status};await axios.patch(API+path,body,{headers:adminHeaders()});await load();}catch(e:any){alert(e?.response?.data?.message||"Unable to update refund")}};
   const updatePayout=async(id:string,status:string)=>{try{await axios.patch(API+"/finance/payouts/"+id,{status},{headers:adminHeaders()});await load()}catch(e:any){alert(e?.response?.data?.message||"Unable to update payout")}};
   const updateIncentive=async(id:string,status:string)=>{try{await axios.patch(API+"/finance/incentives/"+id,{status},{headers:adminHeaders()});await load()}catch(e:any){alert(e?.response?.data?.message||"Unable to update incentive")}}; const createStorePayout=async(x:any)=>{try{const from=window.prompt("Payout period start (YYYY-MM-DD)",new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10));if(!from)return;const to=window.prompt("Payout period end (YYYY-MM-DD)",new Date().toISOString().slice(0,10));if(!to)return;await axios.post(API+"/finance/store-payout-batches",{storeAdminId:x.storeId,from,to},{headers:adminHeaders()});alert("Store payout batch created and sent for Finance Manager approval");await load()}catch(e:any){alert(e?.response?.data?.message||"Unable to create Store payout")}}; const updateStorePayout=async(id:string,status:string)=>{try{await axios.patch(API+"/finance/store-payout-batches/"+id,{status},{headers:adminHeaders()});await load()}catch(e:any){alert(e?.response?.data?.message||"Unable to update Store payout")}};
-  const exportReport=async()=>{if(!can("FINANCE_EXPORT_REPORTS"))return alert("Export permission required.");try{const r=await axios.get(API+"/finance/reports/export",{headers:adminHeaders(),responseType:"blob"});const url=URL.createObjectURL(r.data);const a=document.createElement("a");a.href=url;a.download="FreshBasket-financial-report.csv";a.click();URL.revokeObjectURL(url);}catch(e:any){alert(e?.response?.data?.message||"Unable to export report")}};
+  const exportReport=async()=>{if(!can("FINANCE_EXPORT_REPORTS"))return alert("Export permission required.");try{const r=await axios.get(API+"/finance/reports/export",{headers:adminHeaders(),responseType:"blob"});const url=URL.createObjectURL(r.data);const a=document.createElement("a");a.href=url;a.download="DUKAANGRID-financial-report.csv";a.click();URL.revokeObjectURL(url);}catch(e:any){alert(e?.response?.data?.message||"Unable to export report")}};
   const saveFinancePhoto = (file:File) => {
     if(!file.type.startsWith("image/"))return alert("Only image files are allowed.");
     if(file.size>700*1024)return alert("Photo must be 700 KB or smaller.");
@@ -14415,7 +14490,7 @@ function FinanceDashboard({store}:{store:ReturnType<typeof useStore>}){
   };
   const card=(label:string,value:any,click?:()=>void)=><button onClick={click} className="bg-white border rounded-2xl p-4 text-left hover:border-emerald-300"><p className="text-xs text-slate-500">{label}</p><b className="text-2xl">{value}</b></button>;
   return <div className="min-h-screen bg-slate-50 fb-dashboard-shell fb-finance-shell"><div className="flex min-h-screen">
-    <DepartmentSidebar title="FreshBasket" subtitle={String(store.user?.role||"Finance").replace("_"," ")} departments={financeDepartments} activeId={section} onSelect={(id)=>{ setSection(id); }} logout={()=>{store.logout();window.location.href="/login"}} mobileOpen={financeSidebarOpen} setMobileOpen={setFinanceSidebarOpen}/>
+    <DepartmentSidebar title="DUKAANGRID" subtitle={String(store.user?.role||"Finance").replace("_"," ")} departments={financeDepartments} activeId={section} onSelect={(id)=>{ setSection(id); }} logout={()=>{store.logout();window.location.href="/login"}} mobileOpen={financeSidebarOpen} setMobileOpen={setFinanceSidebarOpen}/>
     <main className="md:ml-64 flex-1 min-w-0"><header className="sticky top-0 z-20 bg-white border-b px-4 md:px-8 py-4 flex justify-between items-center"><div className="flex items-center gap-3"><button type="button" className="md:hidden border rounded-xl p-2" aria-label="Open navigation" onClick={()=>setFinanceSidebarOpen(true)}><Menu size={19}/></button><div><p className="text-xs text-emerald-600 font-bold">{String(store.user?.role||"").replace("_"," ").toUpperCase()}</p><h1 className="text-2xl font-bold">Finance {section[0].toUpperCase()+section.slice(1)}</h1></div></div><button onClick={load} className="border rounded-xl px-4 py-2 font-bold"><RefreshCw size={16} className="inline mr-1"/>Refresh</button></header><div className="p-4 md:p-8">
     {dashboard.forcePasswordChange&&<div className="mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900"><b>Password change required.</b> Please update your password from Profile before continuing.</div>}
     {section==="dashboard"&&<div className="space-y-6"><MyIdentityCard store={store} /><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Refunds",statusRefund("REQUESTED"),()=>{setRefundFilter("REQUESTED");setSection("refunds")})}{card("Under Review",statusRefund("FINANCE_REVIEW"),()=>{setRefundFilter("FINANCE_REVIEW");setSection("refunds")})}{card("Approved Refunds",statusRefund("APPROVED"),()=>{setRefundFilter("APPROVED");setSection("refunds")})}{card("Completed Refunds",statusRefund("COMPLETED"),()=>{setRefundFilter("COMPLETED");setSection("refunds")})}{card("Failed Refunds",dashboardCount("refunds","FAILED"),()=>{setRefundFilter("FAILED");setSection("refunds")})}</div><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{card("Pending Store Payouts",storePayouts.filter((x:any)=>Number(x.pendingPayout||0)>0).length,()=>setSection("store-payouts"))}{card("Pending Payouts",statusPayout("PENDING"),()=>{setPayoutFilter("PENDING");setSection("payouts")})}{card("Eligible Payouts",statusPayout("ELIGIBLE"),()=>{setPayoutFilter("ELIGIBLE");setSection("payouts")})}{card("Finalized Payouts",statusPayout("FINALIZED"),()=>{setPayoutFilter("FINALIZED");setSection("payouts")})}{card("Paid Payouts",statusPayout("PAID"),()=>{setPayoutFilter("PAID");setSection("payouts")})}{card("Failed Payouts",statusPayout("FAILED"),()=>{setPayoutFilter("FAILED");setSection("payouts")})}</div><div className="grid grid-cols-3 gap-3">{card("Pending Incentives",statusInc("PENDING"),()=>{setIncentiveFilter("PENDING");setSection("incentives")})}{card("Approved Incentives",statusInc("APPROVED"),()=>{setIncentiveFilter("APPROVED");setSection("incentives")})}{card("Paid Incentives",statusInc("PAID"),()=>{setIncentiveFilter("PAID");setSection("incentives")})}</div><div className="grid md:grid-cols-5 gap-3">{card("Today's Refunds",money(dashboard.summary?.todayRefunds||0))}{card("Today's Payouts",money(dashboard.summary?.todayPayouts||0))}{card("Monthly Refunds",money(dashboard.summary?.monthlyRefunds||0))}{card("Monthly Delivery Payout",money(dashboard.summary?.monthlyDeliveryPayout||0))}{card("Monthly Incentives",money(dashboard.summary?.monthlyIncentives||0))}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">Recent Activities</h2></div>{(dashboard.recentActivities||[]).map((x:any)=><button type="button" key={x._id} onClick={()=>setSection("transactions")} className="w-full p-4 border-b flex justify-between text-sm text-left hover:bg-slate-50"><span><b>{x.transactionId}</b><span className="text-slate-500 ml-2">{x.type}</span></span><span>{money(x.amount)} · {x.status}</span></button>)}{!(dashboard.recentActivities||[]).length&&<div className="p-5 text-sm text-slate-500">No recent finance activity.</div>}</div><div className="bg-white border rounded-3xl overflow-hidden"><div className="p-5 border-b"><h2 className="font-bold">My Work Queue</h2><p className="text-xs text-slate-500 mt-1">Live records that require the current Finance role's attention.</p></div><div className="divide-y">{[...refunds.filter((x:any)=>["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE","FINANCE_REVIEW","APPROVAL_PENDING","APPROVED","PROCESSING"].includes(x.status)).slice(0,4).map((x:any)=>({key:"r"+x._id,label:"REFUND",id:x.requestId||x._id,amount:x.approvedAmount??x.amount,status:x.status,go:"refunds"})),...payouts.filter((x:any)=>["ELIGIBLE","FINALIZED","PROCESSING","ON_HOLD"].includes(x.deliveryPayoutStatus)).slice(0,3).map((x:any)=>({key:"p"+x._id,label:"DELIVERY PAYOUT",id:x._id,amount:Number(x.deliveryPayout||0)+Number(x.performanceIncentive||0),status:x.deliveryPayoutStatus,go:"payouts"})),...incentives.filter((x:any)=>["PENDING","APPROVED","ON_HOLD"].includes(x.status)).slice(0,3).map((x:any)=>({key:"i"+x._id,label:"INCENTIVE",id:x.incentiveId||x._id,amount:x.approvedAmount||x.eligibleAmount,status:x.status,go:"incentives"}))].slice(0,8).map((x:any)=><button key={x.key} onClick={()=>setSection(x.go)} className="w-full p-4 text-left flex items-center justify-between gap-4 hover:bg-slate-50"><span><b>{x.label}</b><span className="ml-2 text-slate-500">{x.id}</span><p className="text-xs text-amber-700 mt-1">Action Required · {x.status}</p></span><b>{money(x.amount||0)}</b></button>)}{!refunds.length&&!payouts.length&&!incentives.length&&<div className="p-5 text-sm text-slate-500">No finance work is currently assigned.</div>}</div></div></div>}
@@ -14467,7 +14542,7 @@ function DepartmentSidebar({
     <div className="h-full flex flex-col">
       <div className="p-6 text-xl font-bold flex items-center gap-2">
         <span className="w-9 h-9 bg-emerald-500 rounded-xl grid place-items-center">
-          <Leaf size={18} />
+          <Boxes size={18} />
         </span>
         {title}
       </div>
@@ -14564,8 +14639,8 @@ const applicationDocumentDefinitions = {
     ["BANK_ACCOUNT_PROOF", "Bank Account Proof", "Optional / if required for seller settlement"],
   ],
   DELIVERY: [
-    ["IDENTITY_PROOF", "Identity Proof", "Required only if FreshBasket business policy requires it"],
-    ["DRIVING_LICENCE", "Driving Licence", "Required only if FreshBasket business policy requires it"],
+    ["IDENTITY_PROOF", "Identity Proof", "Required only if DUKAANGRID business policy requires it"],
+    ["DRIVING_LICENCE", "Driving Licence", "Required only if DUKAANGRID business policy requires it"],
     ["VEHICLE_RC", "Vehicle Registration Certificate", "Optional / as applicable"],
     ["ADDRESS_PROOF", "Address Proof", "Optional / as applicable"],
     ["PAN_CARD", "PAN Card", "Optional / as applicable"],
@@ -14712,11 +14787,11 @@ function PublicApplicationPage({ type }: { type: "STORE" | "DELIVERY" }) {
     <div className="min-h-screen bg-slate-50 px-4 py-8 md:py-14">
       <div className="max-w-2xl mx-auto bg-white border rounded-[2rem] shadow-sm p-7 md:p-10 text-center">
         <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-700 grid place-items-center mx-auto"><CheckCircle2 size={34}/></div>
-        <p className="text-emerald-700 text-xs font-black uppercase tracking-[.18em] mt-5">FreshBasket Onboarding</p>
+        <p className="text-emerald-700 text-xs font-black uppercase tracking-[.18em] mt-5">DUKAANGRID Onboarding</p>
         <h1 className="text-3xl md:text-4xl font-black mt-2">Application submitted successfully.</h1>
         <p className="text-slate-500 mt-3">Keep your Application ID safe. You can use it to track the application without creating a customer account.</p>
         <div className="bg-slate-50 border rounded-2xl p-5 mt-6"><p className="text-xs text-slate-500">Application ID</p><p className="text-2xl font-black text-slate-950 mt-1 tracking-wide">{success.applicationId}</p><div className="flex justify-center gap-2 mt-3"><span className="px-3 py-1.5 rounded-full border bg-white text-sm font-bold">{applicationStatusLabel(success.status)}</span><span className="text-sm text-slate-500 py-1.5">{success.submittedAt ? new Date(success.submittedAt).toLocaleString("en-IN") : ""}</span></div></div>
-        <div className="flex flex-col sm:flex-row justify-center gap-3 mt-7"><Link to="/application-status" className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">Track application</Link><button type="button" onClick={() => nav("/")} className="border rounded-xl px-5 py-3 font-bold">Back to FreshBasket</button></div>
+        <div className="flex flex-col sm:flex-row justify-center gap-3 mt-7"><Link to="/application-status" className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">Track application</Link><button type="button" onClick={() => nav("/")} className="border rounded-xl px-5 py-3 font-bold">Back to DUKAANGRID</button></div>
       </div>
     </div>
   );
@@ -14724,9 +14799,9 @@ function PublicApplicationPage({ type }: { type: "STORE" | "DELIVERY" }) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-slate-950 text-white"><div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4"><Link to="/login" className="flex items-center gap-3"><span className="w-10 h-10 rounded-xl bg-emerald-500 grid place-items-center"><Leaf size={21}/></span><div><b className="text-lg">FreshBasket</b><p className="text-[10px] uppercase tracking-widest text-emerald-300">Public onboarding</p></div></Link><Link to="/application-status" className="text-sm font-bold text-emerald-300">Track application</Link></div></header>
+      <header className="bg-slate-950 text-white"><div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4"><Link to="/login" className="flex items-center gap-3"><span className="w-10 h-10 rounded-xl bg-emerald-500 grid place-items-center"><Boxes size={21}/></span><div><b className="text-lg">DUKAANGRID</b><p className="text-[10px] uppercase tracking-widest text-emerald-300">Public onboarding</p></div></Link><Link to="/application-status" className="text-sm font-bold text-emerald-300">Track application</Link></div></header>
       <main className="max-w-6xl mx-auto px-4 py-7 md:py-10">
-        <div className="mb-7"><p className="text-emerald-700 text-xs font-black uppercase tracking-[.18em]">{isStore ? "Store / Seller Application" : "Delivery Partner Application"}</p><h1 className="text-3xl md:text-4xl font-black mt-2">{isStore ? "Take Your Local Store Online" : "Become a Delivery Partner"}</h1><p className="text-slate-500 mt-2 max-w-3xl">Submit your details directly to FreshBasket Main Admin. No customer login and no OTP are required for this application.</p></div>
+        <div className="mb-7"><p className="text-emerald-700 text-xs font-black uppercase tracking-[.18em]">{isStore ? "Store / Seller Application" : "Delivery Partner Application"}</p><h1 className="text-3xl md:text-4xl font-black mt-2">{isStore ? "Take Your Local Store Online" : "Become a Delivery Partner"}</h1><p className="text-slate-500 mt-2 max-w-3xl">Submit your details directly to DUKAANGRID Main Admin. No customer login and no OTP are required for this application.</p></div>
         {error && <div className="mb-5 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm font-semibold">{error}</div>}
         <form onSubmit={submit} className="space-y-5">
           <PublicApplicationSection title={isStore ? "A — Applicant Details" : "A — Personal Details"}>
@@ -14751,11 +14826,11 @@ function PublicApplicationPage({ type }: { type: "STORE" | "DELIVERY" }) {
             <PublicApplicationSection title="C — Vehicle"><div className="grid md:grid-cols-2 gap-4"><PublicApplicationField label="Vehicle Type"><PublicApplicationSelect value={form.vehicleType} onChange={(e:any)=>set("vehicleType",e.target.value)}>{["Bike","Scooter","Cycle","EV","Other"].map(x=><option key={x}>{x}</option>)}</PublicApplicationSelect></PublicApplicationField><PublicApplicationField label="Vehicle Registration Number"><PublicApplicationInput value={form.vehicleRegistrationNumber} onChange={(e:any)=>set("vehicleRegistrationNumber",e.target.value)}/></PublicApplicationField><PublicApplicationField label="Driving Licence Number"><PublicApplicationInput value={form.drivingLicenceNumber} onChange={(e:any)=>set("drivingLicenceNumber",e.target.value)}/></PublicApplicationField><PublicApplicationField label="Vehicle ownership"><PublicApplicationSelect value={form.vehicleOwnership} onChange={(e:any)=>set("vehicleOwnership",e.target.value)}>{["Own","Family","Rented","Other"].map(x=><option key={x}>{x}</option>)}</PublicApplicationSelect></PublicApplicationField></div></PublicApplicationSection>
           </>}
 
-          <PublicApplicationSection title={isStore ? "G — Documents" : "D — Documents"}><div className="space-y-3">{(form.documents || []).map((doc: any, i: number) => <div key={doc.documentType} className="border rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4"><div className="flex-1"><b>{doc.label}</b><p className="text-xs text-slate-500 mt-1">{(applicationDocumentDefinitions[type] as any[])[i]?.[2]}</p>{doc.fileName && <p className="text-xs text-emerald-700 mt-2 font-semibold">{doc.fileName}</p>}</div><div className="flex flex-wrap items-center gap-2"><label className="border rounded-xl px-3 py-2 text-sm font-bold cursor-pointer"><Upload size={15} className="inline mr-1"/>Upload<input type="file" accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" className="hidden" onChange={(e:any)=>uploadDocument(i,e.target.files?.[0])}/></label><ImagePickerButtons compact onFile={(file)=>uploadDocument(i,file)}/>{doc.fileName && <button type="button" onClick={()=>removeDocument(i)} className="border border-red-200 text-red-700 rounded-xl px-3 py-2 text-sm font-bold">Remove</button>}</div></div>)}</div><p className="text-xs text-slate-500 mt-4">Document fields are shown as optional/as applicable unless FreshBasket business rules later require a specific document. Files are accessible only through authorized admin application views.</p></PublicApplicationSection>
+          <PublicApplicationSection title={isStore ? "G — Documents" : "D — Documents"}><div className="space-y-3">{(form.documents || []).map((doc: any, i: number) => <div key={doc.documentType} className="border rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4"><div className="flex-1"><b>{doc.label}</b><p className="text-xs text-slate-500 mt-1">{(applicationDocumentDefinitions[type] as any[])[i]?.[2]}</p>{doc.fileName && <p className="text-xs text-emerald-700 mt-2 font-semibold">{doc.fileName}</p>}</div><div className="flex flex-wrap items-center gap-2"><label className="border rounded-xl px-3 py-2 text-sm font-bold cursor-pointer"><Upload size={15} className="inline mr-1"/>Upload<input type="file" accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" className="hidden" onChange={(e:any)=>uploadDocument(i,e.target.files?.[0])}/></label><ImagePickerButtons compact onFile={(file)=>uploadDocument(i,file)}/>{doc.fileName && <button type="button" onClick={()=>removeDocument(i)} className="border border-red-200 text-red-700 rounded-xl px-3 py-2 text-sm font-bold">Remove</button>}</div></div>)}</div><p className="text-xs text-slate-500 mt-4">Document fields are shown as optional/as applicable unless DUKAANGRID business rules later require a specific document. Files are accessible only through authorized admin application views.</p></PublicApplicationSection>
 
           {!isStore && <><PublicApplicationSection title="E — Emergency Contact"><div className="grid md:grid-cols-3 gap-4"><PublicApplicationField label="Emergency Contact Name"><PublicApplicationInput value={form.emergencyContactName} onChange={(e:any)=>set("emergencyContactName",e.target.value)}/></PublicApplicationField><PublicApplicationField label="Relationship"><PublicApplicationInput value={form.emergencyContactRelationship} onChange={(e:any)=>set("emergencyContactRelationship",e.target.value)}/></PublicApplicationField><PublicApplicationField label="Emergency Contact Number"><PublicApplicationInput value={form.emergencyContactNumber} onChange={(e:any)=>set("emergencyContactNumber",e.target.value)}/></PublicApplicationField></div></PublicApplicationSection><PublicApplicationSection title="F — Experience"><div className="grid md:grid-cols-3 gap-4"><PublicApplicationField label="Previous Delivery Experience"><PublicApplicationSelect value={form.previousDeliveryExperience} onChange={(e:any)=>set("previousDeliveryExperience",e.target.value)}><option>No</option><option>Yes</option></PublicApplicationSelect></PublicApplicationField>{form.previousDeliveryExperience === "Yes" && <><PublicApplicationField label="Company / Platform"><PublicApplicationInput value={form.previousDeliveryCompany} onChange={(e:any)=>set("previousDeliveryCompany",e.target.value)}/></PublicApplicationField><PublicApplicationField label="Experience duration"><PublicApplicationInput value={form.previousDeliveryDuration} onChange={(e:any)=>set("previousDeliveryDuration",e.target.value)}/></PublicApplicationField></>}</div></PublicApplicationSection></>}
 
-          <PublicApplicationSection title={isStore ? "H — Declaration" : "G — Declaration"}><div className="space-y-3"><label className="flex gap-3 items-start text-sm font-semibold"><input type="checkbox" checked={form.declarationAccurate} onChange={(e:any)=>set("declarationAccurate",e.target.checked)} className="mt-1"/> <span>I confirm that the information provided is accurate.</span></label><label className="flex gap-3 items-start text-sm font-semibold"><input type="checkbox" checked={form.declarationContact} onChange={(e:any)=>set("declarationContact",e.target.checked)} className="mt-1"/> <span>I agree that FreshBasket may contact me regarding onboarding.</span></label></div></PublicApplicationSection>
+          <PublicApplicationSection title={isStore ? "H — Declaration" : "G — Declaration"}><div className="space-y-3"><label className="flex gap-3 items-start text-sm font-semibold"><input type="checkbox" checked={form.declarationAccurate} onChange={(e:any)=>set("declarationAccurate",e.target.checked)} className="mt-1"/> <span>I confirm that the information provided is accurate.</span></label><label className="flex gap-3 items-start text-sm font-semibold"><input type="checkbox" checked={form.declarationContact} onChange={(e:any)=>set("declarationContact",e.target.checked)} className="mt-1"/> <span>I agree that DUKAANGRID may contact me regarding onboarding.</span></label></div></PublicApplicationSection>
           <div className="bg-white border rounded-3xl p-5 md:p-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"><div><p className="font-bold">Ready to submit?</p><p className="text-xs text-slate-500 mt-1">No customer account and no OTP are required.</p></div><div className="flex flex-col sm:flex-row gap-3"><button type="button" onClick={()=>nav("/")} className="border rounded-xl px-5 py-3 font-bold">Cancel</button><button type="submit" disabled={submitting} className="bg-emerald-600 text-white rounded-xl px-6 py-3 font-bold disabled:opacity-50">{submitting ? "Submitting Application..." : isStore ? "Submit Store Application" : "Submit Delivery Partner Application"}</button></div></div>
         </form>
       </main>
@@ -14769,7 +14844,7 @@ function ApplicationStatusPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const search = async (e?: React.FormEvent) => { e?.preventDefault(); setError(""); setData(null); if (!id.trim()) return setError("Enter your Application ID."); setLoading(true); try { const r=await axios.get(API+"/public/applications/"+encodeURIComponent(id.trim().toUpperCase())+"/status"); setData(r.data.data); } catch(e:any){ setError(e?.response?.data?.message||"Application not found."); } finally { setLoading(false); } };
-  return <div className="min-h-screen bg-slate-50"><header className="bg-slate-950 text-white"><div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center"><Link to="/login" className="flex items-center gap-3"><span className="w-10 h-10 rounded-xl bg-emerald-500 grid place-items-center"><Leaf size={21}/></span><b className="text-lg">FreshBasket</b></Link><Link to="/" className="text-sm font-bold text-emerald-300">Back to FreshBasket</Link></div></header><main className="max-w-3xl mx-auto px-4 py-10"><div className="bg-white border rounded-[2rem] p-6 md:p-8 shadow-sm"><p className="text-emerald-700 text-xs font-black uppercase tracking-[.18em]">Application Tracking</p><h1 className="text-3xl font-black mt-2">Check application status</h1><p className="text-slate-500 mt-2">Enter the Application ID shown after your public Store or Delivery Partner submission.</p><form onSubmit={search} className="flex flex-col sm:flex-row gap-3 mt-6"><input value={id} onChange={(e:any)=>setId(e.target.value)} placeholder="FB-STORE-APP-... or FB-DEL-APP-..." className="flex-1 border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-100"/><button disabled={loading} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">{loading?"Checking...":"Check Status"}</button></form>{error&&<div className="mt-5 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm font-semibold">{error}</div>}{data&&<div className="mt-6 space-y-4"><div className="bg-slate-50 border rounded-2xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"><div><p className="text-xs text-slate-500">Application ID</p><b className="text-xl">{data.applicationId}</b><p className="text-sm text-slate-500 mt-1">{data.applicationType === "STORE" ? "Store / Seller" : "Delivery Partner"} · {data.applicantName}{data.storeName?` · ${data.storeName}`:""}</p></div><span className={`px-3 py-1.5 rounded-full border text-sm font-bold w-fit ${applicationStatusClass(data.status)}`}>{applicationStatusLabel(data.status)}</span></div>{data.publicMessage&&<div className="bg-violet-50 border border-violet-100 text-violet-800 rounded-2xl p-4"><b>Message from FreshBasket</b><p className="text-sm mt-1">{data.publicMessage}</p></div>}<div className="bg-white border rounded-2xl p-5"><h2 className="font-bold">Timeline</h2><div className="mt-4 space-y-3">{(data.statusHistory||[]).map((h:any,i:number)=><div key={i} className="flex gap-3 items-start"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"/><div><b className="text-sm">{applicationStatusLabel(h.status)}</b><p className="text-xs text-slate-500 mt-0.5">{h.at?new Date(h.at).toLocaleString("en-IN"):""}</p></div></div>)}</div></div></div>}</div></main></div>;
+  return <div className="min-h-screen bg-slate-50"><header className="bg-slate-950 text-white"><div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center"><Link to="/login" className="flex items-center gap-3"><span className="w-10 h-10 rounded-xl bg-emerald-500 grid place-items-center"><Boxes size={21}/></span><b className="text-lg">DUKAANGRID</b></Link><Link to="/" className="text-sm font-bold text-emerald-300">Back to DUKAANGRID</Link></div></header><main className="max-w-3xl mx-auto px-4 py-10"><div className="bg-white border rounded-[2rem] p-6 md:p-8 shadow-sm"><p className="text-emerald-700 text-xs font-black uppercase tracking-[.18em]">Application Tracking</p><h1 className="text-3xl font-black mt-2">Check application status</h1><p className="text-slate-500 mt-2">Enter the Application ID shown after your public Store or Delivery Partner submission.</p><form onSubmit={search} className="flex flex-col sm:flex-row gap-3 mt-6"><input value={id} onChange={(e:any)=>setId(e.target.value)} placeholder="FB-STORE-APP-... or FB-DEL-APP-..." className="flex-1 border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-100"/><button disabled={loading} className="bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">{loading?"Checking...":"Check Status"}</button></form>{error&&<div className="mt-5 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm font-semibold">{error}</div>}{data&&<div className="mt-6 space-y-4"><div className="bg-slate-50 border rounded-2xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"><div><p className="text-xs text-slate-500">Application ID</p><b className="text-xl">{data.applicationId}</b><p className="text-sm text-slate-500 mt-1">{data.applicationType === "STORE" ? "Store / Seller" : "Delivery Partner"} · {data.applicantName}{data.storeName?` · ${data.storeName}`:""}</p></div><span className={`px-3 py-1.5 rounded-full border text-sm font-bold w-fit ${applicationStatusClass(data.status)}`}>{applicationStatusLabel(data.status)}</span></div>{data.publicMessage&&<div className="bg-violet-50 border border-violet-100 text-violet-800 rounded-2xl p-4"><b>Message from DUKAANGRID</b><p className="text-sm mt-1">{data.publicMessage}</p></div>}<div className="bg-white border rounded-2xl p-5"><h2 className="font-bold">Timeline</h2><div className="mt-4 space-y-3">{(data.statusHistory||[]).map((h:any,i:number)=><div key={i} className="flex gap-3 items-start"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"/><div><b className="text-sm">{applicationStatusLabel(h.status)}</b><p className="text-xs text-slate-500 mt-0.5">{h.at?new Date(h.at).toLocaleString("en-IN"):""}</p></div></div>)}</div></div></div>}</div></main></div>;
 }
 
 function AdminApplications({ type }: { type: "STORE" | "DELIVERY" }) {
@@ -14807,7 +14882,7 @@ function AdminLoginNotices() {
 }
 
 function AdminPublicContact() {
-  const [form,setForm]=useState<any>({businessName:"FreshBasket",contactName:"",phone:"",whatsapp:"",email:"",address:"",workingHours:"",storeOnboardingContact:"",deliveryHiringContact:"",customerSupportContact:""}); const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState<any>({businessName:"DUKAANGRID",contactName:"",phone:"",whatsapp:"",email:"",address:"",workingHours:"",storeOnboardingContact:"",deliveryHiringContact:"",customerSupportContact:""}); const [loading,setLoading]=useState(true);
   const load=async()=>{try{const r=await axios.get(API+"/admin/public-contact",{headers:adminHeaders()});setForm({...form,...(r.data.data||{})})}catch(e:any){alert(e?.response?.data?.message||"Unable to load public contact")}finally{setLoading(false)}}; useEffect(()=>{load()},[]);
   const save=async()=>{try{await axios.put(API+"/admin/public-contact",form,{headers:adminHeaders()});alert("Public contact settings saved") }catch(e:any){alert(e?.response?.data?.message||"Unable to save public contact")}};
   return <div className="space-y-5"><div><p className="text-emerald-600 text-sm font-bold">CONTENT MANAGEMENT</p><h2 className="text-2xl font-bold">Public Contact Settings</h2><p className="text-sm text-slate-500 mt-1">These are the only contact details exposed on public onboarding/login surfaces.</p></div><div className="bg-white border rounded-3xl p-6"><div className="grid md:grid-cols-2 gap-4">{[["businessName","Business / Support Contact Name"],["contactName","Contact person"],["phone","Support phone"],["whatsapp","WhatsApp"],["email","Support email"],["address","Business address"],["workingHours","Working hours"],["storeOnboardingContact","Store onboarding contact"],["deliveryHiringContact","Delivery hiring contact"],["customerSupportContact","Customer support contact"]].map(([key,label])=><label key={key} className="text-sm font-semibold">{label}<input value={form[key]||""} onChange={e=>setForm({...form,[key]:e.target.value})} className="mt-2 w-full border rounded-xl p-3"/></label>)}</div><button disabled={loading} onClick={save} className="mt-5 bg-emerald-600 text-white rounded-xl px-5 py-3 font-bold">Save public contact</button></div></div>;
@@ -14882,7 +14957,7 @@ function AdminCodRiskControl() {
       {message&&<p className="mt-4 text-sm font-semibold text-emerald-700">{message}</p>}
       <button onClick={save} disabled={saving||loading} className="mt-5 bg-emerald-600 disabled:opacity-50 text-white rounded-xl px-5 py-3 font-bold">{saving?"Saving...":"Save COD risk rules"}</button>
     </div>
-    <div className="bg-white border rounded-3xl p-6"><h3 className="font-bold text-lg">Decision data</h3><p className="text-sm text-slate-500 mt-1">The customer decision is calculated at checkout from persisted FreshBasket records: COD cancellations, assigned-order cancellations treated as failed delivery signals, delivered COD orders, and completed COD refunds.</p></div>
+    <div className="bg-white border rounded-3xl p-6"><h3 className="font-bold text-lg">Decision data</h3><p className="text-sm text-slate-500 mt-1">The customer decision is calculated at checkout from persisted DUKAANGRID records: COD cancellations, assigned-order cancellations treated as failed delivery signals, delivered COD orders, and completed COD refunds.</p></div>
   </div>;
 }
 
@@ -15064,6 +15139,139 @@ function AdminApprovalCenter({ onNavigate }: { onNavigate: (tab: string) => void
   </div>;
 }
 
+
+function AdminLegalPolicies() {
+  const policyKeys = ["terms", "privacy", "refund", "replacement", "cancellation", "delivery", "grievance"] as const;
+  const labels: Record<string, string> = {
+    terms: "Terms & Conditions",
+    privacy: "Privacy Policy",
+    refund: "Refund Policy",
+    replacement: "Replacement Policy",
+    cancellation: "Cancellation Policy",
+    delivery: "Delivery Policy",
+    grievance: "Grievance Redressal & Contact",
+  };
+  const [policies, setPolicies] = useState<any>({});
+  const [contact, setContact] = useState<any>({ businessName: "DUKAANGRID", contactName: "", phone: "", whatsapp: "", email: "", address: "", workingHours: "", storeOnboardingContact: "", deliveryHiringContact: "", customerSupportContact: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [contactSaving, setContactSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [legalRes, contactRes] = await Promise.all([
+        axios.get(API + "/admin/legal-policies", { headers: adminHeaders() }),
+        axios.get(API + "/admin/public-contact", { headers: adminHeaders() }),
+      ]);
+      setPolicies(legalRes.data?.data || {});
+      setContact((prev: any) => ({ ...prev, ...(contactRes.data?.data || {}) }));
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Unable to load legal & policy settings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const updatePolicy = (key: string, field: string, value: any) => {
+    setPolicies((prev: any) => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), [field]: value },
+    }));
+  };
+
+  const savePolicy = async (key: string) => {
+    const row = policies[key] || {};
+    const body = {
+      title: String(row.title || labels[key]).trim(),
+      heading: String(row.heading || "").trim(),
+      body: String(row.bodyText ?? (Array.isArray(row.body) ? row.body.join("\n\n") : ""))
+        .split(/\n\s*\n/)
+        .map((x: string) => x.trim())
+        .filter(Boolean),
+    };
+    if (!body.heading) return alert("Heading is required");
+    if (!body.body.length) return alert("Policy content is required");
+    setSaving(key);
+    try {
+      const r = await axios.put(API + "/admin/legal-policies/" + key, body, { headers: adminHeaders() });
+      setPolicies((prev: any) => ({ ...prev, [key]: r.data?.data || { ...row, ...body, bodyText: body.body.join("\n\n") } }));
+      alert(labels[key] + " saved successfully");
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Unable to save " + labels[key]);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const saveContact = async () => {
+    setContactSaving(true);
+    try {
+      const r = await axios.put(API + "/admin/public-contact", contact, { headers: adminHeaders() });
+      setContact(r.data?.data || contact);
+      alert("Grievance / contact details saved successfully");
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Unable to save contact details");
+    } finally {
+      setContactSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-emerald-600 text-sm font-bold">CONTENT MANAGEMENT</p>
+        <h2 className="text-2xl font-black">Legal & Policies</h2>
+        <p className="text-sm text-slate-500 mt-1">Manage the legal pages displayed to customers. Changes are stored in the database and appear on the public Legal & Policies pages.</p>
+      </div>
+
+      {loading ? <div className="bg-white border rounded-3xl p-6 text-sm text-slate-500">Loading legal settings...</div> : (
+        <>
+          {policyKeys.map((key) => {
+            const row = policies[key] || {};
+            const bodyText = String(row.bodyText ?? (Array.isArray(row.body) ? row.body.join("\n\n") : ""));
+            return (
+              <div key={key} className="bg-white border rounded-3xl p-5 sm:p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-black text-lg">{labels[key]}</h3>
+                    <p className="text-xs text-slate-500 mt-1">Separate paragraphs with a blank line.</p>
+                  </div>
+                  <button type="button" disabled={saving === key} onClick={() => void savePolicy(key)} className="bg-emerald-600 disabled:opacity-60 text-white rounded-xl px-4 py-2.5 font-bold">
+                    {saving === key ? "Saving..." : "Save policy"}
+                  </button>
+                </div>
+                <input value={row.title || labels[key]} onChange={e => updatePolicy(key, "title", e.target.value)} placeholder="Policy title" className="w-full border rounded-xl p-3" />
+                <input value={row.heading || ""} onChange={e => updatePolicy(key, "heading", e.target.value)} placeholder="Section heading" className="w-full border rounded-xl p-3" />
+                <textarea value={bodyText} onChange={e => updatePolicy(key, "bodyText", e.target.value)} placeholder="Write policy content. Use a blank line between paragraphs." className="w-full border rounded-xl p-3 min-h-44 leading-6" />
+              </div>
+            );
+          })}
+
+          <div className="bg-white border rounded-3xl p-5 sm:p-6 space-y-4">
+            <div>
+              <h3 className="font-black text-lg">Grievance / Contact Details</h3>
+              <p className="text-sm text-slate-500 mt-1">These details are shown on the customer's Grievance Redressal page. This uses the same public contact configuration used elsewhere in the app.</p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              {[["businessName","Business name"],["contactName","Contact person"],["email","Grievance / support email"],["phone","Phone"],["whatsapp","WhatsApp"],["address","Address"],["workingHours","Working hours"],["customerSupportContact","Customer support contact"]].map(([key,label]) => (
+                <label key={key} className="text-sm font-semibold">{label}
+                  <input value={contact[key] || ""} onChange={e => setContact((p:any) => ({ ...p, [key]: e.target.value }))} className="mt-2 w-full border rounded-xl p-3" />
+                </label>
+              ))}
+            </div>
+            <button type="button" disabled={contactSaving} onClick={() => void saveContact()} className="bg-emerald-600 disabled:opacity-60 text-white rounded-xl px-5 py-3 font-bold">
+              {contactSaving ? "Saving..." : "Save grievance / contact details"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Admin({
   store,
 }: {
@@ -15206,6 +15414,7 @@ function Admin({
     ["notifications", Bell, "Notifications"],
     ["login-notices", Bell, "Login Page Notices"],
     ["public-contact", Mail, "Public Contact Settings"],
+    ["legal-policies", ShieldCheck, "Legal & Policies"],
     ["settings", Settings, "Settings / Security"],
     ["reports", BarChart3, "Reports"],
     ["store-demand-heatmap", MapPin, "Store Demand Heatmap"],
@@ -15220,7 +15429,7 @@ function Admin({
 
   const visibleNavs = isMainAdmin
     ? navs
-    : navs.filter((x) => !["rewards", "settings", "admin-management", "login-notices", "public-contact"].includes(x[0]));
+    : navs.filter((x) => !["rewards", "settings", "admin-management", "login-notices", "public-contact", "legal-policies"].includes(x[0]));
 
   const adminDepartments = [
     { id: "operations", label: "Operations", Icon: Briefcase, items: visibleNavs.filter(x => ["orders","order-history","delivery-partners","delivery-operations","replacement-requests"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
@@ -15230,7 +15439,7 @@ function Admin({
     { id: "finance", label: "Finance", Icon: CircleDollarSign, items: visibleNavs.filter(x => ["finance-management","payment-settings","financial-overview"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
     { id: "administration", label: "Administration", Icon: ShieldCheck, items: visibleNavs.filter(x => ["action-required","approval-center","safe-view-as","configuration-history","cod-risk-control","admin-management","id-card-generator","notifications"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
     { id: "applications", label: "Applications", Icon: Store, items: visibleNavs.filter(x => ["store-applications","delivery-applications"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
-    { id: "content", label: "Content Management", Icon: Bell, items: visibleNavs.filter(x => ["login-notices","public-contact"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
+    { id: "content", label: "Content Management", Icon: Bell, items: visibleNavs.filter(x => ["login-notices","public-contact","legal-policies"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
     { id: "reports", label: "Reports & Analytics", Icon: BarChart3, items: visibleNavs.filter(x => ["reports","store-demand-heatmap","delivery-heatmap","peak-hour-detection"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
     { id: "settings-security", label: "Settings & Security", Icon: Settings, items: visibleNavs.filter(x => ["settings"].includes(x[0])).map(x => ({ id:x[0], label:x[2], Icon:x[1] })) },
   ].filter(d => d.items.length);
@@ -15242,7 +15451,7 @@ function Admin({
         Skip to main content
       </a>
       <DepartmentSidebar
-        title="FreshBasket"
+        title="DUKAANGRID"
         subtitle="Store management"
         departments={adminDepartments}
         activeId={tab}
@@ -15551,7 +15760,7 @@ function Admin({
                 <div>
                   <p className="text-emerald-600 text-xs font-bold">ADMINISTRATION</p>
                   <h2 className="text-2xl font-bold">Notifications</h2>
-                  <p className="text-sm text-slate-500 mt-1">Admin alerts and workflow updates from FreshBasket.</p>
+                  <p className="text-sm text-slate-500 mt-1">Admin alerts and workflow updates from DUKAANGRID.</p>
                 </div>
                 <button onClick={markAllAdminNotificationsRead} className="border rounded-xl px-4 py-2 text-sm font-bold">Mark all read</button>
               </div>
@@ -15574,6 +15783,7 @@ function Admin({
 
           {tab === "login-notices" && isMainAdmin && <AdminLoginNotices />}
           {tab === "public-contact" && isMainAdmin && <AdminPublicContact />}
+          {tab === "legal-policies" && isMainAdmin && <AdminLegalPolicies />}
           {tab === "settings" && <AdminSettings />}
           {tab === "reports" && <AdminReports />}
           {tab === "store-demand-heatmap" && <AdminStoreDemandHeatmap store={store} />}
@@ -15590,7 +15800,7 @@ function Admin({
   );
 }
 
-function getFreshBasketRoleRoot(role: string) {
+function getDUKAANGRIDRoleRoot(role: string) {
   if (role === "admin") return "/admin";
   if (role === "delivery") return "/delivery";
   if (role === "customer_care") return "/customer-care";
@@ -15598,12 +15808,12 @@ function getFreshBasketRoleRoot(role: string) {
   return "/";
 }
 
-function getFreshBasketBackFallback(pathname: string, role: string) {
+function getDUKAANGRIDBackFallback(pathname: string, role: string) {
   if (/^\/product\/[^/]+/.test(pathname)) return role === "customer" ? "/shop" : "/";
   if (/^\/orders\/[^/]+/.test(pathname)) return "/orders";
   if (/^\/invoice\/[^/]+/.test(pathname)) return "/orders";
   if (pathname === "/checkout") return "/cart";
-  if (pathname === "/cart") return role === "customer" ? "/" : getFreshBasketRoleRoot(role);
+  if (pathname === "/cart") return role === "customer" ? "/" : getDUKAANGRIDRoleRoot(role);
   if (pathname === "/delivery/earnings") return "/delivery";
   if (pathname === "/customer-360") {
     if (role === "customer_care") return "/customer-care";
@@ -15617,9 +15827,9 @@ function getFreshBasketBackFallback(pathname: string, role: string) {
       pathname === "/account" || pathname === "/profile" || pathname === "/login-history" ||
       pathname === "/stores" || pathname === "/favorite-stores" || pathname === "/shop" ||
       pathname === "/rewards" || pathname === "/support") {
-    return getFreshBasketRoleRoot(role);
+    return getDUKAANGRIDRoleRoot(role);
   }
-  return getFreshBasketRoleRoot(role);
+  return getDUKAANGRIDRoleRoot(role);
 }
 
 function SafeAuthenticatedRouteRestorer({ store }: { store: ReturnType<typeof useStore> }) {
@@ -15661,7 +15871,7 @@ function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
       if (detail.handled) return;
 
       const role = String(store.user?.role || "");
-      const root = getFreshBasketRoleRoot(role);
+      const root = getDUKAANGRIDRoleRoot(role);
 
       // At the authenticated Home/Dashboard root, Android Back should exit the
       // native app. Do this before React Router history handling so an old
@@ -15676,7 +15886,7 @@ function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
       if (Number.isFinite(historyIndex) && historyIndex > 0) { nav(-1); return; }
       if (!Number.isFinite(historyIndex) && window.history.length > 1) { nav(-1); return; }
 
-      const fallback = getFreshBasketBackFallback(location.pathname, role);
+      const fallback = getDUKAANGRIDBackFallback(location.pathname, role);
       if (location.pathname !== fallback) { nav(fallback, { replace: true }); return; }
     };
 
@@ -15694,9 +15904,149 @@ function GlobalBackHandler({ store }: { store: ReturnType<typeof useStore> }) {
   return null;
 }
 
+
+function LegalPolicyPage({ policy }: { policy: "terms" | "privacy" | "refund" | "replacement" | "cancellation" | "delivery" | "grievance" }) {
+  const [contact, setContact] = useState<any>(null);
+  const [managedPolicies, setManagedPolicies] = useState<any>(null);
+  const titleMap: Record<string, string> = {
+    terms: "Terms & Conditions",
+    privacy: "Privacy Policy",
+    refund: "Refund Policy",
+    replacement: "Replacement Policy",
+    cancellation: "Cancellation Policy",
+    delivery: "Delivery Policy",
+    grievance: "Grievance Redressal & Contact",
+  };
+  useEffect(() => {
+    axios.get(API + "/public/contact").then((r) => setContact(r.data?.data || null)).catch(() => setContact(null));
+    axios.get(API + "/public/legal-policies").then((r) => setManagedPolicies(r.data?.data || null)).catch(() => setManagedPolicies(null));
+  }, []);
+  const contactName = contact?.businessName || "DUKAANGRID";
+  const email = contact?.customerSupportContact || contact?.email || "Not configured";
+  const phone = contact?.phone || "Not configured";
+  const address = contact?.address || "Not configured";
+  const hours = contact?.workingHours || "Not configured";
+
+  const content: Record<string, { heading: string; body: string[] }> = {
+    terms: {
+      heading: "Using DUKAANGRID",
+      body: [
+        "DUKAANGRID is a local marketplace platform that connects customers with participating local stores and delivery partners. By using the application, you agree to use the platform lawfully and provide accurate account and order information.",
+        "Product availability, pricing, store information, delivery availability and other order details are shown from the participating store/platform records available at the time of the order.",
+        "Customers are responsible for keeping their account credentials secure and for reviewing order details before placing an order. DUKAANGRID may suspend or restrict access where required for security, fraud prevention, misuse or legal compliance.",
+        "These terms should be read together with the Refund, Replacement, Cancellation, Delivery and Privacy policies shown in this Legal & Policies section."
+      ]
+    },
+    privacy: {
+      heading: "How information is handled",
+      body: [
+        "DUKAANGRID may process information needed to operate the marketplace, including account details, contact information, delivery addresses, orders, support requests, refunds/replacements, ratings and relevant notification/device information.",
+        "Information is used to provide services, process and track orders, support customers, communicate service updates, maintain security, prevent misuse and meet applicable legal or operational requirements.",
+        "Payment credentials are handled through the payment flow/provider integrated with the application; DUKAANGRID should not be treated as storing a customer's complete card credentials merely because a payment option is displayed in the application.",
+        "Customers can contact DUKAANGRID through the published support/grievance details for questions about their personal information or account."
+      ]
+    },
+    refund: {
+      heading: "Refund requests",
+      body: [
+        "Refund eligibility is determined using the applicable product refund setting, order status, delivery status, request timing and the information/evidence submitted by the customer.",
+        "The current application uses a 24-hour post-delivery eligibility window for supported refund requests. A product must also be marked as eligible for refund by the applicable store/platform configuration.",
+        "Customer Care is the first verification layer for refund requests. Eligible financial cases are then routed through the existing Finance workflow.",
+        "A refund request can be rejected when the applicable eligibility conditions are not satisfied. Where a rejection reason is required by the workflow, it is recorded with the request."
+      ]
+    },
+    replacement: {
+      heading: "Replacement requests",
+      body: [
+        "Replacement eligibility is determined from the product's replacement setting, order/delivery status, request timing and the information/evidence supplied by the customer.",
+        "The current application uses a 24-hour post-delivery eligibility window for supported replacement requests.",
+        "Customer Care verifies the request before it is routed through the existing Store Admin/Main Admin and Delivery Partner workflow.",
+        "A replacement may be unavailable when the product is not marked as replacement-eligible or the applicable order/request conditions are not satisfied."
+      ]
+    },
+    cancellation: {
+      heading: "Order cancellation",
+      body: [
+        "Cancellation availability depends on the current order state and the cancellation controls available for that order. Customers should use the cancellation option shown for an eligible order or contact Customer Support when assistance is required.",
+        "Once an order has progressed to a state where cancellation is no longer permitted by the existing order workflow, the customer may need to use the applicable support, refund or replacement process instead.",
+        "Any payment reversal or refund resulting from an approved cancellation follows the applicable payment and Finance workflow."
+      ]
+    },
+    delivery: {
+      heading: "Delivery information",
+      body: [
+        "DUKAANGRID facilitates delivery through the delivery workflow associated with the order, which may involve a participating store, the platform's operations team and/or an assigned Delivery Partner.",
+        "Delivery status, assignment information and relevant order updates may be shown in the customer account. Customers should keep their delivery address and contact details accurate so the assigned delivery team can complete the order.",
+        "Where delivery proof is required by the existing workflow, the Delivery Partner may be required to submit delivery evidence before the order is finalized as delivered.",
+        "Delivery availability and timing can depend on the selected store, address, order conditions, availability and operational circumstances."
+      ]
+    },
+    grievance: {
+      heading: "Grievance Redressal / Customer Contact",
+      body: [
+        "Customers can raise order, payment, refund, replacement, delivery, account or technical concerns through the Customer Support functionality available in the application.",
+        "For formal grievance escalation, use the contact details configured by DUKAANGRID below. Please include your Customer ID, Order ID, relevant Order Item ID and a concise description where applicable so the issue can be located efficiently.",
+        "The contact details shown here are loaded from the application's public contact configuration. If a field is marked 'Not configured', the business administrator should update the public contact settings before launch."
+      ]
+    }
+  };
+  const section = managedPolicies?.[policy]
+    ? {
+        heading: String(managedPolicies[policy].heading || content[policy].heading),
+        body: Array.isArray(managedPolicies[policy].body) && managedPolicies[policy].body.length
+          ? managedPolicies[policy].body.map((x: any) => String(x)).filter(Boolean)
+          : content[policy].body,
+      }
+    : content[policy];
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="bg-slate-950 text-white sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+          <Link to="/" className="font-black text-xl">DUKAANGRID</Link>
+          <Link to="/" className="text-sm font-semibold text-slate-300 hover:text-white">Back to home</Link>
+        </div>
+      </header>
+      <main className="max-w-5xl mx-auto px-4 py-8 sm:py-12">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-8">
+          <p className="text-emerald-600 text-xs font-black tracking-widest uppercase">DUKAANGRID · Legal & Policies</p>
+          <h1 className="text-2xl sm:text-4xl font-black mt-2">{managedPolicies?.[policy]?.title || titleMap[policy]}</h1>
+          <p className="text-sm text-slate-500 mt-2">Please read this information together with the other policies available in the Legal & Policies section.</p>
+          <section className="mt-8 space-y-5">
+            <h2 className="text-xl font-bold">{section.heading}</h2>
+           {section.body.map((text: string, i: number) => (
+  <p key={i} className="text-sm sm:text-base leading-7 text-slate-700">
+    {text}
+  </p>
+))}
+          </section>
+          {policy === "grievance" && (
+            <div className="mt-8 grid sm:grid-cols-2 gap-4">
+              {[["Business", contactName], ["Customer Support / Grievance Email", email], ["Phone", phone], ["Address", address], ["Working Hours", hours]].map(([label, value]) => (
+                <div key={String(label)} className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                  <p className="text-xs text-slate-500 font-semibold">{label}</p>
+                  <p className="mt-1 font-bold break-words">{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-10 pt-6 border-t border-slate-200 flex flex-wrap gap-3 text-sm font-semibold">
+            <Link className="text-emerald-700" to="/legal/terms">Terms</Link>
+            <Link className="text-emerald-700" to="/legal/privacy">Privacy</Link>
+            <Link className="text-emerald-700" to="/legal/refund">Refund</Link>
+            <Link className="text-emerald-700" to="/legal/replacement">Replacement</Link>
+            <Link className="text-emerald-700" to="/legal/cancellation">Cancellation</Link>
+            <Link className="text-emerald-700" to="/legal/delivery">Delivery</Link>
+            <Link className="text-emerald-700" to="/legal/grievance">Grievance / Contact</Link>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function App() {
   const store = useStore();
-  useNativeFreshBasketPush(store);
+  useNativeDUKAANGRIDPush(store);
 
   return (
     <>
@@ -15815,6 +16165,13 @@ export default function App() {
         path="/finance"
         element={<RoleRoute store={store} roles={["finance_manager","finance_executive"]}><FinanceDashboard store={store} /></RoleRoute>}
       />
+      <Route path="/legal/terms" element={<LegalPolicyPage policy="terms" />} />
+      <Route path="/legal/privacy" element={<LegalPolicyPage policy="privacy" />} />
+      <Route path="/legal/refund" element={<LegalPolicyPage policy="refund" />} />
+      <Route path="/legal/replacement" element={<LegalPolicyPage policy="replacement" />} />
+      <Route path="/legal/cancellation" element={<LegalPolicyPage policy="cancellation" />} />
+      <Route path="/legal/delivery" element={<LegalPolicyPage policy="delivery" />} />
+      <Route path="/legal/grievance" element={<LegalPolicyPage policy="grievance" />} />
       <Route
         path="*"
         element={<Home store={store} />}

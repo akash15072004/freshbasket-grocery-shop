@@ -37,7 +37,7 @@ import Application from "./models/Application";
 
 const storeLocationSchema = new mongoose.Schema({
   key: { type: String, unique: true, default: "main" },
-  name: { type: String, default: "FreshBasket Store", trim: true, maxlength: 120 },
+  name: { type: String, default: "DUKAANGRID Store", trim: true, maxlength: 120 },
   address: { type: String, default: "", trim: true, maxlength: 300 },
   latitude: { type: Number, default: null },
   longitude: { type: Number, default: null },
@@ -65,7 +65,7 @@ const StoreLocation = mongoose.models.StoreLocation || mongoose.model("StoreLoca
 const paymentSettingSchema = new mongoose.Schema({
   storeAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User", unique: true, sparse: true, index: true },
   upiId: { type: String, default: "", trim: true, maxlength: 120 },
-  merchantName: { type: String, default: "FreshBasket", trim: true, maxlength: 120 },
+  merchantName: { type: String, default: "DUKAANGRID", trim: true, maxlength: 120 },
   qrImage: { type: String, default: "", trim: true, maxlength: 100000 },
   isEnabled: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -89,9 +89,61 @@ const loginNoticeSchema = new mongoose.Schema({
 }, { timestamps: true });
 const LoginNotice = mongoose.models.LoginNotice || mongoose.model("LoginNotice", loginNoticeSchema);
 
+const legalPolicySchema = new mongoose.Schema({
+  key: { type: String, unique: true, required: true, trim: true },
+  title: { type: String, required: true, trim: true, maxlength: 160 },
+  heading: { type: String, required: true, trim: true, maxlength: 240 },
+  body: { type: [String], default: [] },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+}, { timestamps: true });
+const LegalPolicySetting = mongoose.models.LegalPolicySetting || mongoose.model("LegalPolicySetting", legalPolicySchema);
+
+const DEFAULT_LEGAL_POLICIES:any = {
+  terms: { title: "Terms & Conditions", heading: "Using DUKAANGRID", body: [
+    "DUKAANGRID is a local marketplace platform that connects customers with participating local stores and delivery partners. By using the application, you agree to use the platform lawfully and provide accurate account and order information.",
+    "Product availability, pricing, store information, delivery availability and other order details are shown from the participating store/platform records available at the time of the order.",
+    "Customers are responsible for keeping their account credentials secure and for reviewing order details before placing an order. DUKAANGRID may suspend or restrict access where required for security, fraud prevention, misuse or legal compliance.",
+    "These terms should be read together with the Refund, Replacement, Cancellation, Delivery and Privacy policies shown in this Legal & Policies section."
+  ]},
+  privacy: { title: "Privacy Policy", heading: "How information is handled", body: [
+    "DUKAANGRID may process information needed to operate the marketplace, including account details, contact information, delivery addresses, orders, support requests, refunds/replacements, ratings and relevant notification/device information.",
+    "Information is used to provide services, process and track orders, support customers, communicate service updates, maintain security, prevent misuse and meet applicable legal or operational requirements.",
+    "Payment credentials are handled through the payment flow/provider integrated with the application; DUKAANGRID should not be treated as storing a customer's complete card credentials merely because a payment option is displayed in the application.",
+    "Customers can contact DUKAANGRID through the published support/grievance details for questions about their personal information or account."
+  ]},
+  refund: { title: "Refund Policy", heading: "Refund requests", body: [
+    "Refund eligibility is determined using the applicable product refund setting, order status, delivery status, request timing and the information/evidence submitted by the customer.",
+    "The current application uses a 24-hour post-delivery eligibility window for supported refund requests. A product must also be marked as eligible for refund by the applicable store/platform configuration.",
+    "Customer Care is the first verification layer for refund requests. Eligible financial cases are then routed through the existing Finance workflow.",
+    "A refund request can be rejected when the applicable eligibility conditions are not satisfied. Where a rejection reason is required by the workflow, it is recorded with the request."
+  ]},
+  replacement: { title: "Replacement Policy", heading: "Replacement requests", body: [
+    "Replacement eligibility is determined from the product's replacement setting, order/delivery status, request timing and the information/evidence supplied by the customer.",
+    "The current application uses a 24-hour post-delivery eligibility window for supported replacement requests.",
+    "Customer Care verifies the request before it is routed through the existing Store Admin/Main Admin and Delivery Partner workflow.",
+    "A replacement may be unavailable when the product is not marked as replacement-eligible or the applicable order/request conditions are not satisfied."
+  ]},
+  cancellation: { title: "Cancellation Policy", heading: "Order cancellation", body: [
+    "Cancellation availability depends on the current order state and the cancellation controls available for that order. Customers should use the cancellation option shown for an eligible order or contact Customer Support when assistance is required.",
+    "Once an order has progressed to a state where cancellation is no longer permitted by the existing order workflow, the customer may need to use the applicable support, refund or replacement process instead.",
+    "Any payment reversal or refund resulting from an approved cancellation follows the applicable payment and Finance workflow."
+  ]},
+  delivery: { title: "Delivery Policy", heading: "Delivery information", body: [
+    "DUKAANGRID facilitates delivery through the delivery workflow associated with the order, which may involve a participating store, the platform's operations team and/or an assigned Delivery Partner.",
+    "Delivery status, assignment information and relevant order updates may be shown in the customer account. Customers should keep their delivery address and contact details accurate so the assigned delivery team can complete the order.",
+    "Where delivery proof is required by the existing workflow, the Delivery Partner may be required to submit delivery evidence before the order is finalized as delivered.",
+    "Delivery availability and timing can depend on the selected store, address, order conditions, availability and operational circumstances."
+  ]},
+  grievance: { title: "Grievance Redressal & Contact", heading: "Grievance Redressal / Customer Contact", body: [
+    "Customers can raise order, payment, refund, replacement, delivery, account or technical concerns through the Customer Support functionality available in the application.",
+    "For formal grievance escalation, use the contact details configured by DUKAANGRID below. Please include your Customer ID, Order ID, relevant Order Item ID and a concise description where applicable so the issue can be located efficiently.",
+    "The contact details shown here are loaded from the application's public contact configuration. If a field is marked 'Not configured', the business administrator should update the public contact settings before launch."
+  ]}
+};
+
 const publicContactSchema = new mongoose.Schema({
   key: { type: String, unique: true, default: "default" },
-  businessName: { type: String, default: "FreshBasket", trim: true, maxlength: 120 },
+  businessName: { type: String, default: "DUKAANGRID", trim: true, maxlength: 120 },
   contactName: { type: String, default: "", trim: true, maxlength: 120 },
   phone: { type: String, default: "", trim: true, maxlength: 20 },
   whatsapp: { type: String, default: "", trim: true, maxlength: 30 },
@@ -357,7 +409,7 @@ if (orderItemsSchemaPath?.schema?.add) {
   // Delivery batching never replaces the original order ID.
   deliveryBatchId: { type: String, default: null, index: true },
   deliveryAssignmentType: { type: String, enum: ["MANUAL", "AUTO", "BATCH"], default: "MANUAL", index: true },
-  sourceType: { type: String, enum: ["FRESHBASKET_DIRECT", "STORE"], default: "FRESHBASKET_DIRECT" },
+  sourceType: { type: String, enum: ["DUKAANGRID_DIRECT", "STORE"], default: "DUKAANGRID_DIRECT" },
   // Immutable financial snapshot captured when a delivered order is finalized.
   // Legacy orders remain untouched and simply have no snapshot.
   commissionRate: { type: Number, default: 0, min: 0, max: 100 },
@@ -455,7 +507,7 @@ if (orderItemsSchemaPath?.schema?.add) {
     type: [{
       token: { type: String, required: true },
       platform: { type: String, default: "android" },
-      appId: { type: String, default: "com.freshbasket.grocery" },
+      appId: { type: String, default: "com.DUKAANGRID.grocery" },
       lastSeenAt: { type: Date, default: Date.now },
     }],
     default: [],
@@ -506,7 +558,7 @@ if (orderItemsSchemaPath?.schema?.add) {
   mainAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   customerCareAgent: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   deliveryPartner: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-  sourceType: { type: String, enum: ["STORE", "FRESHBASKET_DIRECT"], default: "FRESHBASKET_DIRECT", index: true },
+  sourceType: { type: String, enum: ["STORE", "DUKAANGRID_DIRECT"], default: "DUKAANGRID_DIRECT", index: true },
   fulfillmentOwnerType: { type: String, enum: ["STORE_ADMIN", "MAIN_ADMIN", ""], default: "" },
   fulfillmentOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   priority: { type: String, enum: ["LOW", "MEDIUM", "HIGH", "URGENT"], default: "MEDIUM" },
@@ -616,7 +668,7 @@ const backfillUserIdentifiers = async () => {
   if (mainAdminId) {
     const legacyOrders:any[] = await Order.find({ $or: [{ sourceType: { $exists: false } }, { sourceType: null }, { sourceType: "" }] }).select("_id storeAdmin").lean();
     for (const order of legacyOrders) {
-      const sourceType = order.storeAdmin && String(order.storeAdmin) !== String(mainAdminId) ? "STORE" : "FRESHBASKET_DIRECT";
+      const sourceType = order.storeAdmin && String(order.storeAdmin) !== String(mainAdminId) ? "STORE" : "DUKAANGRID_DIRECT";
       await Order.collection.updateOne({ _id: order._id, $or: [{ sourceType: { $exists: false } }, { sourceType: null }, { sourceType: "" }] }, { $set: { sourceType } });
     }
   }
@@ -920,7 +972,7 @@ const STORE_LAT_RAW = String(process.env.STORE_LAT || "").trim();
 const STORE_LNG_RAW = String(process.env.STORE_LNG || "").trim();
 const STORE_LAT = STORE_LAT_RAW === "" ? null : Number(STORE_LAT_RAW);
 const STORE_LNG = STORE_LNG_RAW === "" ? null : Number(STORE_LNG_RAW);
-const STORE_ADDRESS = String(process.env.STORE_ADDRESS || "FreshBasket Store").trim();
+const STORE_ADDRESS = String(process.env.STORE_ADDRESS || "DUKAANGRID Store").trim();
 
 const hasValidStoreCoordinates =
   STORE_LAT !== null &&
@@ -1000,7 +1052,7 @@ const belongsToTenant = async (req: AuthRequest, doc: any, field = "storeAdmin")
 
 
 const allowedOrigins = [
-  "https://freshbasket-grocery-shop.vercel.app",
+  "https://DUKAANGRID-grocery-shop.vercel.app",
   "http://localhost:5173",
   // Capacitor Android WebView origin
   "http://localhost",
@@ -1250,7 +1302,7 @@ const firebaseMessaging = (() => {
   try {
     // Prefer a complete Firebase service-account JSON when the deployment
     // platform supports one secret. Fall back to the individual variables
-    // already supported by FreshBasket.
+    // already supported by DUKAANGRID.
     const rawServiceAccount = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
     let serviceAccount: any = null;
 
@@ -1266,7 +1318,7 @@ const firebaseMessaging = (() => {
     if (!serviceAccount) {
       const projectId = String(process.env.FIREBASE_PROJECT_ID || "").trim();
       const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || "").trim();
-      const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n").trim();
+      const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || "").replace(/\n/g, "\n").trim();
       if (!projectId || !clientEmail || !privateKey) {
         console.warn("FCM NOT CONFIGURED: set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY");
         return null;
@@ -1277,7 +1329,7 @@ const firebaseMessaging = (() => {
     const app = getApps().length
       ? getApps()[0]
       : initializeApp({ credential: cert(serviceAccount) });
-    console.log("FCM initialized for FreshBasket Android notifications");
+    console.log("FCM initialized for DUKAANGRID Android notifications");
     return getMessaging(app);
   } catch (error) {
     console.error("FCM INITIALIZATION ERROR:", error);
@@ -1323,7 +1375,7 @@ const sendPushToUsers = async ({ users, title, message, type = "info", relatedEn
     const target = buildNotificationDeepLink({ relatedEntity, relatedEntityId, order, deepLink });
     const response = await firebaseMessaging.sendEachForMulticast({
       tokens,
-      notification: { title: String(title || "FreshBasket"), body: String(message || "") },
+      notification: { title: String(title || "DUKAANGRID"), body: String(message || "") },
       data: {
         type: String(type || "info"),
         relatedEntity: String(relatedEntity || ""),
@@ -1515,7 +1567,7 @@ app.get("/api/admin/security-alerts", auth, mainAdminOnly, async (req: AuthReque
 app.get("/api/health", (_, res) => {
   res.json({
     success: true,
-    message: "FreshBasket API is running",
+    message: "DUKAANGRID API is running",
   });
 });
 
@@ -1868,8 +1920,52 @@ app.patch("/api/admin/login-notices/:id", auth, mainAdminOnly, async (req: AuthR
 
 app.delete("/api/admin/login-notices/:id", auth, mainAdminOnly, async (req, res) => { try { await LoginNotice.findByIdAndDelete(req.params.id); return res.json({success:true}); } catch { return res.status(500).json({success:false,message:"Unable to archive notice"}); } });
 
-app.get("/api/public/contact", async (_req,res)=>{try{const d:any=await PublicContactSetting.findOne({key:"default"}).lean();return res.json({success:true,data:d||{businessName:"FreshBasket",contactName:"",phone:"",whatsapp:"",email:"",address:"",workingHours:"",storeOnboardingContact:"",deliveryHiringContact:"",customerSupportContact:""}});}catch{return res.status(500).json({success:false,message:"Unable to load public contact"});}});
-app.get("/api/admin/public-contact", auth, mainAdminOnly, async (_req,res)=>{try{const d:any=await PublicContactSetting.findOne({key:"default"}).lean();return res.json({success:true,data:d||{key:"default",businessName:"FreshBasket"}});}catch{return res.status(500).json({success:false,message:"Unable to load public contact"});}});
+app.get("/api/public/legal-policies", async (_req,res)=>{
+  try {
+    const rows:any[] = await LegalPolicySetting.find({}).lean();
+    const data:any = {};
+    for (const key of Object.keys(DEFAULT_LEGAL_POLICIES)) {
+      const row:any = rows.find((x:any) => x.key === key);
+      data[key] = row || { key, ...DEFAULT_LEGAL_POLICIES[key] };
+    }
+    return res.json({success:true,data});
+  } catch { return res.status(500).json({success:false,message:"Unable to load legal policies"}); }
+});
+
+app.get("/api/admin/legal-policies", auth, mainAdminOnly, async (_req,res)=>{
+  try {
+    const rows:any[] = await LegalPolicySetting.find({}).lean();
+    const data:any = {};
+    for (const key of Object.keys(DEFAULT_LEGAL_POLICIES)) {
+      const row:any = rows.find((x:any) => x.key === key);
+      const merged:any = row ? {...DEFAULT_LEGAL_POLICIES[key], ...row} : { key, ...DEFAULT_LEGAL_POLICIES[key] };
+      merged.bodyText = Array.isArray(merged.body) ? merged.body.join("\n\n") : "";
+      data[key] = merged;
+    }
+    return res.json({success:true,data});
+  } catch { return res.status(500).json({success:false,message:"Unable to load legal policies"}); }
+});
+
+app.put("/api/admin/legal-policies/:key", auth, mainAdminOnly, async (req:AuthRequest,res)=>{
+  try {
+    const key=String(req.params.key||"").trim();
+    if(!Object.prototype.hasOwnProperty.call(DEFAULT_LEGAL_POLICIES,key)) return res.status(404).json({success:false,message:"Legal policy not found"});
+    const title=String(req.body.title||DEFAULT_LEGAL_POLICIES[key].title).trim();
+    const heading=String(req.body.heading||"").trim();
+    const body=Array.isArray(req.body.body) ? req.body.body.map((x:any)=>String(x||"").trim()).filter(Boolean) : [];
+    if(title.length<2) return res.status(400).json({success:false,message:"Policy title is required"});
+    if(heading.length<2) return res.status(400).json({success:false,message:"Policy heading is required"});
+    if(!body.length) return res.status(400).json({success:false,message:"Policy content is required"});
+    if(body.join(" ").length>20000) return res.status(400).json({success:false,message:"Policy content is too long"});
+    const previous:any=await LegalPolicySetting.findOne({key}).lean();
+    const row:any=await LegalPolicySetting.findOneAndUpdate({key},{$set:{key,title,heading,body,updatedBy:req.user!.id}},{upsert:true,new:true,setDefaultsOnInsert:true});
+    await recordEntityChange({req,action:"LEGAL_POLICY_UPDATED",targetType:"CONFIGURATION",targetId:`legal-policy:${key}`,before:previous||null,after:row.toObject?row.toObject():row,reason:req.body?.reason||`Legal policy ${key} updated`});
+    return res.json({success:true,data:{...row.toObject(),bodyText:body.join("\n\n")}});
+  } catch(e){ return res.status(400).json({success:false,message:"Unable to save legal policy"}); }
+});
+
+app.get("/api/public/contact", async (_req,res)=>{try{const d:any=await PublicContactSetting.findOne({key:"default"}).lean();return res.json({success:true,data:d||{businessName:"DUKAANGRID",contactName:"",phone:"",whatsapp:"",email:"",address:"",workingHours:"",storeOnboardingContact:"",deliveryHiringContact:"",customerSupportContact:""}});}catch{return res.status(500).json({success:false,message:"Unable to load public contact"});}});
+app.get("/api/admin/public-contact", auth, mainAdminOnly, async (_req,res)=>{try{const d:any=await PublicContactSetting.findOne({key:"default"}).lean();return res.json({success:true,data:d||{key:"default",businessName:"DUKAANGRID"}});}catch{return res.status(500).json({success:false,message:"Unable to load public contact"});}});
 app.put("/api/admin/public-contact", auth, mainAdminOnly, async (req:AuthRequest,res)=>{try{const fields=["businessName","contactName","phone","whatsapp","email","address","workingHours","storeOnboardingContact","deliveryHiringContact","customerSupportContact"];const patch:any={key:"default",updatedBy:req.user!.id};for(const k of fields)if(req.body[k]!==undefined)patch[k]=String(req.body[k]||"").trim();if(patch.email&&!/^\S+@\S+\.\S+$/.test(patch.email))return res.status(400).json({success:false,message:"Invalid public email"});const previous:any=await PublicContactSetting.findOne({key:"default"}).lean();const d=await PublicContactSetting.findOneAndUpdate({key:"default"},{$set:patch},{upsert:true,new:true,setDefaultsOnInsert:true});await recordEntityChange({req,action:"PUBLIC_CONTACT_CONFIGURATION_CHANGED",targetType:"CONFIGURATION",targetId:"public-contact",before:{businessName:previous?.businessName||"",contactName:previous?.contactName||"",phone:previous?.phone||"",whatsapp:previous?.whatsapp||"",email:previous?.email||"",address:previous?.address||"",workingHours:previous?.workingHours||"",storeOnboardingContact:previous?.storeOnboardingContact||"",deliveryHiringContact:previous?.deliveryHiringContact||"",customerSupportContact:previous?.customerSupportContact||""},after:{businessName:d.businessName||"",contactName:d.contactName||"",phone:d.phone||"",whatsapp:d.whatsapp||"",email:d.email||"",address:d.address||"",workingHours:d.workingHours||"",storeOnboardingContact:d.storeOnboardingContact||"",deliveryHiringContact:d.deliveryHiringContact||"",customerSupportContact:d.customerSupportContact||""},reason:req.body?.reason||"Public contact configuration updated"});return res.json({success:true,data:d});}catch{return res.status(400).json({success:false,message:"Unable to save public contact"});}});
 
 /* =========================================================
@@ -2991,7 +3087,7 @@ app.post("/api/customer/ai-support-assistant", auth, role("customer"), async (re
 
 /* =========================================================
    AI ORDER ASSISTANT — CATALOG GROUNDED
-   Uses only active, in-stock FreshBasket catalogue records.
+   Uses only active, in-stock DUKAANGRID catalogue records.
    No product, price, stock, or availability is invented.
 ========================================================= */
 app.post("/api/customer/ai-order-assistant", auth, role("customer"), async (req: AuthRequest, res) => {
@@ -3892,7 +3988,7 @@ app.post("/api/push/register", auth, async (req: AuthRequest, res) => {
   try {
     const token = String(req.body?.token || "").trim();
     const platform = String(req.body?.platform || "android").trim().toLowerCase();
-    const appId = String(req.body?.appId || "com.freshbasket.grocery").trim();
+    const appId = String(req.body?.appId || "com.DUKAANGRID.grocery").trim();
     if (!token || token.length < 20 || token.length > 4096) return res.status(400).json({ success:false, message:"Invalid push token" });
     // A physical device token belongs to one currently authenticated account.
     // Remove stale ownership from every account before assigning it to this user.
@@ -3930,9 +4026,9 @@ app.post("/api/push/unregister", auth, async (req: AuthRequest, res) => {
 app.get("/api/push/status", auth, role("admin"), async (_req: AuthRequest, res) => {
   try {
     const configured = Boolean(firebaseMessaging);
-    return res.json({ success:true, configured, platform:"android", appId:"com.freshbasket.grocery" });
+    return res.json({ success:true, configured, platform:"android", appId:"com.DUKAANGRID.grocery" });
   } catch {
-    return res.json({ success:true, configured:false, platform:"android", appId:"com.freshbasket.grocery" });
+    return res.json({ success:true, configured:false, platform:"android", appId:"com.DUKAANGRID.grocery" });
   }
 });
 
@@ -4415,7 +4511,7 @@ app.post(
         deliveryLocation,
         deliveryAssignmentStatus: "UNASSIGNED",
         ...(idempotencyKey ? { orderIdempotencyKey: idempotencyKey, orderIdempotencyHash: requestHash } : {}),
-        sourceType: (orderStoreAdmin && mainAdminId && String(orderStoreAdmin) !== String(mainAdminId)) ? "STORE" : "FRESHBASKET_DIRECT",
+        sourceType: (orderStoreAdmin && mainAdminId && String(orderStoreAdmin) !== String(mainAdminId)) ? "STORE" : "DUKAANGRID_DIRECT",
         status: "Pending",
       });
       await applyDeliverySlaForStatus(order, "Pending");
@@ -4456,7 +4552,7 @@ app.post(
       }
 
       const orderCustomer: any = await User.findById(order.user).select("customerId name").lean();
-      const orderSourceType = String((order as any).sourceType || "FRESHBASKET_DIRECT");
+      const orderSourceType = String((order as any).sourceType || "DUKAANGRID_DIRECT");
       await notifyUser({
         user: order.user,
         title: "Order placed",
@@ -4465,8 +4561,8 @@ app.post(
         order: order._id,
       });
       await notifyAdmins({
-        title: orderSourceType === "STORE" ? "New store order received" : "New FreshBasket order received",
-        message: `${orderSourceType === "STORE" ? "Store order" : "FreshBasket direct order"} #${String(order._id).slice(-8).toUpperCase()} · Customer: ${orderCustomer?.name || "Customer"} · Customer ID: ${orderCustomer?.customerId || "—"} · Amount: ₹${Number(order.total || 0).toLocaleString("en-IN")} · Items: ${Array.isArray(order.items) ? order.items.length : 0}.`,
+        title: orderSourceType === "STORE" ? "New store order received" : "New DUKAANGRID order received",
+        message: `${orderSourceType === "STORE" ? "Store order" : "DUKAANGRID direct order"} #${String(order._id).slice(-8).toUpperCase()} · Customer: ${orderCustomer?.name || "Customer"} · Customer ID: ${orderCustomer?.customerId || "—"} · Amount: ₹${Number(order.total || 0).toLocaleString("en-IN")} · Items: ${Array.isArray(order.items) ? order.items.length : 0}.`,
         type: "order",
         order: order._id,
         ...(orderStoreAdmin ? { storeAdmin: orderStoreAdmin } : {}),
@@ -4553,7 +4649,7 @@ app.get(
         ],
       };
       const sourceType = String(req.query.sourceType || "").trim().toUpperCase();
-      if (isMainAdmin && ["STORE", "FRESHBASKET_DIRECT"].includes(sourceType)) filter.$and.push({ sourceType });
+      if (isMainAdmin && ["STORE", "DUKAANGRID_DIRECT"].includes(sourceType)) filter.$and.push({ sourceType });
 
       if (status && !["Delivered", "Cancelled"].includes(status)) {
         filter.status = status;
@@ -5957,7 +6053,7 @@ app.post("/api/customer-care/orders/:id/refund-requests", auth, role("customer_c
     if(reason.length<3)return res.status(400).json({success:false,message:"Refund reason is required"});
     const dup=await RefundRequest.findOne({order:order._id,orderItemId,status:{$in:REFUND_ACTIVE_STATUSES}});
     if(dup)return res.status(409).json({success:false,message:"Refund request already exists for this item"});
-    const request:any=await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount,requestedAmount:amount,reason,requestedBy:req.user!.id,status:"REQUESTED",orderItemId,storeId:(order as any).storeAdmin||null,storeAdmin:(order as any).storeAdmin||null,sourceType:String((order as any).sourceType||"FRESHBASKET_DIRECT"),customerCareAgent:null,refundMethod:"ORIGINAL",evidence:imageList(req.body.evidence),statusHistory:[{status:"REQUESTED",by:order.user,role:"customer",at:new Date()}]});
+    const request:any=await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount,requestedAmount:amount,reason,requestedBy:req.user!.id,status:"REQUESTED",orderItemId,storeId:(order as any).storeAdmin||null,storeAdmin:(order as any).storeAdmin||null,sourceType:String((order as any).sourceType||"DUKAANGRID_DIRECT"),customerCareAgent:null,refundMethod:"ORIGINAL",evidence:imageList(req.body.evidence),statusHistory:[{status:"REQUESTED",by:order.user,role:"customer",at:new Date()}]});
     await recordCustomerCareAudit({req,action:"REFUND_REQUESTED",targetType:"REFUND_REQUEST",targetId:request._id,customer:order.user,order:order._id,metadata:{amount,reason,orderItemId}});
     await inspectSecurityThresholds({ req, event: "REFUND_ACTIVITY", actorId: order.user, targetId: request._id, metadata: { amount: Number(amount || 0), orderId: String(order._id), orderItemId } });
     return res.status(201).json({success:true,message:"Refund request created",data:request});
@@ -5987,7 +6083,7 @@ app.post("/api/customer-care/orders/:id/replacement-requests", auth, role("custo
     const refunded = await RefundRequest.findOne({ order: order._id, customer: order.user, orderItemId, status: "COMPLETED" }).select("_id requestId").lean();
     if (refunded) return res.status(409).json({ success: false, message: "This order item has already been refunded" });
     const quantity = Math.max(1, Math.min(Number(selectedItem.quantity || 1), Number(req.body.quantity || 1)));
-    const sourceType = String((order as any).sourceType || ((order as any).storeAdmin ? "STORE" : "FRESHBASKET_DIRECT"));
+    const sourceType = String((order as any).sourceType || ((order as any).storeAdmin ? "STORE" : "DUKAANGRID_DIRECT"));
     const storeId = sourceType === "STORE" ? ((order as any).storeAdmin || null) : null;
     const request: any = await ReplacementRequest.create({
       requestId: makeRequestId("REPLACEMENT"), replacementId: makeReplacementId(), order: order._id,
@@ -5995,7 +6091,7 @@ app.post("/api/customer-care/orders/:id/replacement-requests", auth, role("custo
       reason, description: String(req.body.description || "").trim().slice(0, 3000),
       items: [{ product: selectedItem.product || null, name: String(selectedItem.name || ""), quantity }],
       orderItemId, storeId, storeAdmin: storeId,
-      mainAdmin: sourceType === "FRESHBASKET_DIRECT" ? await getMainAdminId() : null,
+      mainAdmin: sourceType === "DUKAANGRID_DIRECT" ? await getMainAdminId() : null,
       sourceType, deliveryPartner: null,
       priority: ["LOW","MEDIUM","HIGH","URGENT"].includes(String(req.body.priority || "").toUpperCase()) ? String(req.body.priority).toUpperCase() : "MEDIUM",
       evidence: imageList(req.body.evidence), deliveredAtSnapshot: order.deliveredAt, expiryAt,
@@ -6242,7 +6338,7 @@ app.patch("/api/customer-care/requests/:type/:id/verify", auth, role("customer_c
     const evidence:string[] = imageList(evidenceBuckets);
     if(!evidence.length) return res.status(400).json({success:false,message:"Evidence is required before Customer Care can verify this request"});
     request.evidence=evidence;
-    const verified={customer:true,order:true,orderItem:true,product:Boolean(ctx.product),store:Boolean(ctx.storeId||ctx.sourceType==="FRESHBASKET_DIRECT"),policy:Boolean(ctx.policy),eligibility:type==="refund"?Boolean(ctx.policy.refundEligible):Boolean(ctx.policy.replacementEligible),reason:true,evidence:true};
+    const verified={customer:true,order:true,orderItem:true,product:Boolean(ctx.product),store:Boolean(ctx.storeId||ctx.sourceType==="DUKAANGRID_DIRECT"),policy:Boolean(ctx.policy),eligibility:type==="refund"?Boolean(ctx.policy.refundEligible):Boolean(ctx.policy.replacementEligible),reason:true,evidence:true};
     if(!verified.product||!verified.policy||!verified.eligibility) return res.status(400).json({success:false,message:"Policy or eligibility verification failed",verification:verified});
     request.verification=verified;
     request.customerCareAgent=req.user!.id;
@@ -6266,7 +6362,7 @@ app.patch("/api/customer-care/requests/:type/:id/verify", auth, role("customer_c
       request.fulfillmentOwnerType=ctx.sourceType==="STORE" ? "STORE_ADMIN" : "MAIN_ADMIN";
       request.fulfillmentOwnerId=ctx.sourceType==="STORE" ? ctx.storeId : ctx.mainAdminId;
       request.storeAdmin=ctx.sourceType==="STORE" ? ctx.storeId : null;
-      request.mainAdmin=ctx.sourceType==="FRESHBASKET_DIRECT" ? ctx.mainAdminId : null;
+      request.mainAdmin=ctx.sourceType==="DUKAANGRID_DIRECT" ? ctx.mainAdminId : null;
       request.deliveredAtSnapshot=request.deliveredAtSnapshot || ctx.order.deliveredAt || null;
       request.expiryAt=request.expiryAt || replacementExpiry(ctx.order);
       request.eligibleAtRequestTime=true;
@@ -6275,7 +6371,7 @@ app.patch("/api/customer-care/requests/:type/:id/verify", auth, role("customer_c
       pushRequestHistory(request,nextStatus,req.user!.id,"customer_care","Customer Care verified the request and routed it to the correct fulfillment owner.");
       await request.save();
       if(ctx.sourceType==="STORE") await notifyUser({user:ctx.storeId,title:"Replacement Request Ready",message:`Replacement ${request.requestId} is ready for your store fulfillment.`,type:"replacement_assignment",order:request.order,relatedEntity:"REPLACEMENT_REQUEST",relatedEntityId:request._id});
-      else await notifyUser({user:ctx.mainAdminId,title:"FreshBasket Direct Replacement Request",message:`Replacement ${request.requestId} requires FreshBasket Direct fulfillment.`,type:"replacement_assignment",order:request.order,relatedEntity:"REPLACEMENT_REQUEST",relatedEntityId:request._id});
+      else await notifyUser({user:ctx.mainAdminId,title:"DUKAANGRID Direct Replacement Request",message:`Replacement ${request.requestId} requires DUKAANGRID Direct fulfillment.`,type:"replacement_assignment",order:request.order,relatedEntity:"REPLACEMENT_REQUEST",relatedEntityId:request._id});
       await notifyRequestStatus(request,"REPLACEMENT",nextStatus);
     }
     await recordCustomerCareAudit({req,action:type==="refund"?"REFUND_VERIFIED_BY_CUSTOMER_CARE":"REPLACEMENT_VERIFIED_BY_CUSTOMER_CARE",targetType:type==="refund"?"REFUND_REQUEST":"REPLACEMENT_REQUEST",targetId:request._id,customer:request.customer,order:request.order,metadata:{requestId:request.requestId,storeId:request.storeId,sourceType:request.sourceType,verification:verified}});
@@ -6511,7 +6607,7 @@ const resolveDeliveryDestination = async (order:any) => {
   };
 
   try {
-    const headers={"User-Agent":"FreshBasket/1.0 delivery-tracking"};
+    const headers={"User-Agent":"DUKAANGRID/1.0 delivery-tracking"};
     const exactQuery=[address,city,state,pincode,"India"].filter(Boolean).join(", ");
     let r:any=null;
     try {
@@ -7426,7 +7522,7 @@ app.post("/api/orders/:id/payment/session",auth,roleAny("customer","delivery"),a
         return res.json({success:true,data:{provider:"RAZORPAY_QR",keyId,orderId:order._id,qrCodeId:existingQrId,qrImageUrl:String(existing.qrImageUrl||""),qrImageContent:String(existing.qrImageContent||""),amount,currency:"INR",reference:existing.reference||`RZP-QR-${String(order._id).slice(-10).toUpperCase()}`,expiresAt:existing.expiresAt||null}});
       }
       // Prefer a one-time Razorpay UPI QR for desktop/web checkout.
-      // The QR is generated server-side with the exact FreshBasket order amount.
+      // The QR is generated server-side with the exact DUKAANGRID order amount.
       try {
         const createdAt=new Date();
         const expiresAt=new Date(createdAt.getTime()+15*60*1000);
@@ -7434,13 +7530,13 @@ app.post("/api/orders/:id/payment/session",auth,roleAny("customer","delivery"),a
         const reference=`RZP-QR-${String(order._id).slice(-10).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
         const qrResp=await axios.post("https://api.razorpay.com/v1/payments/qr_codes",{
           type:"upi_qr",
-          name:"FreshBasket Order",
+          name:"DUKAANGRID Order",
           usage:"single_use",
           fixed_amount:true,
           payment_amount:Math.round(amount*100),
-          description:`FreshBasket Order #${String(order._id).slice(-8).toUpperCase()}`,
+          description:`DUKAANGRID Order #${String(order._id).slice(-8).toUpperCase()}`,
           close_by:closeBy,
-          notes:{freshbasketOrderId:String(order._id),reference},
+          notes:{DUKAANGRIDOrderId:String(order._id),reference},
         },{auth:{username:keyId,password:keySecret},headers:{"Content-Type":"application/json"},timeout:15000});
         let qr=qrResp.data||{};
         const qrCodeId=String(qr.id||"");
@@ -7472,7 +7568,7 @@ app.post("/api/orders/:id/payment/session",auth,roleAny("customer","delivery"),a
         console.warn("RAZORPAY QR CREATE FAILED; FALLING BACK TO STANDARD CHECKOUT:",qrError?.response?.data||qrError?.message||qrError);
       }
       const receipt=`FB-${String(order._id).slice(-20)}`.replace(/[^A-Za-z0-9_-]/g,"").slice(0,40);
-      const api=await axios.post("https://api.razorpay.com/v1/orders",{amount:Math.round(amount*100),currency:"INR",receipt,notes:{freshbasketOrderId:String(order._id)}},{auth:{username:keyId,password:keySecret},headers:{"Content-Type":"application/json"},timeout:15000});
+      const api=await axios.post("https://api.razorpay.com/v1/orders",{amount:Math.round(amount*100),currency:"INR",receipt,notes:{DUKAANGRIDOrderId:String(order._id)}},{auth:{username:keyId,password:keySecret},headers:{"Content-Type":"application/json"},timeout:15000});
       const rzOrder=api.data;
       const createdAt=new Date();
       const expiresAt=new Date(createdAt.getTime()+30*60*1000);
@@ -7486,12 +7582,12 @@ app.post("/api/orders/:id/payment/session",auth,roleAny("customer","delivery"),a
     if(!settings?.isEnabled||!settings?.upiId)return res.status(503).json({success:false,message:"Online payment is not configured. Add Razorpay server credentials or configure the existing UPI payment settings."});
     const existingSession:any=order.paymentSession||null;
     const existingValid=existingSession?.reference&&existingSession?.uri&&existingSession?.expiresAt&&new Date(existingSession.expiresAt).getTime()>Date.now()&&Number(existingSession.amount)===amount&&String(existingSession.currency||"INR")==="INR";
-    if(existingValid)return res.json({success:true,data:{provider:"UPI",reference:existingSession.reference,uri:existingSession.uri,amount,currency:"INR",expiresAt:existingSession.expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"FreshBasket",upiId:settings.upiId}});
+    if(existingValid)return res.json({success:true,data:{provider:"UPI",reference:existingSession.reference,uri:existingSession.uri,amount,currency:"INR",expiresAt:existingSession.expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"DUKAANGRID",upiId:settings.upiId}});
     const reference=`UPI-${String(order._id).slice(-10).toUpperCase()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-    const uri=`upi://pay?pa=${encodeURIComponent(String(settings.upiId))}&pn=${encodeURIComponent(String(settings.merchantName||"FreshBasket"))}&tr=${encodeURIComponent(reference)}&am=${amount.toFixed(2)}&cu=INR`;
+    const uri=`upi://pay?pa=${encodeURIComponent(String(settings.upiId))}&pn=${encodeURIComponent(String(settings.merchantName||"DUKAANGRID"))}&tr=${encodeURIComponent(reference)}&am=${amount.toFixed(2)}&cu=INR`;
     const createdAt=new Date(),expiresAt=new Date(createdAt.getTime()+15*60*1000);
     await Order.collection.updateOne({_id:order._id},{$set:{"paymentSession.reference":reference,"paymentSession.uri":uri,"paymentSession.amount":amount,"paymentSession.currency":"INR","paymentSession.createdAt":createdAt,"paymentSession.expiresAt":expiresAt,"paymentSession.provider":"UPI"}});
-    return res.json({success:true,data:{provider:"UPI",reference,uri,amount,currency:"INR",expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"FreshBasket",upiId:settings.upiId}});
+    return res.json({success:true,data:{provider:"UPI",reference,uri,amount,currency:"INR",expiresAt,qrImage:settings.qrImage||"",merchantName:settings.merchantName||"DUKAANGRID",upiId:settings.upiId}});
   }catch(e:any){
     console.error("PAYMENT SESSION ERROR:",e?.response?.data||e);
     return res.status(500).json({success:false,message:e?.response?.data?.error?.description||e?.message||"Unable to create payment session"});
@@ -7568,7 +7664,7 @@ app.post("/api/orders/:id/payment/verify",auth,roleAny("customer","delivery"),as
     const paymentResp=await axios.get(`https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpayPaymentId)}`,{auth:{username:keyId,password:secret},timeout:15000});
     const payment:any=paymentResp.data||{};
     const expectedPaise=Math.round(Number(order.total||0)*100);
-    if(String(payment.order_id||"")!==storedOrderId||Number(payment.amount||0)!==expectedPaise||String(payment.currency||"INR")!=="INR")return res.status(400).json({success:false,message:"Razorpay payment amount or order does not match FreshBasket order"});
+    if(String(payment.order_id||"")!==storedOrderId||Number(payment.amount||0)!==expectedPaise||String(payment.currency||"INR")!=="INR")return res.status(400).json({success:false,message:"Razorpay payment amount or order does not match DUKAANGRID order"});
     if(String(payment.status||"").toLowerCase()!=="captured"){
       await Order.collection.updateOne({_id:order._id},{$set:{paymentStatus:String(payment.status||"PENDING").toUpperCase(),"paymentSession.razorpayPaymentId":razorpayPaymentId,"paymentSession.razorpaySignature":razorpaySignature,"paymentSession.provider":"RAZORPAY","paymentSession.providerStatus":String(payment.status||"")}});
       return res.status(202).json({success:false,pending:true,message:`Payment is ${String(payment.status||"pending")}. We will update the order when Razorpay confirms capture.`});
@@ -7617,7 +7713,7 @@ app.get("/api/payment-settings", async (req, res) => {
     const mainId = await getMainAdminId();
     const owner = storeAdminId && mongoose.Types.ObjectId.isValid(storeAdminId) ? storeAdminId : mainId;
     const settings: any = owner ? await PaymentSetting.findOne({ storeAdmin: owner }).lean() : null;
-    return res.json({ success: true, data: settings || { upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: false } });
+    return res.json({ success: true, data: settings || { upiId: "", merchantName: "DUKAANGRID", qrImage: "", isEnabled: false } });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Unable to load payment settings" });
   }
@@ -7627,7 +7723,7 @@ app.get("/api/admin/payment-settings", auth, role("admin"), async (req: AuthRequ
   try {
     const owner = await getTenantAdminId(req);
     const settings: any = owner ? await PaymentSetting.findOne({ storeAdmin: owner }).lean() : null;
-    return res.json({ success: true, data: settings || { upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: true } });
+    return res.json({ success: true, data: settings || { upiId: "", merchantName: "DUKAANGRID", qrImage: "", isEnabled: true } });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Unable to load payment settings" });
   }
@@ -7638,13 +7734,13 @@ app.put("/api/admin/payment-settings", auth, role("admin"), async (req: AuthRequ
     const owner = await getTenantAdminId(req);
     if (!owner) return res.status(400).json({ success: false, message: "Store account not found" });
     const upiId = String(req.body.upiId || "").trim();
-    const merchantName = String(req.body.merchantName || "FreshBasket").trim();
+    const merchantName = String(req.body.merchantName || "DUKAANGRID").trim();
     const qrImage = String(req.body.qrImage || "").trim();
     const isEnabled = req.body.isEnabled !== false;
     if (upiId && !/^[^\s@]+@[^\s@]+$/.test(upiId)) return res.status(400).json({ success: false, message: "Enter a valid UPI ID" });
     const previous:any = await PaymentSetting.findOne({ storeAdmin: owner }).select("upiId merchantName isEnabled").lean();
     const saved = await PaymentSetting.findOneAndUpdate({ storeAdmin: owner }, { $set: { storeAdmin: owner, upiId, merchantName, qrImage, isEnabled } }, { upsert: true, new: true, setDefaultsOnInsert: true });
-    await recordEntityChange({ req, action:"PAYMENT_CONFIGURATION_CHANGED", targetType:"CONFIGURATION", targetId:`payment-settings:${String(owner)}`, before:{ upiId:previous?.upiId||"", merchantName:previous?.merchantName||"FreshBasket", isEnabled:previous?.isEnabled!==false }, after:{ upiId:saved?.upiId||"", merchantName:saved?.merchantName||"FreshBasket", isEnabled:saved?.isEnabled!==false }, reason:req.body?.reason||"Payment settings updated" });
+    await recordEntityChange({ req, action:"PAYMENT_CONFIGURATION_CHANGED", targetType:"CONFIGURATION", targetId:`payment-settings:${String(owner)}`, before:{ upiId:previous?.upiId||"", merchantName:previous?.merchantName||"DUKAANGRID", isEnabled:previous?.isEnabled!==false }, after:{ upiId:saved?.upiId||"", merchantName:saved?.merchantName||"DUKAANGRID", isEnabled:saved?.isEnabled!==false }, reason:req.body?.reason||"Payment settings updated" });
     return res.json({ success: true, message: "Payment settings saved successfully", data: saved });
   } catch (error) {
     return res.status(400).json({ success: false, message: "Unable to save payment settings" });
@@ -7658,7 +7754,7 @@ app.get("/api/orders/:id/payment-settings", auth, async (req: AuthRequest, res) 
     const allowed = req.user?.role === "admin" ? await belongsToTenant(req, order) : req.user?.role === "customer" ? String(order.user) === String(req.user.id) : req.user?.role === "delivery" ? String(order.deliveryPartner) === String(req.user.id) : false;
     if (!allowed) return res.status(403).json({ success: false, message: "Forbidden" });
     const settings: any = order.storeAdmin ? await PaymentSetting.findOne({ storeAdmin: order.storeAdmin }).lean() : null;
-    return res.json({ success: true, data: settings || { upiId: "", merchantName: "FreshBasket", qrImage: "", isEnabled: false } });
+    return res.json({ success: true, data: settings || { upiId: "", merchantName: "DUKAANGRID", qrImage: "", isEnabled: false } });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Unable to load payment settings" });
   }
@@ -7725,7 +7821,7 @@ app.get(
       return res.json({
         success: true,
         data: {
-          name: saved?.name || "FreshBasket Store",
+          name: saved?.name || "DUKAANGRID Store",
           address: saved?.address || (isMain ? STORE_ADDRESS : ""),
           latitude: configured ? latitude : null,
           longitude: configured ? longitude : null,
@@ -7755,7 +7851,7 @@ app.put(
   role("admin"),
   async (req: AuthRequest, res) => {
     try {
-      const name = String(req.body.name || "FreshBasket Store").trim();
+      const name = String(req.body.name || "DUKAANGRID Store").trim();
       const address = String(req.body.address || "").trim();
       const category = String(req.body.category || "Local Store").trim();
       const description = String(req.body.description || "").trim();
@@ -7856,7 +7952,7 @@ app.get(
       const latitude = saved?.latitude ?? (isMain && hasValidStoreCoordinates ? STORE_LAT : null);
       const longitude = saved?.longitude ?? (isMain && hasValidStoreCoordinates ? STORE_LNG : null);
       const address = saved?.address || (isMain ? STORE_ADDRESS : "");
-      const name = saved?.name || "FreshBasket Store";
+      const name = saved?.name || "DUKAANGRID Store";
       const configured = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) && Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
       return res.json({ success: true, data: { name, address, latitude: configured ? Number(latitude) : null, longitude: configured ? Number(longitude) : null, configured } });
     } catch (error) {
@@ -7908,7 +8004,7 @@ const itemFromOrder = (order:any, itemId:any, productId:any = "") => {
   const items = Array.isArray(order?.items) ? order.items : [];
 
   // Order.items uses an embedded schema with _id:false in the existing
-  // FreshBasket architecture. Therefore an order-item identifier may be the
+  // DUKAANGRID architecture. Therefore an order-item identifier may be the
   // persisted product id, an index used by legacy UI, or (for older data) an
   // embedded _id if one existed before the current schema. Resolve only when
   // the match is deterministic; never fabricate an item.
@@ -7974,7 +8070,7 @@ const ensureReplacementIdentity = (request:any) => {
 const backfillReplacementLegacyFields = async (request:any, order:any) => {
   const patch:any={};
   if(!request.replacementId) patch.replacementId=makeReplacementId();
-  const sourceType=String(request.sourceType||order?.sourceType||((request.storeId||order?.storeAdmin)?"STORE":"FRESHBASKET_DIRECT"));
+  const sourceType=String(request.sourceType||order?.sourceType||((request.storeId||order?.storeAdmin)?"STORE":"DUKAANGRID_DIRECT"));
   if(!request.sourceType)patch.sourceType=sourceType;
   if(!request.deliveredAtSnapshot && order?.deliveredAt)patch.deliveredAtSnapshot=order.deliveredAt;
   if(!request.expiryAt && order?.deliveredAt)patch.expiryAt=new Date(new Date(order.deliveredAt).getTime()+24*60*60*1000);
@@ -7986,7 +8082,7 @@ const backfillReplacementLegacyFields = async (request:any, order:any) => {
     if(String(request.fulfillmentOwnerType||"")!=="STORE_ADMIN") patch.fulfillmentOwnerType="STORE_ADMIN";
     if(storeId && String(request.fulfillmentOwnerId||"")!==String(storeId)) patch.fulfillmentOwnerId=storeId;
   }
-  if(sourceType==="FRESHBASKET_DIRECT") {
+  if(sourceType==="DUKAANGRID_DIRECT") {
     const mainId=await getMainAdminId();
     if(mainId && String(request.mainAdmin||"")!==String(mainId)) patch.mainAdmin=mainId;
     if(request.storeAdmin) patch.storeAdmin=null;
@@ -8036,7 +8132,7 @@ const getRequestContext = async (orderId:string, orderItemId:string, productId:s
     : null;
   const mainAdminId:any = await getMainAdminId();
   const storeId:any = order.storeAdmin || product?.storeAdmin || null;
-  const sourceType = String(order.sourceType || (storeId && mainAdminId && String(storeId) !== String(mainAdminId) ? "STORE" : "FRESHBASKET_DIRECT"));
+  const sourceType = String(order.sourceType || (storeId && mainAdminId && String(storeId) !== String(mainAdminId) ? "STORE" : "DUKAANGRID_DIRECT"));
   const policy:any = await policyForItem(item);
   return { order, item, product, policy, mainAdminId, storeId, sourceType };
 };
@@ -8142,7 +8238,7 @@ app.get("/api/customer-care/replacement-requests/:id", auth, role("customer_care
     const audit=await AuditLog.find({targetType:"REPLACEMENT_REQUEST",targetId:String(request._id)}).sort({createdAt:1}).limit(500).lean();
     const timeline=Array.isArray(request.statusHistory)?request.statusHistory.map((x:any)=>({...x,at:x.at||x.createdAt})):[];
     const eligibility={productReplacementAllowed:Boolean(product?.replacementAllowed ?? product?.replacementEligible),deliveryCompleted:order.status==="Delivered",deliveredAt:request.deliveredAtSnapshot||order.deliveredAt||null,requestCreatedAt:request.createdAt,expiryAt,eligibleAtRequestTime:Boolean(request.eligibleAtRequestTime),currentlyWithinWindow:Boolean(request.eligibleAtRequestTime || (order.status==="Delivered" && expiryAt && new Date()<=new Date(expiryAt)))};
-    return res.json({success:true,data:{request,customer:request.customer,order,orderItem:item,product,store:{id:storeId,name:storeAdmin?.name||"FreshBasket Direct",admin:storeAdmin},assignment:{customerCareAgent:request.customerCareAgent,storeAdmin:request.storeAdmin,mainAdmin:request.mainAdmin,deliveryPartner:request.deliveryPartner},delivery:{replacementId:request.replacementId,deliveryPartner:request.deliveryPartner,status:request.status,startedAt:request.deliveryStartedAt,replacementDeliveredAt:request.replacementDeliveredAt,proof:request.deliveryProof||null},eligibility,finance:{financeEmployeeId:request.financeEmployeeId||null,financeManagerId:request.financeManagerId||null,transactionId:request.transactionId||null},timeline,audit}});
+    return res.json({success:true,data:{request,customer:request.customer,order,orderItem:item,product,store:{id:storeId,name:storeAdmin?.name||"DUKAANGRID Direct",admin:storeAdmin},assignment:{customerCareAgent:request.customerCareAgent,storeAdmin:request.storeAdmin,mainAdmin:request.mainAdmin,deliveryPartner:request.deliveryPartner},delivery:{replacementId:request.replacementId,deliveryPartner:request.deliveryPartner,status:request.status,startedAt:request.deliveryStartedAt,replacementDeliveredAt:request.replacementDeliveredAt,proof:request.deliveryProof||null},eligibility,finance:{financeEmployeeId:request.financeEmployeeId||null,financeManagerId:request.financeManagerId||null,transactionId:request.transactionId||null},timeline,audit}});
   } catch(e){ console.error("CUSTOMER CARE REPLACEMENT DETAIL ERROR",e); return res.status(500).json({success:false,message:"Unable to load replacement request"}); }
 });
 
@@ -8267,16 +8363,16 @@ const createItemRequest = async (req:AuthRequest,type:"refund"|"replacement")=>{
     const dup=await RefundRequest.findOne({order:order._id,orderItemId:itemId,status:{$in:REFUND_ACTIVE_STATUSES}}); if(dup) throw new Error("Refund request already in progress");
     const activeReplacement=await ReplacementRequest.findOne({order:order._id,orderItemId:itemId,status:{$in:["REQUESTED","UNDER_REVIEW","APPROVED","STORE_PREPARATION","DELIVERY"]}}); if(activeReplacement) throw new Error("Replacement request is already in progress for this item");
     const method=String(req.body.refundMethod||"ORIGINAL").toUpperCase(); if(!["ORIGINAL","BANK","UPI"].includes(method))throw new Error("Invalid refund method");
-    if(method==="BANK"){const a=String(req.body.accountNumber||"").replace(/\D/g,"");const c=String(req.body.confirmAccountNumber||"").replace(/\D/g,"");const ifsc=String(req.body.ifsc||"").trim().toUpperCase();const holder=String(req.body.accountHolderName||"").trim();const bank=String(req.body.bankName||"").trim();if(a.length<9||a!==c)throw new Error("Enter matching valid bank account numbers");if(!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc))throw new Error("Enter a valid IFSC code");if(!holder||!bank)throw new Error("Bank name and account holder are required");return await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount:requestedAmount,requestedAmount,reason:String(req.body.reason||"").trim(),requestedBy:req.user!.id,status:"REQUESTED",orderItemId:itemId,storeId:order.storeAdmin||null,storeAdmin:order.storeAdmin||null,sourceType:String(order.sourceType||"FRESHBASKET_DIRECT"),deliveryPartner:order.deliveryPartner||null,refundMethod:method,bankName:bank,bankAccountEncrypted:encryptSensitive(a),bankAccountMasked:maskAccount(a),ifsc,accountHolderName:holder,evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}]});}
-    if(method==="UPI"){const upi=String(req.body.upiId||"").trim().toLowerCase();const confirm=String(req.body.confirmUpiId||"").trim().toLowerCase();if(!/^[\w.\-]{2,}@[\w.-]{2,}$/.test(upi)||upi!==confirm)throw new Error("Enter matching valid UPI ID");return await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount:requestedAmount,requestedAmount,reason:String(req.body.reason||"").trim(),requestedBy:req.user!.id,status:"REQUESTED",orderItemId:itemId,storeId:order.storeAdmin||null,storeAdmin:order.storeAdmin||null,sourceType:String(order.sourceType||"FRESHBASKET_DIRECT"),deliveryPartner:order.deliveryPartner||null,refundMethod:method,upiEncrypted:encryptSensitive(upi),upiMasked:maskUpi(upi),evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}]});}
-    return await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount:requestedAmount,requestedAmount,reason:String(req.body.reason||"").trim(),requestedBy:req.user!.id,status:"REQUESTED",orderItemId:itemId,storeId:order.storeAdmin||null,storeAdmin:order.storeAdmin||null,sourceType:String(order.sourceType||"FRESHBASKET_DIRECT"),deliveryPartner:order.deliveryPartner||null,refundMethod:"ORIGINAL",evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}]});
+    if(method==="BANK"){const a=String(req.body.accountNumber||"").replace(/\D/g,"");const c=String(req.body.confirmAccountNumber||"").replace(/\D/g,"");const ifsc=String(req.body.ifsc||"").trim().toUpperCase();const holder=String(req.body.accountHolderName||"").trim();const bank=String(req.body.bankName||"").trim();if(a.length<9||a!==c)throw new Error("Enter matching valid bank account numbers");if(!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc))throw new Error("Enter a valid IFSC code");if(!holder||!bank)throw new Error("Bank name and account holder are required");return await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount:requestedAmount,requestedAmount,reason:String(req.body.reason||"").trim(),requestedBy:req.user!.id,status:"REQUESTED",orderItemId:itemId,storeId:order.storeAdmin||null,storeAdmin:order.storeAdmin||null,sourceType:String(order.sourceType||"DUKAANGRID_DIRECT"),deliveryPartner:order.deliveryPartner||null,refundMethod:method,bankName:bank,bankAccountEncrypted:encryptSensitive(a),bankAccountMasked:maskAccount(a),ifsc,accountHolderName:holder,evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}]});}
+    if(method==="UPI"){const upi=String(req.body.upiId||"").trim().toLowerCase();const confirm=String(req.body.confirmUpiId||"").trim().toLowerCase();if(!/^[\w.\-]{2,}@[\w.-]{2,}$/.test(upi)||upi!==confirm)throw new Error("Enter matching valid UPI ID");return await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount:requestedAmount,requestedAmount,reason:String(req.body.reason||"").trim(),requestedBy:req.user!.id,status:"REQUESTED",orderItemId:itemId,storeId:order.storeAdmin||null,storeAdmin:order.storeAdmin||null,sourceType:String(order.sourceType||"DUKAANGRID_DIRECT"),deliveryPartner:order.deliveryPartner||null,refundMethod:method,upiEncrypted:encryptSensitive(upi),upiMasked:maskUpi(upi),evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}]});}
+    return await RefundRequest.create({requestId:makeRequestId("REFUND"),order:order._id,customer:order.user,productId:item.product||null,amount:requestedAmount,requestedAmount,reason:String(req.body.reason||"").trim(),requestedBy:req.user!.id,status:"REQUESTED",orderItemId:itemId,storeId:order.storeAdmin||null,storeAdmin:order.storeAdmin||null,sourceType:String(order.sourceType||"DUKAANGRID_DIRECT"),deliveryPartner:order.deliveryPartner||null,refundMethod:"ORIGINAL",evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}]});
   }
   const dup=await ReplacementRequest.findOne({order:order._id,customer:req.user!.id,orderItemId:itemId,status:{$in:replacementActiveStatuses}});if(dup)throw new Error("Replacement request already in progress");
   const completedReplacement=await ReplacementRequest.findOne({order:order._id,customer:req.user!.id,orderItemId:itemId,status:{$in:["REPLACED","COMPLETED","CLOSED"]}});if(completedReplacement)throw new Error("This order item has already been replaced");
   const activeRefund=await RefundRequest.findOne({order:order._id,customer:req.user!.id,orderItemId:itemId,status:{$in:["REQUESTED","UNDER_REVIEW","VERIFIED_BY_CUSTOMER_CARE","FINANCE_REVIEW","APPROVAL_PENDING","APPROVED","PROCESSING"]}});if(activeRefund)throw new Error("Refund request is already in progress for this item");
   const completedRefund=await RefundRequest.findOne({order:order._id,customer:req.user!.id,orderItemId:itemId,status:"COMPLETED"});if(completedRefund)throw new Error("This order item has already been refunded");
-  const sourceType=String(order.sourceType||"FRESHBASKET_DIRECT"); const storeId=sourceType==="STORE"?(order.storeAdmin||null):null;
-  return await ReplacementRequest.create({requestId:makeRequestId("REPLACEMENT"),replacementId:makeReplacementId(),order:order._id,customer:order.user,productId:item.product||null,requestedBy:req.user!.id,reason:String(req.body.reason||"").trim(),description:String(req.body.description||"").trim().slice(0,3000),items:[{product:item.product,name:item.name,quantity:q}],orderItemId:itemId,storeId,storeAdmin:storeId,mainAdmin:sourceType==="FRESHBASKET_DIRECT"?await getMainAdminId():null,sourceType,deliveryPartner:null,priority:["LOW","MEDIUM","HIGH","URGENT"].includes(String(req.body.priority||"").toUpperCase())?String(req.body.priority).toUpperCase():"MEDIUM",evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}],deliveredAtSnapshot:order.deliveredAt,expiryAt,eligibleAtRequestTime:true});
+  const sourceType=String(order.sourceType||"DUKAANGRID_DIRECT"); const storeId=sourceType==="STORE"?(order.storeAdmin||null):null;
+  return await ReplacementRequest.create({requestId:makeRequestId("REPLACEMENT"),replacementId:makeReplacementId(),order:order._id,customer:order.user,productId:item.product||null,requestedBy:req.user!.id,reason:String(req.body.reason||"").trim(),description:String(req.body.description||"").trim().slice(0,3000),items:[{product:item.product,name:item.name,quantity:q}],orderItemId:itemId,storeId,storeAdmin:storeId,mainAdmin:sourceType==="DUKAANGRID_DIRECT"?await getMainAdminId():null,sourceType,deliveryPartner:null,priority:["LOW","MEDIUM","HIGH","URGENT"].includes(String(req.body.priority||"").toUpperCase())?String(req.body.priority).toUpperCase():"MEDIUM",evidence,statusHistory:[{status:"REQUESTED",by:req.user!.id,role:"customer",at:new Date()}],deliveredAtSnapshot:order.deliveredAt,expiryAt,eligibleAtRequestTime:true});
 };
 
 app.post("/api/customer/orders/:id/refund-requests",auth,role("customer"),async(req:AuthRequest,res)=>{try{const r:any=await createItemRequest(req,"refund");await recordCustomerCareAudit({req,action:"REFUND_REQUESTED",targetType:"REFUND_REQUEST",targetId:r._id,customer:req.user!.id,order:req.params.id,metadata:{requestId:r.requestId,orderItemId:r.orderItemId,storeId:r.storeId,sourceType:r.sourceType}});await notifyCustomerCareUsers({title:"New refund request",message:`Refund request for order #${String(req.params.id).slice(-8).toUpperCase()}.`,type:"refund_request",order:req.params.id});return res.status(201).json({success:true,message:"Refund request submitted",data:r});}catch(e:any){return res.status(400).json({success:false,message:e?.message||"Unable to submit refund request"});}});
@@ -8928,7 +9024,7 @@ const finalizeOrderFinancials=async(order:any, actorId:any)=>{
   if(!order || String(order.status||"")!=="Delivered") return order;
   const raw:any=await Order.collection.findOne({_id:order._id},{projection:{financialFinalizedAt:1,sourceType:1,storeAdmin:1,user:1,subtotal:1,discount:1,total:1,deliveryCharge:1,paymentMethod:1,paymentStatus:1,paymentMode:1}});
   if(raw?.financialFinalizedAt) return order;
-  const sourceType=String(raw?.sourceType||order.sourceType||"FRESHBASKET_DIRECT");
+  const sourceType=String(raw?.sourceType||order.sourceType||"DUKAANGRID_DIRECT");
   const storeId=raw?.storeAdmin||order.storeAdmin||null;
   const subtotal=Math.max(0,Number(raw?.subtotal??order.subtotal??0));
   const discount=Math.max(0,Number(raw?.discount??order.discount??0));
@@ -9110,7 +9206,7 @@ app.get("/api/admin/peak-hour-detection",auth,mainAdminOnly,async(req:AuthReques
     const orders:any[]=await Order.find(filter).select("_id createdAt deliveryStartedAt deliveredAt status storeAdmin").lean();
     const buckets=buildPeakHourBuckets(orders);
     const storeRows:any[]=requestedStore?[]:await StoreLocation.find({}).select("storeAdmin name").lean();
-    return res.json({success:true,data:{from:from.toISOString(),to:to.toISOString(),timezone:"Asia/Kolkata",orders:orders.length,deliveryEvents:orders.filter((o:any)=>o.deliveryStartedAt||o.deliveredAt).length,...buckets,stores:storeRows.map((x:any)=>({storeAdminId:String(x.storeAdmin||""),name:x.name||"FreshBasket Store"})).filter((x:any)=>x.storeAdminId)}});
+    return res.json({success:true,data:{from:from.toISOString(),to:to.toISOString(),timezone:"Asia/Kolkata",orders:orders.length,deliveryEvents:orders.filter((o:any)=>o.deliveryStartedAt||o.deliveredAt).length,...buckets,stores:storeRows.map((x:any)=>({storeAdminId:String(x.storeAdmin||""),name:x.name||"DUKAANGRID Store"})).filter((x:any)=>x.storeAdminId)}});
   }catch(e:any){return res.status(500).json({success:false,message:e?.message||"Unable to detect peak hours"});}
 });
 
@@ -9160,7 +9256,7 @@ app.get("/api/admin/delivery-heatmap",auth,mainAdminOnly,async(req:AuthRequest,r
     const partners:any[]=partnerIds.length?await User.find({_id:{$in:partnerIds},role:"delivery",blocked:{$ne:true}}).select("_id name employeeId latitude longitude locationUpdatedAt locationAccuracy onlineStatus availabilityStatus").lean():[];
     const activePartnerRows=partners.filter(p=>isValidGeo(p.latitude,p.longitude)).map(p=>({partnerId:p._id,name:p.name||"Delivery Partner",employeeId:p.employeeId||null,latitude:Number(p.latitude),longitude:Number(p.longitude),locationUpdatedAt:p.locationUpdatedAt||null,locationAccuracy:p.locationAccuracy??null,onlineStatus:p.onlineStatus||null,availabilityStatus:p.availabilityStatus||null}));
     const storeLocations:any[]=await StoreLocation.find({}).select("storeAdmin key name address latitude longitude").lean();
-    const stores=storeLocations.filter((st:any)=>st.name||st.storeAdmin||st.key).map((st:any)=>({storeAdminId:String(st.storeAdmin||st.key||""),name:st.name||"FreshBasket Store",address:st.address||"",latitude:st.latitude??null,longitude:st.longitude??null})).filter((st:any)=>st.storeAdminId);
+    const stores=storeLocations.filter((st:any)=>st.name||st.storeAdmin||st.key).map((st:any)=>({storeAdminId:String(st.storeAdmin||st.key||""),name:st.name||"DUKAANGRID Store",address:st.address||"",latitude:st.latitude??null,longitude:st.longitude??null})).filter((st:any)=>st.storeAdminId);
     const center=rows.length?rows.reduce((a,c)=>({latitude:a.latitude+c.latitude,longitude:a.longitude+c.longitude}),{latitude:0,longitude:0}):activePartnerRows.length?activePartnerRows.reduce((a,c)=>({latitude:a.latitude+c.latitude,longitude:a.longitude+c.longitude}),{latitude:0,longitude:0}):null;
     if(center){const n=rows.length||activePartnerRows.length;center.latitude/=n;center.longitude/=n;}
     return res.json({success:true,data:{from:from.toISOString(),to:to.toISOString(),bucketSizeKm:0.5,orders:orders.length,deliveryCount:mappedOrders,mappedOrders,unmappedOrders,completedDeliveries,activeDeliveries,cells:rows,partners:activePartnerRows,stores,center}});
@@ -9216,7 +9312,7 @@ app.get("/api/admin/store-demand-heatmap",auth,mainAdminOnly,async(req:AuthReque
     for(const order of orders){
       const owner=String(order.storeAdmin||mainId||"");
       const store=storeByOwner.get(owner)||null;
-      const st=storeStats.get(owner)||{storeAdminId:owner||null,name:store?.name||"FreshBasket Store",address:store?.address||"",latitude:store?.latitude??null,longitude:store?.longitude??null,orders:0,mappedOrders:0,unmappedOrders:0};
+      const st=storeStats.get(owner)||{storeAdminId:owner||null,name:store?.name||"DUKAANGRID Store",address:store?.address||"",latitude:store?.latitude??null,longitude:store?.longitude??null,orders:0,mappedOrders:0,unmappedOrders:0};
       st.orders+=1;
       let destination:any=null;
       try{destination=await resolveDeliveryDestination(order);}catch{}
@@ -9249,7 +9345,7 @@ app.get("/api/store-admin/store-demand-heatmap",auth,role("admin"),async(req:Aut
     for(const order of orders){let destination:any=null;try{destination=await resolveDeliveryDestination(order);}catch{}if(!destination||!isValidGeo(destination.latitude,destination.longitude)){unmappedOrders++;continue;}mappedOrders++;const lat=Number(destination.latitude),lng=Number(destination.longitude);const cellLat=Math.floor(lat/bucketSize)*bucketSize+bucketSize/2,cellLng=Math.floor(lng/bucketSize)*bucketSize+bucketSize/2,key=`${cellLat.toFixed(5)}:${cellLng.toFixed(5)}`;const c=cells.get(key)||{id:key,storeAdminId:String(owner),latitude:Number(cellLat.toFixed(5)),longitude:Number(cellLng.toFixed(5)),orderCount:0,uniqueCustomerIds:new Set<string>()};c.orderCount++;if(order.customer)c.uniqueCustomerIds.add(String(order.customer));cells.set(key,c);}
     const max=Math.max(1,...[...cells.values()].map((c:any)=>c.orderCount));
     const rows=[...cells.values()].map((c:any)=>({id:c.id,storeAdminId:c.storeAdminId,latitude:c.latitude,longitude:c.longitude,orderCount:c.orderCount,uniqueCustomers:c.uniqueCustomerIds.size,intensity:Math.min(1,c.orderCount/max)}));
-    return res.json({success:true,data:{from:from.toISOString(),to:to.toISOString(),bucketSizeKm:0.5,orders:orders.length,mappedOrders,unmappedOrders,cells:rows,stores:[{storeAdminId:String(owner),name:store?.name||"FreshBasket Store",address:store?.address||"",latitude:store?.latitude??null,longitude:store?.longitude??null,orders:orders.length,mappedOrders,unmappedOrders}],center:store||null}});
+    return res.json({success:true,data:{from:from.toISOString(),to:to.toISOString(),bucketSizeKm:0.5,orders:orders.length,mappedOrders,unmappedOrders,cells:rows,stores:[{storeAdminId:String(owner),name:store?.name||"DUKAANGRID Store",address:store?.address||"",latitude:store?.latitude??null,longitude:store?.longitude??null,orders:orders.length,mappedOrders,unmappedOrders}],center:store||null}});
   }catch(e:any){return res.status(500).json({success:false,message:e?.message||"Unable to load store demand heatmap"});}
 });
 
@@ -9600,7 +9696,7 @@ app.get("/api/finance/reconciliation",auth,financeAuth,financeCan("FINANCE_VIEW_
 
 app.get("/api/finance/transactions",auth,financeAuth,financeCan("FINANCE_VIEW_REPORTS"),async(req,res)=>{try{const scope=await financeTransactionScope(req as AuthRequest);const filter:any={...scope};if(req.query.type)filter.type=String(req.query.type).toUpperCase();if(req.query.status)filter.status=String(req.query.status).toUpperCase();if(req.query.from||req.query.to){filter.createdAt={};if(req.query.from)filter.createdAt.$gte=new Date(String(req.query.from));if(req.query.to){const d=new Date(String(req.query.to));d.setHours(23,59,59,999);filter.createdAt.$lte=d;}}const rows=await FinancialTransaction.find(filter).sort({createdAt:-1}).limit(1000).populate("order","_id").populate("customer","name email").populate("deliveryPartner","name employeeId").lean();return res.json({success:true,data:rows});}catch(e){return res.status(500).json({success:false,message:"Unable to load transactions"});}});
 app.get("/api/finance/reports",auth,financeAuth,financeCan("FINANCE_VIEW_REPORTS"),async(req,res)=>{try{const scope=await financeTransactionScope(req as AuthRequest);const type=String(req.query.type||"").toUpperCase();const from=req.query.from?new Date(String(req.query.from)):new Date(new Date().getFullYear(),new Date().getMonth(),1);const to=req.query.to?new Date(String(req.query.to)):new Date();to.setHours(23,59,59,999);const filter:any={...scope,createdAt:{$gte:from,$lte:to}};if(type)filter.type=type;const rows=await FinancialTransaction.find(filter).sort({createdAt:-1}).limit(5000).lean();return res.json({success:true,data:{from,to,rows}});}catch(e){return res.status(500).json({success:false,message:"Unable to load Finance report"});}});
-app.get("/api/finance/reports/export",auth,financeAuth,financeCan("FINANCE_EXPORT_REPORTS"),async(req,res)=>{try{const scope=await financeTransactionScope(req as AuthRequest);const from=req.query.from?new Date(String(req.query.from)):new Date(new Date().getFullYear(),new Date().getMonth(),1);const to=req.query.to?new Date(String(req.query.to)):new Date();to.setHours(23,59,59,999);const filter:any={...scope,createdAt:{$gte:from,$lte:to}};if(req.query.type)filter.type=String(req.query.type).toUpperCase();const rows:any[]=await FinancialTransaction.find(filter).sort({createdAt:-1}).lean();const lines=[['Transaction ID','Date','Reference','Type','Order ID','Amount','Direction','Payment Method','Status','Completed At'].map(csvEscape).join(','),...rows.map(x=>[x.transactionId,x.createdAt,x.referenceId,x.type,x.order||"",x.amount,x.direction,x.paymentMethod,x.status,x.completedAt||""].map(csvEscape).join(','))];await recordCustomerCareAudit({req:req as AuthRequest,action:"FINANCE_REPORT_EXPORTED",targetType:"FINANCE_REPORT",metadata:{from,to,type:req.query.type||"ALL",count:rows.length}});res.setHeader("Content-Type","text/csv; charset=utf-8");res.setHeader("Content-Disposition","attachment; filename=FreshBasket-financial-report.csv");return res.send(lines.join("\n"));}catch(e){return res.status(500).json({success:false,message:"Unable to export report"});}});
+app.get("/api/finance/reports/export",auth,financeAuth,financeCan("FINANCE_EXPORT_REPORTS"),async(req,res)=>{try{const scope=await financeTransactionScope(req as AuthRequest);const from=req.query.from?new Date(String(req.query.from)):new Date(new Date().getFullYear(),new Date().getMonth(),1);const to=req.query.to?new Date(String(req.query.to)):new Date();to.setHours(23,59,59,999);const filter:any={...scope,createdAt:{$gte:from,$lte:to}};if(req.query.type)filter.type=String(req.query.type).toUpperCase();const rows:any[]=await FinancialTransaction.find(filter).sort({createdAt:-1}).lean();const lines=[['Transaction ID','Date','Reference','Type','Order ID','Amount','Direction','Payment Method','Status','Completed At'].map(csvEscape).join(','),...rows.map(x=>[x.transactionId,x.createdAt,x.referenceId,x.type,x.order||"",x.amount,x.direction,x.paymentMethod,x.status,x.completedAt||""].map(csvEscape).join(','))];await recordCustomerCareAudit({req:req as AuthRequest,action:"FINANCE_REPORT_EXPORTED",targetType:"FINANCE_REPORT",metadata:{from,to,type:req.query.type||"ALL",count:rows.length}});res.setHeader("Content-Type","text/csv; charset=utf-8");res.setHeader("Content-Disposition","attachment; filename=DUKAANGRID-financial-report.csv");return res.send(lines.join("\n"));}catch(e){return res.status(500).json({success:false,message:"Unable to export report"});}});
 
 app.post("/api/finance/transactions/adjustment",auth,financeAuth,financeCan("FINANCE_PROCESS_PAYOUTS"),async(req:AuthRequest,res)=>{try{const amount=Number(req.body.amount),direction=String(req.body.direction||"OUTFLOW").toUpperCase(),reason=String(req.body.reason||"").trim();if(!Number.isFinite(amount)||amount<=0)return res.status(400).json({success:false,message:"Valid adjustment amount is required"});if(!["OUTFLOW","INFLOW"].includes(direction))return res.status(400).json({success:false,message:"Invalid adjustment direction"});if(reason.length<3)return res.status(400).json({success:false,message:"Adjustment reason is required"});const tx:any=await FinancialTransaction.create({transactionId:makeFinancialId("TXN"),type:"ADJUSTMENT",referenceId:String(req.body.referenceId||makeFinancialId("ADJ")),order:req.body.orderId||null,customer:req.body.customerId||null,deliveryPartner:req.body.deliveryPartnerId||null,amount,direction,paymentMethod:String(req.body.paymentMethod||"MANUAL"),status:"COMPLETED",notes:reason,completedAt:new Date(),createdBy:req.user!.id,metadata:{reversalOf:String(req.body.reversalOf||"")}});await recordCustomerCareAudit({req,action:"FINANCIAL_ADJUSTMENT_CREATED",targetType:"FINANCIAL_TRANSACTION",targetId:tx._id,metadata:{amount,direction,reason}});return res.status(201).json({success:true,data:tx});}catch(e){return res.status(500).json({success:false,message:"Unable to create adjustment"});}});
 app.post("/api/finance/payout-batches",auth,financeAuth,financeCan("FINANCE_PROCESS_PAYOUTS"),async(req:AuthRequest,res)=>{try{const ids=Array.isArray(req.body.orderIds)?req.body.orderIds.filter((x:any)=>mongoose.Types.ObjectId.isValid(x)):[];if(!ids.length)return res.status(400).json({success:false,message:"Select at least one payout"});const orders:any[]=await Order.find({_id:{$in:ids},status:"Delivered",deliveryPayoutStatus:{$in:["ELIGIBLE","FINALIZED"]}}).select("_id deliveryPartner deliveryPayout performanceIncentive deliveryPayoutStatus").lean();if(!orders.length)return res.status(400).json({success:false,message:"No eligible payouts found"});const total=orders.reduce((s,o)=>s+Number(o.deliveryPayout||0)+Number(o.performanceIncentive||0),0);const batch:any=await PayoutBatch.create({batchId:makeFinancialId("PAY"),orders:orders.map(o=>o._id),partners:[...new Set(orders.map(o=>String(o.deliveryPartner)).filter(Boolean))],total,status:"CREATED",createdBy:req.user!.id});return res.status(201).json({success:true,data:batch});}catch(e){return res.status(500).json({success:false,message:"Unable to create payout batch"});}});
@@ -9692,9 +9788,9 @@ app.patch("/api/admin/replacement-requests/:id", auth, mainAdminOnly, async (req
       r.rejectionReason=reason;
       r.status="REJECTED";
       r.mainAdmin=req.user!.id;
-      if(r.sourceType==="FRESHBASKET_DIRECT") { r.fulfillmentOwnerType="MAIN_ADMIN"; r.fulfillmentOwnerId=req.user!.id; r.storeAdmin=null; r.storeId=null; }
+      if(r.sourceType==="DUKAANGRID_DIRECT") { r.fulfillmentOwnerType="MAIN_ADMIN"; r.fulfillmentOwnerId=req.user!.id; r.storeAdmin=null; r.storeId=null; }
       pushRequestHistory(r,"REJECTED",req.user!.id,"main_admin",reason);
-      await releaseReplacementInventory(r,req.user!.id,"FreshBasket Direct replacement rejected; reserved stock released");
+      await releaseReplacementInventory(r,req.user!.id,"DUKAANGRID Direct replacement rejected; reserved stock released");
       await r.save();
       await notifyRequestStatus(r,"REPLACEMENT","REJECTED",`Reason: ${reason}`);
       await recordCustomerCareAudit({req,action:"MAIN_ADMIN_REPLACEMENT_REJECTED",targetType:"REPLACEMENT_REQUEST",targetId:r._id,customer:r.customer,order:r.order,metadata:{requestId:r.requestId,oldStatus,newStatus:"REJECTED",reason,sourceType:r.sourceType}});
@@ -9705,17 +9801,17 @@ app.patch("/api/admin/replacement-requests/:id", auth, mainAdminOnly, async (req
     const product:any=await Product.findById(item.product); if(!product)return res.status(409).json({success:false,message:"Replacement product is no longer available"});
     if(["APPROVED","REPLACEMENT_APPROVED","STORE_PREPARATION","REPLACEMENT_PROCESSING"].includes(status) && !r.inventoryReserved){
       const qty=replacementQuantity(r); if(Number(product.stock||0)<qty)return res.status(409).json({success:false,message:"Replacement unavailable due to insufficient stock"});
-      const previousStock=Number(product.stock||0); product.stock=previousStock-qty; await product.save(); await recordStockHistory({product:product._id,change:-qty,previousStock,newStock:product.stock,reason:"FreshBasket Direct replacement stock reserved",order:r.order,adjustedBy:req.user!.id}); r.inventoryReserved=true; r.inventoryReservedAt=new Date();
+      const previousStock=Number(product.stock||0); product.stock=previousStock-qty; await product.save(); await recordStockHistory({product:product._id,change:-qty,previousStock,newStock:product.stock,reason:"DUKAANGRID Direct replacement stock reserved",order:r.order,adjustedBy:req.user!.id}); r.inventoryReserved=true; r.inventoryReservedAt=new Date();
     }
     if(status==="DELIVERY"||status==="DELIVERY_ASSIGNED"){
       const partnerId=String(req.body.deliveryPartnerId||r.deliveryPartner||""); if(!mongoose.Types.ObjectId.isValid(partnerId))return res.status(400).json({success:false,message:"Delivery Partner is required"});
       const partner:any=await User.findOne({_id:partnerId,role:"delivery",blocked:{$ne:true}}).select("_id employeeId name").lean(); if(!partner)return res.status(403).json({success:false,message:"Invalid Delivery Partner for this replacement"});
-      await ReplacementRequest.updateOne({_id:r._id},{$set:{deliveryPartner:partner._id,status:"DELIVERY_ASSIGNED"}}); r.deliveryPartner=partner._id; r.status="DELIVERY_ASSIGNED"; pushRequestHistory(r,"DELIVERY_ASSIGNED",req.user!.id,"main_admin","FreshBasket Direct replacement assigned for delivery."); await r.save(); await ReplacementRequest.collection.updateOne({_id:r._id},{$set:{deliveryPartner:partner._id,status:"DELIVERY_ASSIGNED"}}); await notifyRequestStatus(r,"REPLACEMENT","DELIVERY_ASSIGNED"); await notifyUser({user:r.deliveryPartner,title:"Replacement Delivery Assigned",message:`Replacement ${r.requestId} is assigned to you for delivery.`,type:"replacement_delivery",order:r.order,relatedEntity:"REPLACEMENT_REQUEST",relatedEntityId:r._id});
+      await ReplacementRequest.updateOne({_id:r._id},{$set:{deliveryPartner:partner._id,status:"DELIVERY_ASSIGNED"}}); r.deliveryPartner=partner._id; r.status="DELIVERY_ASSIGNED"; pushRequestHistory(r,"DELIVERY_ASSIGNED",req.user!.id,"main_admin","DUKAANGRID Direct replacement assigned for delivery."); await r.save(); await ReplacementRequest.collection.updateOne({_id:r._id},{$set:{deliveryPartner:partner._id,status:"DELIVERY_ASSIGNED"}}); await notifyRequestStatus(r,"REPLACEMENT","DELIVERY_ASSIGNED"); await notifyUser({user:r.deliveryPartner,title:"Replacement Delivery Assigned",message:`Replacement ${r.requestId} is assigned to you for delivery.`,type:"replacement_delivery",order:r.order,relatedEntity:"REPLACEMENT_REQUEST",relatedEntityId:r._id});
     } else if(status==="ESCALATED"){
       const reason=String(req.body.reason||"").trim(); if(reason.length<3)return res.status(400).json({success:false,message:"Escalation reason is required"}); r.escalationReason=reason; r.escalatedAt=new Date(); r.status="ESCALATED"; pushRequestHistory(r,"ESCALATED",req.user!.id,"main_admin",reason); await r.save(); await notifyRequestStatus(r,"REPLACEMENT","ESCALATED",reason);
     } else {
       const normalized=status==="APPROVED"?"REPLACEMENT_APPROVED":status; r.mainAdmin=req.user!.id; r.fulfillmentOwnerType="MAIN_ADMIN"; r.fulfillmentOwnerId=req.user!.id; r.status=normalized; if(normalized==="REPLACEMENT_PROCESSING")r.inventoryReserved=true;
-      if(normalized==="REJECTED"){const reason=String(req.body.reason||"").trim();if(reason.length<3)return res.status(400).json({success:false,message:"Rejection reason is required"});r.rejectionReason=reason;await releaseReplacementInventory(r,req.user!.id,"FreshBasket Direct replacement rejected; reserved stock released");} if(normalized==="FAILED")r.rejectionReason=String(req.body.reason||"Replacement fulfillment failed").trim();
+      if(normalized==="REJECTED"){const reason=String(req.body.reason||"").trim();if(reason.length<3)return res.status(400).json({success:false,message:"Rejection reason is required"});r.rejectionReason=reason;await releaseReplacementInventory(r,req.user!.id,"DUKAANGRID Direct replacement rejected; reserved stock released");} if(normalized==="FAILED")r.rejectionReason=String(req.body.reason||"Replacement fulfillment failed").trim();
       pushRequestHistory(r,normalized,req.user!.id,"main_admin",String(req.body.note||req.body.reason||"")); await r.save(); await notifyRequestStatus(r,"REPLACEMENT",normalized);
     }
     await recordCustomerCareAudit({req,action:`MAIN_ADMIN_REPLACEMENT_${status}`,targetType:"REPLACEMENT_REQUEST",targetId:r._id,customer:r.customer,order:r.order,metadata:{requestId:r.requestId,replacementId:r.replacementId,sourceType:r.sourceType,storeId:r.storeId,deliveryPartner:r.deliveryPartner,inventoryReserved:r.inventoryReserved}}); return res.json({success:true,data:r});
@@ -11394,7 +11490,7 @@ app.post("/api/admin/safe-view-as/start", auth, async (req:AuthRequest,res) => {
 
 app.get("/api/admin/safe-view-as/session", async (req:any,res) => {
   try {
-    const token = String(req.headers["x-freshbasket-view-token"] || "");
+    const token = String(req.headers["x-DUKAANGRID-view-token"] || "");
     const decoded:any = verifySafeViewToken(token);
     if (!decoded) return res.status(401).json({success:false,message:"Safe View As session is invalid or expired"});
     const actor:any = await User.findById(decoded.actorId).select("_id role blocked email permissions").lean();
@@ -11428,7 +11524,7 @@ app.get("/api/admin/safe-view-as/session", async (req:any,res) => {
 
 app.post("/api/admin/safe-view-as/end", async (req:any,res) => {
   try {
-    const token = String(req.headers["x-freshbasket-view-token"] || "");
+    const token = String(req.headers["x-DUKAANGRID-view-token"] || "");
     const decoded:any = verifySafeViewToken(token);
     if (!decoded) return res.status(401).json({success:false,message:"Safe View As session is invalid or expired"});
     const actor:any = await User.findById(decoded.actorId).select("_id role employeeId blocked").lean();
