@@ -12877,13 +12877,13 @@ function AdminDeliveryPartners() {
 function IdentityQr({ value }: { value: string }) {
   const [failed, setFailed] = useState(false);
 
-  const verificationOrigin = IS_NATIVE_APP
-    ? "https://DUKAANGRID-grocery-shop.vercel.app"
-    : window.location.origin;
+ const verificationOrigin = IS_NATIVE_APP
+  ? "https://freshbasket-grocery-shop.vercel.app"
+  : window.location.origin;
 
-  const verificationUrl = value
-    ? `${verificationOrigin}/verify/employee/${encodeURIComponent(value)}`
-    : "";
+const verificationUrl = value
+  ? `${verificationOrigin}/verify/employee/${encodeURIComponent(value)}`
+  : "";
   const qrUrl = verificationUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=18&ecc=H&data=${encodeURIComponent(verificationUrl)}` : "";
   useEffect(() => setFailed(false), [value]);
   return <div className="w-36 h-36 bg-white p-2 rounded-xl border border-slate-200 grid place-items-center shrink-0">
