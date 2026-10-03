@@ -93,10 +93,9 @@ const IS_NATIVE_APP = Capacitor.isNativePlatform();
 const IS_ANDROID_APP = Capacitor.getPlatform() === "android";
 
 const API_BASE = IS_NATIVE_APP
-  ? "https://freshbasket-grocery-shop.onrender"
+  ? "https://freshbasket-grocery-shop.onrender.com"
   : import.meta.env.VITE_API_URL ||
     (window.location.hostname === "localhost"
-      
       ? "http://localhost:5000"
       : "https://freshbasket-grocery-shop.onrender.com");
 
