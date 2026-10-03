@@ -1052,7 +1052,7 @@ const belongsToTenant = async (req: AuthRequest, doc: any, field = "storeAdmin")
 
 
 const allowedOrigins = [
-  "https://DUKAANGRID-grocery-shop.vercel.app",
+  "https://freshbasket-grocery-shop.vercel.app",
   "http://localhost:5173",
   // Capacitor Android WebView origin
   "http://localhost",
