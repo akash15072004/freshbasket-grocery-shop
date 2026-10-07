@@ -4259,6 +4259,7 @@ app.get(
 app.post(
   "/api/orders",
   auth,
+  role("customer"),
   async (req: AuthRequest, res) => {
     const reservedStock: Array<{ productId: mongoose.Types.ObjectId; quantity: number; variantId?: string }> = [];
     const idempotencyKey = String(
